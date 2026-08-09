@@ -1,0 +1,567 @@
+🗺️ Atlas Development Roadmap — Chunk-Based Architecture
+
+The overarching philosophy I'd use from here:
+
+Build interconnected systems together, and prioritize anything that makes Atlas faster, more reliable, or more enjoyable to use before giving her greater autonomy.
+
+🟢 CHUNK 1 — Performance & Development Infrastructure
+Goal
+
+Make Atlas fast, efficient, resilient, and pleasant to develop before adding major new capabilities.
+
+This is your next chunk.
+
+🔄 Development Reliability
+ Task-aware hot reload
+ Task persistence
+ Task recovery
+ Safe task resume
+ Interrupted-task detection
+ Backend restart recovery
+ Electron reconnect improvements
+⚡ Cache Optimization
+
+Finish the cache architecture you started:
+
+ Complete remaining cache layers
+ HOT/WARM/COLD optimization
+ Project cache improvements
+ Conversation cache
+ Search cache
+ Context cache
+ Memory cache optimization
+ Cache invalidation strategy
+ File-change detection
+ Hash-based file tracking
+🛣️ Fast-Path Expansion
+
+This is where your new tool brainstorming becomes extremely important.
+
+Identify:
+
+"What does Atlas commonly do that doesn't actually require an LLM?"
+
+Then create deterministic tools for those operations.
+
+Initial targets:
+
+ findFile
+ searchCode
+ searchProject
+ checkSyntax
+ runTests
+ getFileHash
+ getChangedFiles
+ refreshProjectCache
+ getTaskProgress
+ listActiveTasks
+ getTaskResult
+ Additional math/conversion utilities
+ Writing utilities
+ Other common deterministic operations
+📡 Streaming
+ Stream LLM responses
+ Stream background-task progress
+ Stream tool activity where appropriate
+ Improve UI response rendering
+🎯 Performance Goal
+
+Eventually aim for roughly:
+
+Simple interaction:
+< 1–3 seconds
+
+Normal interaction:
+~3–10 seconds
+
+Complex reasoning:
+~10–20 seconds
+
+Heavy analysis:
+Background task
+
+Not because those numbers are sacred, but because Atlas should spend expensive inference only where it actually provides value.
+
+🔬 Performance Diagnostics
+
+Once the event infrastructure exists:
+
+ Measure every pipeline stage
+ Identify recurring bottlenecks
+ Track model generation time
+ Track tool execution time
+ Track context construction
+ Track memory operations
+ Track planner latency
+ Track cache hit/miss rates
+🟡 CHUNK 2 — Voice & Natural Interaction
+
+Once the infrastructure is efficient enough, move into the "I can actually talk to Atlas" chunk.
+
+🎙️ Speech Input
+ Microphone capture
+ Voice activity detection
+ Speech-to-text
+ Transcription cleanup
+ Feed transcription into existing normalizer
+ Voice input indicator
+ Listening state
+ Error handling
+
+The beautiful thing here is that your existing pipeline doesn't really need to care whether the input originated from:
+
+Keyboard
+   ↓
+Text
+
+or
+
+Microphone
+   ↓
+STT
+   ↓
+Text
+
+Both eventually become the same userInput.
+
+🔊 Speech Output
+
+Eventually:
+
+ TTS
+ Streaming TTS
+ Interrupt Atlas while speaking
+ Voice selection
+ Speaking state
+ Audio controls
+🖥️ Main Atlas Interface
+
+Your main page can then become the "quick interaction" surface:
+
+          ATLAS
+
+      🎙️ Listening
+
+   "What can I help with?"
+
+     Recent Activity
+     Active Tasks
+     Notifications
+     Quick Actions
+
+While the Conversations page remains the long-form workspace.
+
+That gives the UI two distinct purposes rather than trying to make one screen do everything.
+
+🔵 CHUNK 3 — Intelligence / Knowledge Overhaul
+
+This is the chunk I'd deliberately hold off on until the infrastructure is stable.
+
+This is where you said you eventually want to dedicate a whole day to making Atlas feel significantly more intelligent.
+
+🧠 Knowledge Architecture
+ Rework Knowledge Library
+ Improve knowledge categorization
+ Improve retrieval
+ Improve relevance scoring
+ Improve context selection
+ Reduce irrelevant memory injection
+ Better knowledge grounding
+ Better source attribution
+🧩 Reasoning
+ Improve reasoning controller
+ Improve task decomposition
+ Improve analytical prompting
+ Improve complex planning
+ Improve multi-step reasoning
+ Improve failure recovery
+ Improve uncertainty handling
+🎭 Identity
+
+This is the "Who is Atlas?" day.
+
+ Personality overhaul
+ Identity definition
+ Behavioral guidelines
+ Knowledge of herself
+ Conversational quirks
+ Emotional/social behavior
+ Better personality consistency
+ Better contextual tone
+
+And this is where your Jarvis / Raphael inspiration really starts coming through.
+
+🟣 CHUNK 4 — Universal Assistant Toolkit
+
+This is where Atlas stops being primarily a development assistant.
+
+Build out the general-purpose toolbox.
+
+✍️ Writing
+ summarize
+ rewrite
+ critique
+ brainstorm
+ suggestIdeas
+ translate
+ changeTone
+ proofread
+🧮 Utilities
+ Unit conversion
+ Currency conversion
+ Date/time utilities
+ Percentages
+ Statistics
+ Calculations
+🌎 Information
+ Weather
+ News
+ Documentation search
+ GitHub search
+ Image search
+ Places
+🎵 Music
+ Key transposition
+ Capo conversion
+ Chord lookup
+ Chord progression generation
+ Scale lookup
+ Guitar chord lookup
+ Rhyme finder
+ Syllable counter
+ Lyric analysis
+💰 Personal / Shopping
+ Price comparison
+ Discount calculation
+ Tax calculation
+ Shopping research
+ Bindex integration 👀
+🟠 CHUNK 5 — Personal Knowledge & Profiles
+
+This is where your profile idea belongs.
+
+And I actually think this could be one of the most fun chunks.
+
+👤 Profile System
+
+Create a dedicated profiles database.
+
+Potential entities:
+
+profiles
+├── profile
+├── facts
+├── relationships
+├── events
+├── interests
+├── notes
+└── sources
+
+Atlas could manage profiles with:
+
+ createProfile
+ getProfile
+ updateProfile
+ deleteProfile
+ searchProfiles
+ listProfiles
+ addProfileFact
+ removeProfileFact
+ profileSummary
+ profileTimeline
+ compareProfiles
+🔎 Profile Research
+
+Eventually:
+
+scanProfile
+
+could gather publicly available information and organize it.
+
+Then:
+
+"Atlas, build me a profile on X."
+
+becomes a legitimate workflow.
+
+And importantly, I'd build source tracking into this from day one:
+
+Fact:
+Birthday → May 14
+
+Source:
+User-provided
+
+Confidence:
+Confirmed
+
+versus:
+
+Fact:
+Favorite food → Sushi
+
+Source:
+Public website
+
+Confidence:
+Likely
+
+That distinction becomes very important once Atlas starts collecting information.
+
+🔴 CHUNK 6 — Self-Awareness & System Introspection
+
+Now we're entering the really fun territory.
+
+This is where your EventBus + TaskManager + caches + project hashes start connecting.
+
+📊 Timeline
+ Persistent event history
+ Task timeline
+ Performance telemetry
+ Tool execution history
+ Model selection history
+🔍 Self-Inspection
+ getTaskTimeline
+ explainTask
+ getPerformanceStats
+ getBottlenecks
+ inspectMemory
+ inspectProjectState
+ inspectTools
+
+Then:
+
+"Atlas, why did that request take 38 seconds?"
+
+could become:
+
+"Your planner took 1.2 seconds, context construction took 0.4 seconds, and Qwen3 4B generation took 35.8 seconds. Model generation accounted for 94% of the request."
+
+That's a real assistant capability, rather than just a chatbot pretending to understand itself.
+
+🟤 CHUNK 7 — Controlled Self-Improvement
+
+Only after Chunk 3's intelligence overhaul.
+
+This is the sandbox chunk you originally had on the roadmap.
+
+🧪 Sandbox
+ Sandbox filesystem
+ Proposed code changes
+ Syntax validation
+ Automated tests
+ Build validation
+ Diff generation
+ Test results
+🔐 Permission Integration
+
+Your existing permission system becomes critical here:
+
+Atlas
+ ↓
+Reasoning
+ ↓
+Proposed Change
+ ↓
+Permission Manager
+ ↓
+Sandbox
+ ↓
+Tests
+ ↓
+Approval
+ ↓
+Real Source
+🔄 Self-Improvement
+
+Eventually:
+
+ proposeCodeChange
+ testCodeChange
+ applyCodeChange
+ rollbackChange
+ refreshSelf
+
+And that is where your original hashed-file architecture becomes really interesting.
+
+🟦 CHUNK 8 — Deep System Integration
+
+This is the "Atlas is becoming an ecosystem" stage.
+
+Integrations could include:
+
+🗂️ Bindex
+Atlas
+ ↓
+Bindex API
+ ↓
+Cards
+Collection
+Prices
+Binders
+Wishlist
+🖥️ Computer
+Applications
+Files
+Processes
+System information
+Browser
+Notifications
+🎵 Music
+
+Potential DAW integrations eventually.
+
+🌐 Web
+
+More advanced research pipelines.
+
+🏠 Future APIs
+
+Anything else you decide Atlas should control.
+
+🟡 CHUNK 9 — The "Jarvis" Layer
+
+This is intentionally last-ish, because it depends on almost everything before it.
+
+This is where Atlas stops feeling like a collection of tools and starts feeling like an agentic operating layer.
+
+Things like:
+
+"Atlas, handle this."
+
+And she figures out:
+
+Understand
+   ↓
+Plan
+   ↓
+Select tools
+   ↓
+Execute
+   ↓
+Monitor
+   ↓
+Recover failures
+   ↓
+Report
+
+With:
+
+Background tasks
+Voice
+Memory
+Profiles
+Notifications
+Scheduling
+System awareness
+Permissions
+Self-diagnostics
+Self-improvement
+Persistent state
+
+That's the point where the original Jarvis/Raphael-esque vision starts becoming tangible.
+
+🧭 The Actual Order I'd Follow
+
+If I were sitting beside you tomorrow and we were deciding what to code next, I'd make the roadmap this simple:
+
+CURRENT STATE
+     │
+     ▼
+🟢 CHUNK 1
+Performance + Reliability
+     │
+     ├── Task persistence
+     ├── Task recovery
+     ├── Remaining caches
+     ├── File hashing
+     ├── Fast-path tools
+     └── Streaming
+     │
+     ▼
+🟡 CHUNK 2
+Voice Interaction
+     │
+     ├── STT
+     ├── Voice detection
+     ├── TTS
+     └── Voice UI
+     │
+     ▼
+🔵 CHUNK 3
+Intelligence + Identity
+     │
+     ├── Knowledge
+     ├── Reasoning
+     ├── Personality
+     └── Identity
+     │
+     ▼
+🟣 CHUNK 4
+Universal Tools
+     │
+     ├── Writing
+     ├── Utilities
+     ├── Music
+     ├── Research
+     └── Bindex
+     │
+     ▼
+🟠 CHUNK 5
+Profiles + Personal Knowledge
+     │
+     ├── People
+     ├── Relationships
+     ├── Facts
+     └── Profile research
+     │
+     ▼
+🔴 CHUNK 6
+Self-Awareness
+     │
+     ├── Timeline
+     ├── Telemetry
+     ├── Diagnostics
+     └── Performance analysis
+     │
+     ▼
+🟤 CHUNK 7
+Sandbox + Self Improvement
+     │
+     ├── Propose
+     ├── Test
+     ├── Approve
+     ├── Apply
+     └── Rollback
+     │
+     ▼
+🟦 CHUNK 8
+Deep Integrations
+     │
+     ├── Bindex
+     ├── Computer
+     ├── Web
+     └── External services
+     │
+     ▼
+🟡 CHUNK 9
+"JARVIS" LAYER
+     │
+     └── Atlas becomes the orchestrator
+
+And I think there's a really important change in mindset here:
+
+You don't need to build Atlas linearly anymore.
+
+You can start looking at her as several interconnected subsystems:
+
+Perception → voice/input
+Cognition → reasoning/knowledge
+Memory → personal/project knowledge
+Action → tools
+Agency → permissions/tasks
+Awareness → events/telemetry
+Identity → personality/profile
+Self-maintenance → sandbox/update system
+
+That's a much cleaner mental model than a giant list of features.

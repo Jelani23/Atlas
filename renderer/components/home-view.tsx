@@ -54,7 +54,7 @@ export function HomeView({
             cloud. Same "own container space" pattern as the floating layer
             above; reuse it for any future stage element. */}
         <div className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden px-4">
-          <div className="mx-auto w-full max-w-4xl pt-2">
+          <div className="mx-auto w-full max-w-4xl pt-10 md:pt-16">
             <div className="mx-auto h-[30vh] max-h-[340px] min-h-[180px] w-full">
               <AtlasCloud state={state} />
             </div>

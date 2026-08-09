@@ -27,7 +27,7 @@ function getCurrentSession() {
 async function listSessions(limit = 50) {
     const { data, error } = await supabase
         .from('sessions')
-        .select('id, started_at, ended_at')
+        .select('id, started_at, ended_at, title')
         .order('started_at', { ascending: false })
         .limit(limit);
 
@@ -63,6 +63,7 @@ async function listSessions(limit = 50) {
         id: s.id,
         startedAt: s.started_at,
         endedAt: s.ended_at,
+        title: s.title || null,
         preview: previewBySession.get(s.id) || '',
     }));
 }
@@ -87,6 +88,74 @@ async function getSessionMessages(sessionId) {
     return data;
 }
 
+// Deletes a session outright (right-click > Delete in the Conversations
+// sidebar). `conversations` rows cascade via the FK in the schema, so this
+// is the one call that fully removes a conversation log.
+async function deleteSession(sessionId) {
+    if (!sessionId) return;
+
+    const { error } = await supabase.from('sessions').delete().eq('id', sessionId);
+
+    if (error) {
+        throw new Error(`Failed to delete session from Supabase: ${error.message}`);
+    }
+
+    if (currentSessionId != null && String(currentSessionId) === String(sessionId)) {
+        currentSessionId = null;
+    }
+}
+
+// Renames a session (right-click > Rename). Empty string clears back to the
+// auto preview.
+async function renameSession(sessionId, title) {
+    if (!sessionId) return null;
+
+    const cleanTitle = (title || '').trim() || null;
+    const { error } = await supabase
+        .from('sessions')
+        .update({ title: cleanTitle })
+        .eq('id', sessionId);
+
+    if (error) {
+        throw new Error(`Failed to rename session in Supabase: ${error.message}`);
+    }
+
+    return cleanTitle;
+}
+
+// Quietly clears out sessions that never got a single message — abandoned
+// "New conversation" clicks, connection hiccups, etc. — so they don't
+// clutter the history list. `excludeId` protects whichever session is
+// currently live (it may still be empty if nothing's been sent yet).
+async function pruneEmptySessions(excludeId = null) {
+    const { data: sessions, error: sessionsError } = await supabase
+        .from('sessions')
+        .select('id');
+
+    if (sessionsError || !sessions || sessions.length === 0) return;
+
+    const { data: convRows, error: convError } = await supabase
+        .from('conversations')
+        .select('session_id');
+
+    if (convError) {
+        console.error('Failed to check for empty sessions:', convError.message);
+        return;
+    }
+
+    const nonEmptyIds = new Set((convRows || []).map((r) => r.session_id));
+    const emptyIds = sessions
+        .map((s) => s.id)
+        .filter((id) => !nonEmptyIds.has(id) && String(id) !== String(excludeId));
+
+    if (emptyIds.length === 0) return;
+
+    const { error: deleteError } = await supabase.from('sessions').delete().in('id', emptyIds);
+    if (deleteError) {
+        console.error('Failed to prune empty sessions:', deleteError.message);
+    }
+}
+
 async function endSession() {
     if (!currentSessionId) {
         return;
@@ -109,5 +178,8 @@ module.exports = {
     getCurrentSession,
     endSession,
     listSessions,
-    getSessionMessages
+    getSessionMessages,
+    deleteSession,
+    renameSession,
+    pruneEmptySessions
 };

@@ -70,6 +70,8 @@ wss.on('connection', (ws) => {
             else if (method === 'listConversations') result = await atlas.listConversations();
             else if (method === 'getConversation') result = await atlas.getConversation(...args);
             else if (method === 'newConversation') result = { ok: true, sessionId: await atlas.newConversation() };
+            else if (method === 'deleteConversation') result = await atlas.deleteConversation(...args);
+            else if (method === 'renameConversation') result = await atlas.renameConversation(...args);
             ws.send(JSON.stringify({ id, result }));
         } catch (err) {
             ws.send(JSON.stringify({ id, error: err.message }));

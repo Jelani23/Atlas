@@ -101,6 +101,35 @@ export function AtlasApp() {
 
       const step = describeEvent(event)
       if (step) setSteps((prev) => [...prev, step])
+
+      // Cast to any to bypass strict AtlasEvent type checking for new payload properties
+      const e = event as any
+
+      // Catch delayed background responses and errors
+      if (e.type === "atlas.response") {
+        setTyping(false)
+        setState("speaking")
+        setMessages((prev) => {
+          return [
+            ...prev,
+            { id: crypto.randomUUID(), role: "atlas", text: e.payload?.text ?? "" },
+          ]
+        })
+        settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
+      } else if (e.type === "atlas.error") {
+        setTyping(false)
+        setState("error")
+        setMessages((prev) => {
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "atlas",
+              text: e.payload?.message ?? "Something went wrong talking to Atlas.",
+            },
+          ]
+        })
+      }
     })
 
     return unsubscribe
@@ -210,17 +239,33 @@ export function AtlasApp() {
     setTab(id)
   }
 
-  const handleNewConversation = useCallback(async () => {
-    const bridge = window.atlasBridge
-    if (!bridge) return
+  // Shared by "New conversation" and "deleted the conversation I'm
+  // currently in" — both land on a fresh, empty live session the same way.
+  const resetLiveSession = useCallback((newSessionId: string) => {
     clearTimeout(settleTimer.current)
-    const result = await bridge.newConversation()
-    setSessionId(result.sessionId)
+    setSessionId(newSessionId)
     setMessages([])
     setSteps([])
     setState("idle")
     setFocusMessageId(null)
   }, [])
+
+  const handleNewConversation = useCallback(async () => {
+    const bridge = window.atlasBridge
+    if (!bridge) return
+    const result = await bridge.newConversation()
+    resetLiveSession(result.sessionId)
+  }, [resetLiveSession])
+
+  // Called by ConversationsView after a right-click "Delete" — only acts
+  // when the deleted conversation was the live one (backend hands back the
+  // replacement session it already started).
+  const handleConversationDeleted = useCallback(
+    (newSessionId: string | null) => {
+      if (newSessionId) resetLiveSession(newSessionId)
+    },
+    [resetLiveSession],
+  )
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden">
@@ -283,6 +328,7 @@ export function AtlasApp() {
           onSend={runFlow}
           onToggleMic={handleMic}
           onNewConversation={handleNewConversation}
+          onConversationDeleted={handleConversationDeleted}
         />
       )}
 

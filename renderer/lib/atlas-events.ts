@@ -27,6 +27,8 @@ export interface AtlasBridge {
   listConversations: () => Promise<import("./types").ConversationSummary[]>
   getConversation: (sessionId: string) => Promise<import("./types").StoredMessage[]>
   newConversation: () => Promise<{ ok: boolean; sessionId: string }>
+  deleteConversation: (sessionId: string) => Promise<{ ok: boolean; newSessionId: string | null }>
+  renameConversation: (sessionId: string, title: string) => Promise<{ ok: boolean; title: string | null }>
   onEvent: (callback: (event: AtlasEvent) => void) => () => void
 }
 

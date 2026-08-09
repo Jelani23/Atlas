@@ -14,8 +14,13 @@
 create table if not exists sessions (
     id bigint generated always as identity primary key,
     started_at timestamptz not null default now(),
-    ended_at timestamptz
+    ended_at timestamptz,
+    title text
 );
+
+-- Safe to re-run: adds the column if this schema already ran before
+-- `title` existed.
+alter table sessions add column if not exists title text;
 
 create table if not exists conversations (
     id bigint generated always as identity primary key,

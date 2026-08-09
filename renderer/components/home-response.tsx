@@ -19,7 +19,7 @@ export function HomeResponse({
     latest?.role === "atlas" ? previewResponse(latest.text) : { preview: "", isTruncated: false }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col items-center px-2 text-center">
+    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col items-center justify-center px-2 text-center">
       {!latest && !typing && (
         <p className="font-display text-lg font-medium text-muted-foreground/80 text-balance">
           {"Hi, I'm Atlas."}
@@ -60,7 +60,7 @@ export function HomeResponse({
       )}
 
       {typing && (
-        <div className="mt-3 flex items-center justify-center gap-1.5">
+        <div className="mt-3 flex -translate-y-2 items-center justify-center gap-1.5">
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.2s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.1s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60" />

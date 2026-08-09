@@ -9,6 +9,8 @@ export interface ConversationSummary {
   id: string
   startedAt: string
   endedAt: string | null
+  /** Manually-set name from the sidebar's right-click "Rename", if any. */
+  title: string | null
   preview: string
   isCurrent: boolean
 }

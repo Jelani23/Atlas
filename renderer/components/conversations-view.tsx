@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { MessageSquarePlus, MessagesSquare } from "lucide-react"
+import { MessageSquarePlus, MessagesSquare, Pencil, Trash2 } from "lucide-react"
 import { ConversationThread } from "./conversation-thread"
 import { ChatInput } from "./chat-input"
 import { STATE_LABEL, type AtlasState } from "./atlas-state"
@@ -19,6 +19,14 @@ interface ConversationsViewProps {
   onSend: (text: string) => void
   onToggleMic: () => void
   onNewConversation: () => void
+  /** Called after a right-click "Delete" removes the currently-live session, with its replacement id. */
+  onConversationDeleted: (newSessionId: string | null) => void
+}
+
+interface ContextMenuState {
+  id: string
+  x: number
+  y: number
 }
 
 function formatSessionLabel(iso: string): string {
@@ -41,6 +49,7 @@ export function ConversationsView({
   onSend,
   onToggleMic,
   onNewConversation,
+  onConversationDeleted,
 }: ConversationsViewProps) {
   const active = state === "thinking" || state === "working"
 
@@ -49,6 +58,9 @@ export function ConversationsView({
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [viewingMessages, setViewingMessages] = useState<Message[]>([])
   const [threadLoading, setThreadLoading] = useState(false)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState("")
 
   // Refetches whenever the live session changes (e.g. after "New") so the
   // list stays in sync with what's actually in Supabase.
@@ -103,6 +115,52 @@ export function ConversationsView({
 
   const returnToCurrent = () => setViewingId(null)
 
+  // Close the right-click menu on Escape or a click anywhere outside it.
+  useEffect(() => {
+    if (!contextMenu) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContextMenu(null)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [contextMenu])
+
+  const startRename = (conversation: ConversationSummary) => {
+    setRenameValue(conversation.title ?? (conversation.preview ? previewLine(conversation.preview, 56) : ""))
+    setRenamingId(conversation.id)
+    setContextMenu(null)
+  }
+
+  const commitRename = async (id: string) => {
+    const value = renameValue.trim()
+    setRenamingId(null)
+    const bridge = window.atlasBridge
+    if (!bridge || !value) return
+    try {
+      const result = await bridge.renameConversation(id, value)
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title: result.title ?? value } : c)),
+      )
+    } catch {
+      // Rename failed silently — the list will resync next time it's fetched.
+    }
+  }
+
+  const deleteConversation = async (id: string) => {
+    setContextMenu(null)
+    const bridge = window.atlasBridge
+    if (!bridge) return
+    // Optimistic — the sidebar shouldn't wait on a round trip to feel deleted.
+    setConversations((prev) => prev.filter((c) => c.id !== id))
+    if (viewingId === id) setViewingId(null)
+    try {
+      const result = await bridge.deleteConversation(id)
+      if (result.newSessionId) onConversationDeleted(result.newSessionId)
+    } catch {
+      // Deletion failed — the list will resync (and the item reappear) next fetch.
+    }
+  }
+
   const isViewingPast = viewingId !== null
   const shownMessages = isViewingPast ? viewingMessages : messages
 
@@ -143,11 +201,24 @@ export function ConversationsView({
           {conversations.map((c) => {
             const isCurrent = c.id === sessionId
             const isSelected = isViewingPast ? c.id === viewingId : isCurrent
+            const isRenaming = renamingId === c.id
+            const label = c.title || (c.preview ? previewLine(c.preview, 56) : "Empty conversation")
             return (
-              <button
+              <div
                 key={c.id}
-                type="button"
-                onClick={() => openConversation(c.id)}
+                role="button"
+                tabIndex={0}
+                onClick={() => !isRenaming && openConversation(c.id)}
+                onKeyDown={(e) => {
+                  if (!isRenaming && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault()
+                    openConversation(c.id)
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({ id: c.id, x: e.clientX, y: e.clientY })
+                }}
                 className={`mb-1 flex w-full cursor-pointer flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
                   isSelected ? "bg-primary/10" : "hover:bg-secondary/70"
                 }`}
@@ -156,14 +227,64 @@ export function ConversationsView({
                   <MessagesSquare className="h-3 w-3" aria-hidden="true" />
                   {isCurrent ? "Current" : formatSessionLabel(c.startedAt)}
                 </span>
-                <span className="truncate text-xs leading-relaxed text-foreground/80">
-                  {c.preview ? previewLine(c.preview, 56) : "Empty conversation"}
-                </span>
-              </button>
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      e.stopPropagation()
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        commitRename(c.id)
+                      } else if (e.key === "Escape") {
+                        e.preventDefault()
+                        setRenamingId(null)
+                      }
+                    }}
+                    onBlur={() => commitRename(c.id)}
+                    className="w-full rounded-md border border-primary/40 bg-background/80 px-1.5 py-0.5 text-xs text-foreground outline-none"
+                  />
+                ) : (
+                  <span className="truncate text-xs leading-relaxed text-foreground/80">{label}</span>
+                )}
+              </div>
             )
           })}
         </div>
       </aside>
+
+      {/* right-click menu — Rename / Delete, closes on Escape or an outside click */}
+      {contextMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
+          <div
+            className="fixed z-50 min-w-[140px] overflow-hidden rounded-xl border border-border/60 bg-card/95 py-1 shadow-[0_12px_40px_-16px_rgba(80,130,190,0.45)] backdrop-blur-xl"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const conversation = conversations.find((c) => c.id === contextMenu.id)
+                if (conversation) startRename(conversation)
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-secondary/70"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteConversation(contextMenu.id)}
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Delete
+            </button>
+          </div>
+        </>
+      )}
 
       {/* thread column — its own flex space, unaffected by the sidebar */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

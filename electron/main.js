@@ -1,7 +1,26 @@
 // electron/main.js
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const WebSocket = require('ws');
+
+// Marker file that tells us whether Atlas has ever launched on this machine
+// before. Lives in Electron's per-user data dir, so it survives app updates
+// but not a full uninstall/reinstall — which is exactly the "first startup"
+// behavior we want.
+const FIRST_LAUNCH_FLAG = path.join(app.getPath('userData'), 'atlas-first-launch-complete');
+
+function isFirstLaunch() {
+    return !fs.existsSync(FIRST_LAUNCH_FLAG);
+}
+
+function markFirstLaunchComplete() {
+    try {
+        fs.writeFileSync(FIRST_LAUNCH_FLAG, String(Date.now()));
+    } catch (err) {
+        console.error('[Electron] Failed to write first-launch flag:', err);
+    }
+}
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = process.env.ATLAS_RENDERER_URL || 'http://localhost:3000';
@@ -82,6 +101,11 @@ function callAtlas(method, args = []) {
 }
 
 function createWindow() {
+    // First time Atlas has ever opened on this machine — launch full screen.
+    // Every launch after that respects whatever size/position the OS
+    // remembers (or our 1200x800 default) instead of forcing full screen.
+    const firstLaunch = isFirstLaunch();
+
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
@@ -92,6 +116,7 @@ function createWindow() {
         // this is what actually turns the OS one off. Without this, the
         // native title bar sits there on top and the custom one never shows.
         frame: false,
+        fullscreen: firstLaunch,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -99,6 +124,8 @@ function createWindow() {
             sandbox: true,
         },
     });
+
+    if (firstLaunch) markFirstLaunchComplete();
 
     if (isDev) {
         mainWindow.loadURL(RENDERER_DEV_URL);
@@ -134,6 +161,8 @@ ipcMain.handle('atlas:resolvePermission', (_event, id, decision) => callAtlas('r
 ipcMain.handle('atlas:listConversations', async () => callAtlas('listConversations'));
 ipcMain.handle('atlas:getConversation', async (_event, sessionId) => callAtlas('getConversation', [sessionId]));
 ipcMain.handle('atlas:newConversation', async () => callAtlas('newConversation'));
+ipcMain.handle('atlas:deleteConversation', async (_event, sessionId) => callAtlas('deleteConversation', [sessionId]));
+ipcMain.handle('atlas:renameConversation', async (_event, sessionId, title) => callAtlas('renameConversation', [sessionId, title]));
 
 // IPC surface: renderer's custom title bar -> the actual BrowserWindow chrome
 ipcMain.handle('window:minimize', () => {

@@ -104,13 +104,17 @@ class AtlasInterface extends EventEmitter {
         };
     }
 
-    // Conversation history, for the Conversations tab's sidebar list.
+    // Conversation history, for the Conversations tab's sidebar list. Sweeps
+    // out empty (never-messaged) sessions first, excluding whichever one is
+    // currently live, so abandoned "New conversation" clicks don't pile up.
     async listConversations() {
+        await sessionManager.pruneEmptySessions(this.sessionId);
         const sessions = await sessionManager.listSessions();
         return sessions.map((s) => ({
             id: String(s.id),
             startedAt: s.startedAt,
             endedAt: s.endedAt,
+            title: s.title,
             preview: s.preview,
             isCurrent: this.sessionId != null && s.id === this.sessionId
         }));
@@ -129,6 +133,32 @@ class AtlasInterface extends EventEmitter {
         this.sessionId = await sessionManager.startSession();
         this.emit('atlas.status', { phase: 'new_conversation', sessionId: this.sessionId });
         return String(this.sessionId);
+    }
+
+    // Manual delete from the Conversations sidebar's right-click menu. If
+    // the session being deleted is the one currently open, a fresh one is
+    // started immediately so there's always a live conversation to return to.
+    async deleteConversation(sessionId) {
+        if (!sessionId) return { ok: false };
+
+        const wasCurrent = this.sessionId != null && String(this.sessionId) === String(sessionId);
+        await sessionManager.deleteSession(sessionId);
+
+        let newSessionId = null;
+        if (wasCurrent) {
+            this.sessionId = await sessionManager.startSession();
+            newSessionId = String(this.sessionId);
+            this.emit('atlas.status', { phase: 'new_conversation', sessionId: this.sessionId });
+        }
+
+        return { ok: true, newSessionId };
+    }
+
+    // Manual rename from the Conversations sidebar's right-click menu.
+    async renameConversation(sessionId, title) {
+        if (!sessionId) return { ok: false };
+        const savedTitle = await sessionManager.renameSession(sessionId, title);
+        return { ok: true, title: savedTitle };
     }
 
     listModes() {
