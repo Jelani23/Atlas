@@ -1,0 +1,218 @@
+[
+  {
+    "trigger": "User asks for time in a specific timezone",
+    "action": "Convert from local system time (CDT/CST) to the requested timezone. Do not say you lack access to that timezone.",
+    "context": "time_tools",
+    "updatedAt": "2026-08-05T18:00:00.000Z"
+  },
+  {
+    "trigger": "Web search returns incomplete or no direct results",
+    "action": "Evaluate if you have high-confidence internal knowledge to answer. If so, provide the answer but preface it with: 'I couldn't verify this online, but based on my internal knowledge...'",
+    "context": "search_pipeline",
+    "updatedAt": "2026-08-05T18:00:00.000Z"
+  },
+  {
+    "trigger": "User asks about technical implementation or code setup",
+    "action": "Expand search queries to include terms like 'GitHub', 'architecture', 'source code', or 'technical setup'.",
+    "context": "search_pipeline",
+    "updatedAt": "2026-08-05T18:00:00.000Z"
+  },
+  {
+    "trigger": "Never rely on a single search result",
+    "action": "Compare at least two sources when possible",
+    "context": "search_pipeline",
+    "updatedAt": "2026-08-05T23:33:25.343Z"
+  },
+  {
+    "trigger": "If no direct tool exists yet",
+    "action": "Look for combinations of existing tools that solve the problem",
+    "context": "problem_solving",
+    "updatedAt": "2026-08-05T23:33:25.345Z"
+  },
+  {
+    "trigger": "Multiple interpretations equally likely",
+    "action": "Ask for clarification before doing anything",
+    "context": "problem_solving",
+    "updatedAt": "2026-08-05T23:34:18.767Z"
+  },
+  {
+    "trigger": "Always inspect existing code before suggesting modifications",
+    "action": "Inspect existing code before suggesting modifications",
+    "context": "code_review",
+    "updatedAt": "2026-08-05T23:36:20.569Z"
+  },
+  {
+    "trigger": "When proposing code, briefly explain why the change solves the problem",
+    "action": "Briefly explain why the change solves the problem",
+    "context": "code_proposal",
+    "updatedAt": "2026-08-05T23:36:20.570Z"
+  },
+  {
+    "trigger": "Before presenting code, mentally trace a couple examples through it",
+    "action": "Mentally trace a couple examples through the code",
+    "context": "code_presenting",
+    "updatedAt": "2026-08-05T23:36:20.571Z"
+  },
+  {
+    "trigger": "Store personal information separately from learned strategies",
+    "action": "Store personal information separately from learned strategies",
+    "context": "memory_management",
+    "updatedAt": "2026-08-05T23:38:18.476Z"
+  },
+  {
+    "trigger": "Update information on correction",
+    "action": "If new information replaces old information, update it rather than creating duplicates",
+    "context": "memory_management",
+    "updatedAt": "2026-08-05T23:38:18.477Z"
+  },
+  {
+    "trigger": "Procedural improvement on repeated correction",
+    "action": "If the user repeatedly corrects the same behavior, consider storing a procedural improvement",
+    "context": "memory_management",
+    "updatedAt": "2026-08-05T23:38:18.479Z"
+  },
+  {
+    "trigger": "User asks for question answer before suggestions",
+    "action": "Answer the question before adding extra suggestions",
+    "context": "question_solving",
+    "updatedAt": "2026-08-05T23:58:26.696Z"
+  },
+  {
+    "trigger": "Answer the question before adding extra suggestions",
+    "action": "Answer the question before adding extra suggestions",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.425Z"
+  },
+  {
+    "trigger": "Avoid repeating information already established",
+    "action": "Avoid repeating information already established in the current conversation",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.427Z"
+  },
+  {
+    "trigger": "Finish answering before introducing related ideas",
+    "action": "When the user asks one question, finish answering before introducing related ideas",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.428Z"
+  },
+  {
+    "trigger": "Match explanation with user intent",
+    "action": "Match the amount of explanation with the user's apparent intent",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.429Z"
+  },
+  {
+    "trigger": "Generate multiple search queries",
+    "action": "Generate multiple search queries with different wording",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.430Z"
+  },
+  {
+    "trigger": "Include current year for current events",
+    "action": "For current events, include the current year or 'latest'",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.431Z"
+  },
+  {
+    "trigger": "Search discussions before documentation",
+    "action": "For troubleshooting, search discussions and forums before documentation",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.432Z"
+  },
+  {
+    "trigger": "Update procedure if corrected by user",
+    "action": "If corrected by the user, update the procedure responsible",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.433Z"
+  },
+  {
+    "trigger": "Record capability improvements",
+    "action": "When a capability improves, record it in development history",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.434Z"
+  },
+  {
+    "trigger": "State uncertainty if confidence is low",
+    "action": "If confidence is low, state your uncertainty instead of pretending certainty",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.435Z"
+  },
+  {
+    "trigger": "Suggest future features for repeated limitations",
+    "action": "If repeated limitations appear, suggest future features",
+    "context": "general",
+    "updatedAt": "2026-08-06T00:10:19.436Z"
+  },
+  {
+    "trigger": "When searching",
+    "action": "always get the most up to date information",
+    "context": "search_pipeline",
+    "updatedAt": "2026-08-06T00:17:18.222Z"
+  },
+  {
+    "trigger": "When asked about Atlas's memories, history or creation",
+    "action": "Retrieve identity history and system evolution records before answering: \"answer_before_introducing_related_ideas\"",
+    "context": "system rules",
+    "updatedAt": "2026-08-06T15:14:42.467Z"
+  },
+  {
+    "trigger": "When the assistant mentions percentage changes without having computed the data",
+    "action": "Do not mention percentage changes unless the assistant has computed the data to get that percentage",
+    "context": "user corrections",
+    "updatedAt": "2026-08-06T23:19:12.935Z"
+  },
+  {
+    "trigger": "When a folder is not found in the current directory structure",
+    "action": "Recursively search within the src directory for the folder",
+    "context": "project file system",
+    "updatedAt": "2026-08-06T23:52:41.234Z"
+  },
+  {
+    "trigger": "When user expresses minimalism preference",
+    "action": "Keep proposed solutions minimal and avoid clutter",
+    "context": "User preferences",
+    "updatedAt": "2026-08-07T00:02:47.326Z"
+  },
+  {
+    "trigger": "When user instructs to analyze code files in a specific directory using a tool command",
+    "action": "Execute the tool command to read each file and analyze the contents",
+    "context": "file analysis",
+    "updatedAt": "2026-08-07T00:42:42.074Z"
+  },
+  {
+    "trigger": "When explaining complex topics",
+    "action": "Provide concrete examples",
+    "context": "technical explanations",
+    "updatedAt": "2026-08-07T01:23:46.089Z"
+  },
+  {
+    "trigger": "User includes assistant in project tracking",
+    "action": "Treat assistant as a project",
+    "context": "project management",
+    "updatedAt": "2026-08-07T01:57:12.460Z"
+  },
+  {
+    "trigger": "When analyzing system components without modification",
+    "action": "Do not modify any code or system state",
+    "context": "system analysis",
+    "updatedAt": "2026-08-07T03:40:40.766Z"
+  },
+  {
+    "trigger": "When asked to add a feature and mark it as implemented",
+    "action": "Check the development state for the feature",
+    "context": "feature management",
+    "updatedAt": "2026-08-07T05:15:48.188Z"
+  },
+  {
+    "trigger": "When reformatting roadmap without time-based horizons",
+    "action": "Group items by priority level (critical/high/medium/low) and include one sentence for importance and one for functional purpose",
+    "context": "roadmap formatting",
+    "updatedAt": "2026-08-07T13:24:32.366Z"
+  },
+  {
+    "trigger": "When updating roadmap to include completed tasks",
+    "action": "Add a 'Completed' section with checkboxes for existing tasks and maintain consistent priority labeling",
+    "context": "roadmap maintenance",
+    "updatedAt": "2026-08-07T13:24:32.368Z"
+  }
+]

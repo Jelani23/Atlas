@@ -1,0 +1,255 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-quicksand), var(--font-inter), ui-sans-serif, sans-serif;
+  --color-sky: var(--sky);
+  --color-sky-deep: var(--sky-deep);
+  --color-gold: var(--gold);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: light;
+  /* sky + sunlight + clouds palette */
+  --background: oklch(0.975 0.018 232);
+  --foreground: oklch(0.34 0.045 252);
+  --card: oklch(0.995 0.006 230);
+  --card-foreground: oklch(0.34 0.045 252);
+  --popover: oklch(0.995 0.006 230);
+  --popover-foreground: oklch(0.34 0.045 252);
+  --primary: oklch(0.72 0.115 233);
+  --primary-foreground: oklch(0.99 0.008 230);
+  --secondary: oklch(0.955 0.02 230);
+  --secondary-foreground: oklch(0.4 0.05 250);
+  --muted: oklch(0.955 0.018 232);
+  --muted-foreground: oklch(0.58 0.035 246);
+  --accent: oklch(0.86 0.085 88);
+  --accent-foreground: oklch(0.4 0.06 74);
+  --destructive: oklch(0.63 0.19 25);
+  --border: oklch(0.9 0.022 236);
+  --input: oklch(0.92 0.02 234);
+  --ring: oklch(0.72 0.115 233);
+  --chart-1: oklch(0.72 0.115 233);
+  --chart-2: oklch(0.82 0.09 210);
+  --chart-3: oklch(0.86 0.085 88);
+  --chart-4: oklch(0.66 0.09 250);
+  --chart-5: oklch(0.78 0.06 200);
+  --sky: oklch(0.72 0.115 233);
+  --sky-deep: oklch(0.6 0.12 250);
+  --gold: oklch(0.86 0.085 88);
+  --radius: 1rem;
+  --sidebar: oklch(0.985 0.01 230);
+  --sidebar-foreground: oklch(0.34 0.045 252);
+  --sidebar-primary: oklch(0.72 0.115 233);
+  --sidebar-primary-foreground: oklch(0.99 0.008 230);
+  --sidebar-accent: oklch(0.955 0.02 230);
+  --sidebar-accent-foreground: oklch(0.4 0.05 250);
+  --sidebar-border: oklch(0.9 0.022 236);
+  --sidebar-ring: oklch(0.72 0.115 233);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    @apply bg-background text-foreground;
+    /* The app is a fixed-viewport "presence" window — the outer page/body
+       never scrolls. Only individually designated inner sections (the
+       Conversations thread, and later things like project/task lists) get
+       their own scroll region via overflow-y-auto on their own container. */
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+@keyframes atlas-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(4%, -2%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes atlas-drift-slow {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-3%, 3%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes atlas-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-drift {
+  animation: atlas-drift 26s ease-in-out infinite;
+}
+
+.animate-drift-slow {
+  animation: atlas-drift-slow 40s ease-in-out infinite;
+}
+
+.animate-rise {
+  animation: atlas-rise 0.5s ease-out both;
+}
+
+/* Themed scrollbar for any inner scroll region (Conversations thread, the
+   home response preview, and later things like project/task lists). Apply
+   the `.themed-scroll` class to the element that has overflow-y: auto. */
+.themed-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.themed-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.themed-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.themed-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+  background-clip: padding-box;
+}

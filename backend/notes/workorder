@@ -1,0 +1,414 @@
+5. Context Budget
+
+Then add an actual budget.
+
+This is one of the roadmap items I'd move way forward.
+
+Instead of:
+
+"Here's everything."
+
+Atlas gets:
+
+Context Budget: 8,000 tokens
+
+System             1,500
+Conversation       2,000
+Project            2,500
+Memory             1,000
+Search             1,000
+
+And the Context Manager dynamically adjusts it.
+
+If she's coding:
+
+System       1,500
+Code         4,000
+Conversation 1,500
+Memory       500
+Other        500
+
+If she's chatting:
+
+System       1,500
+Conversation 3,000
+Memory       2,500
+Project      500
+Other        500
+
+This will become extremely important as Atlas grows.
+
+6. Permission / Risk Layer
+
+I'd actually implement this before sandboxing.
+
+Because this becomes the foundation of Atlas's agency.
+
+You want something like:
+
+Tool	Risk	Default
+Read file	🟢	Automatic
+Search web	🟢	Automatic
+Search memory	🟢	Automatic
+Generate code	🟢	Automatic
+Create sandbox file	🟡	Automatic
+Run tests	🟡	Automatic
+Modify real source	🔴	Approval
+Modify Atlas core	🔴	Approval
+Execute destructive command	🔴	Approval
+Production action	🔴	Approval
+
+And then the important part:
+
+Don't hardcode permission checks inside every tool.
+
+Have one centralized layer:
+
+Atlas
+ ↓
+Permission Manager
+ ↓
+Tool
+
+That way you can eventually say:
+
+"Atlas, you can autonomously run tests, but never modify production."
+
+and the architecture enforces it.
+
+7. Background Task Manager
+
+This one will solve a problem you've been seeing constantly:
+
+PlannerRoute: 42 seconds
+LLMComplete: 29 seconds
+Total: 1:13
+
+That's fine for an experiment.
+
+It's terrible for an assistant that should feel alive.
+
+Instead:
+
+"Atlas, analyze the entire project."
+
+Atlas:
+
+I've started a background analysis of the Atlas project.
+
+Task ID: ANALYSIS-042
+
+Then your process continues.
+
+Internally:
+
+Task Manager
+    │
+    ├── Worker
+    ├── Worker
+    └── Worker
+
+And events:
+
+task.started
+task.progress
+task.completed
+task.failed
+
+Then Atlas can tell you:
+
+"The project scan is 63% complete."
+
+That is very Jarvis-like.
+
+8. Unified Event System
+
+I'd build this immediately alongside the background manager.
+
+Because you're going to want logging for everything.
+
+Something like:
+
+emit('model.selected', {...})
+emit('tool.started', {...})
+emit('tool.completed', {...})
+emit('task.started', {...})
+emit('task.failed', {...})
+emit('sandbox.test_passed', {...})
+
+Then different systems can listen.
+
+For example:
+
+Event
+ ↓
+Logger
+ ↓
+Database
+ ↓
+UI
+ ↓
+Notification system
+
+This also gives you an incredibly useful debugging system.
+
+You could eventually ask:
+
+"Atlas, why did that request take 42 seconds?"
+
+And she could inspect her own event timeline:
+
+Intent routing       0.4ms
+Memory extraction    2.1s
+Context construction 12ms
+Model loading        4.8s
+LLM generation       7.2s
+Tool execution       1.3s
+Total                15.4s
+
+That's a massive capability upgrade.
+
+9. Sandbox Self-Improvement
+
+Now I'd tackle the thing you're excited about.
+
+By this point you have:
+
+model router
+coder model
+project cache
+context manager
+permission system
+background tasks
+event system
+
+Now the sandbox becomes surprisingly straightforward.
+
+Problem detected
+       ↓
+Analyze
+       ↓
+Coder model
+       ↓
+Proposal
+       ↓
+Permission check
+       ↓
+Sandbox
+       ↓
+Apply patch
+       ↓
+Run targeted tests
+       ↓
+Failure?
+   ↙       ↘
+ YES       NO
+ ↓          ↓
+Analyze    Verify
+failure      ↓
+ ↓         Report
+Modify
+ ↓
+Test again
+
+And crucially:
+
+The sandbox is disposable.
+
+Something like:
+
+sandbox/
+   attempt_042/
+      src/
+      tests/
+      proposal.json
+      results.json
+      logs/
+
+Atlas can absolutely wreck it.
+
+That's the point.
+
+She can make:
+
+Attempt 1 → fail
+Attempt 2 → fail
+Attempt 3 → pass
+
+without touching your real Atlas installation.
+
+10. Automated Verification
+
+This is the piece I'd add to your roadmap as a new major item.
+
+Because there's a huge difference between:
+
+"The model thinks this works."
+
+and:
+
+"The code actually passed tests."
+
+I'd give Atlas several confidence levels:
+
+Level 0 — Model confidence
+
+"The coding model believes this should work."
+
+Level 1 — Static validation
+✓ syntax
+✓ imports
+✓ JSON validity
+Level 2 — Targeted tests
+✓ affected feature
+✓ regression tests
+Level 3 — Broader tests
+✓ entire subsystem
+Level 4 — Full regression suite
+✓ Atlas test suite
+
+Then Atlas can report:
+
+Model confidence: 92%
+
+Static validation: PASS
+Targeted tests: 18/18
+Regression tests: 143/147
+
+Overall status: NOT READY
+
+That's infinitely more useful than saying "I'm 92% confident."
+
+11. Self-Improvement Artifacts
+
+Then save everything.
+
+This is where your idea gets really cool.
+
+attempt_042/
+├── problem.json
+├── analysis.json
+├── original.patch
+├── proposed.patch
+├── sandbox/
+├── tests.json
+├── test_results.json
+├── iterations.json
+└── final_report.json
+
+Now Atlas has an actual engineering history.
+
+Eventually you could ask:
+
+"What did you try to fix last month?"
+
+And Atlas can actually retrieve:
+
+Attempt #42
+Attempt #37
+Attempt #31
+
+That's much more powerful than simply remembering a sentence saying "I fixed something once."
+
+12. Intent Templates
+
+I'd sneak this in right now because it's small.
+
+You already have the system.
+
+Move this:
+
+const prompt = `
+...
+Intent Templates:
+...
+`;
+
+into:
+
+src/intent/intentTemplates.json
+
+Then you can have:
+
+{
+  "generate_code": {
+    "description": "...",
+    "required_slots": ["prompt"],
+    "examples": [
+      "write a javascript calculator",
+      "make a fibonacci function"
+    ]
+  }
+}
+
+That gives Atlas a proper intent ontology instead of an enormous prompt string.
+
+And eventually you can add:
+
+aliases
+negative_examples
+confidence_rules
+required_tools
+preferred_model
+
+That's going to become useful as Atlas's capabilities explode.
+
+13. Consolidate extractJSON
+
+I'd also do this very soon.
+
+This is tiny compared to everything above.
+
+You've already experienced the consequences of duplicated JSON extraction logic.
+
+Make:
+
+src/utils/jsonExtractor.js
+
+the one canonical implementation.
+
+Then:
+
+normalizer.js
+memoryExtractor.js
+planner.js
+
+all use it.
+
+And add tests.
+
+This is one of those boring engineering tasks that prevents a stupid headache six months later.
+
+What I would NOT work on yet
+
+I'd deliberately push these down:
+
+❌ UI
+
+Not yet.
+
+The CLI is giving you incredible visibility into the internals right now.
+
+Build the brain first.
+
+❌ TTS/STT
+
+Also not yet.
+
+Voice makes Atlas feel more alive, but doesn't make the underlying assistant better.
+
+❌ API server
+
+Useful eventually, especially for your future UI/mobile access, but not your immediate bottleneck.
+
+❌ Full autonomous goals
+
+Way later.
+
+That's the stuff we were philosophically discussing. You want the underlying architecture capable of safely supporting agency before giving Atlas meaningful autonomy.
+
+❌ "Feeling Alive"
+
+Also later.
+
+Ironically, the systems you're building now are what will eventually make this possible.

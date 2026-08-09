@@ -1,0 +1,468 @@
+Atlas Roadmap
+
+The main goal of Atlas is to create a fully capable AI assistant/companion similar to that of Jarvis/Friday from the MCU, and Raphael from Tensura. A sort of combination of the two.
+
+✅ Phase 1 — Context & Intelligence (Complete)
+- LLM-driven Task Normalizer replacing rigid keyword matching
+- Context Inheritance — last 10 turns of history passed into the Normalizer so pronouns ("it", "that") resolve correctly
+- Information Source Classifier (Normalizer decides Web vs Code vs Notes vs Memory)
+- Fast Paths that bypass the LLM entirely for Time, Date, and Calculator
+- Hybrid fallback: regex normalizer kicks in if the LLM normalizer fails
+
+✅ Phase 2 — Memory System 2.0 (Complete)
+- Separated Personal / Project / Knowledge / Procedural memory stores
+- Upsert logic confirmed in longTermProfile.js
+- Confidence scoring stored per memory
+- Relationship/interest observations routed into the same profile store
+
+✅ Phase 3 — Planning Engine, Multi-Step (Complete)
+- analyze_and_suggest / analyze_and_save — read code, analyze, optionally save findings to a note
+- Reflection system: deep exit-analysis extracting procedural rules, JSON parsing hardened
+
+✅ Phase 4 — Search Pipeline Stability (Complete)
+- Serper.dev primary, DuckDuckGo/Wikipedia fallback
+- 3-query pipeline with per-query try/catch
+- 1s configurable delay between queries
+
+✅ Phase 5 — Atlas World Model (Complete)
+- Environment, capabilities, limitations, and current projects injected into every prompt via worldModel.js
+
+✅ Performance Pass (Complete)
+- buildContext() fetches all memory stores in parallel via Promise.all
+
+⚠️ Phase 6 — Self-Modification (Partially Complete)
+✅ Atlas can read her own code and propose a structured fix (propose_code_change)
+✅ No longer broken — Bug #1 (missing extractJSON export) is fixed, this intent runs cleanly now
+❌ Stage 2/3 still not started: writing approved proposals to a sandbox/ directory, and a review/approve step before any change touches real source
+
+✅ Priority 9 — Database Migration (Complete)
+All memory — sessions, conversations, user_profile, project_memory, knowledge_library, procedural_memory, dev_state, reflections, world_model — now lives in Supabase (Postgres)
+atlas.db (better-sqlite3) and every src/memory/*.json file are retired; legacy_sqlite/ kept around for reference only
+The three dead SQLite tables flagged last time (memories, user_memory, reflections in the old schema) were confirmed empty (0 rows) and dropped rather than migrated
+One-time migration script (scripts/migrateToSupabase.js) and a pre-flight connectivity check (scripts/checkSupabaseConnection.js) are both in place
+This closes out the item from the original roadmap — no longer split across SQLite + JSON
+
+✅ Performance Pass & Optimization (Complete)
+buildContext() fetches all memory stores in parallel via Promise.all
+Memory extraction history reduced to 5 turns to halve LLM token processing
+think: false disabled for Normalizer and internal tool execution (analyze, propose) to drop 60s+ latency to ~10-15s
+Fast Path regex bypass in Normalizer for immediate file/time/math routing
+Dynamic src tree fetching in Normalizer to prevent LLM path hallucinations
+Smart camelCase/PascalCase file resolution in readCode to prevent slow recursive searches
+Enforced brevity prompts (< 200 words, 3 bullet points) tailored for local 4B model (Qwen3) on RTX 3060
+
+✅ Intent Templates (Partially Complete)
+Keyword matching replaced with LLM intent mapping
+Formal intentTemplates.json (examples + required_slots per intent) still not built — templates still live inline as a prompt string in normalizer.js
+
+✅ Priority 10 — Model Management (Implemented)
+Model manager handles the swapping between models. Checks if the model needed is loaded or not.
+
+✅ Phase 7 — Model Orchestrator (Multi-Model Swarm) (Partially Implemented)
+Model toggle between semantical requests vs everything else. 
+Anything to do with code semantics gets sent to qwen2.5-coder 7b and everything  else gets sent to qwen3 4b.
+
+❌ Phase 8 — API Server (Not Started)
+
+❌ UI (Not Started)
+
+❌ TTS / STT (Not Started)
+
+⚠️ Fail-Safe / Crash Prevention (Partially Complete)
+
+✅ handleMessage() in conversationEngine.js is now wrapped in a top-level try/catch with a graceful fallback reply, and memory extraction has its own isolated try/catch so a flaky call can't take the whole turn down (Bugs #3 and #4)
+
+❌ Still no broader fail-safe system beyond that — this was a targeted fix for a concrete crash path, not the full system originally scoped
+
+❌ "Feeling Alive" Across Sessions (Not Started)
+
+---
+
+Suggested New Roadmap Items
+
+Things I noticed while reading the code that aren't on your list anywhere:
+
+1. **Provider-agnostic "thinking" handling.** Only `ollama.js` and `qwen.js` actually forward the `think` option to the model. `openai.js` and `deepseek.js` silently drop it. Since Atlas is meant to be provider-swappable, this means switching `ATLAS_MODEL_PROVIDER` to `deepseek` or `openai` will silently change behavior anywhere `think: true/false` is being relied on (Normalizer, Memory Extractor, code analysis calls). Worth adding a shared thinking-mode abstraction in `modelAdapter.js` so this doesn't quietly rot.
+2. **Tool-use memory gap.** `conversationEngine.js` skips memory extraction entirely whenever a tool is used, to save latency. That means if you say "read planner.js, and by the way I'm switching this project to TypeScript," the TypeScript fact is never captured. Worth adding a lightweight, tool-result-independent memory pass so factual statements aren't lost just because a tool also fired that turn.
+3. **Confidence-gated clarification, done properly.** Related to Bug #5 below — worth formalizing "what happens on confidence 0" as an explicit roadmap item once fixed, so it doesn't regress.
+4. **Schema cleanup pass.** Decide the fate of the unused `memories` / `user_memory` tables in `schema.sql` (wire up or remove) as part of the Priority 9 migration work.
+5. **Automated regression check for the JSON extractors.** You now have three near-identical `extractJSON` implementations (`normalizer.js`, `memoryExtractor.js`, and the inline one referenced in `planner.js`). Given how much silent-failure debugging has already gone into this pattern, it's worth consolidating into one shared, tested utility rather than three copies that can drift out of sync (see Bug #1 — this is exactly how it already broke once).
+
+==========================================================================================================
+🧭 Atlas — ADA-Inspired Architecture & Cache Roadmap
+1. 🧠 Model Router
+Priority: Now
+Give Atlas the ability to select the best model for the task.
+Conversation / Memory / Search → Qwen3 4B
+Coding → Qwen2.5-Coder 7B
+
+Uses:
+selectModel(route, context)
+
+Returns a decision such as:
+{
+  "model": "qwen2.5-coder:7b",
+  "reason": "Coding task requiring deeper code analysis"
+}
+==========================================================================================================
+2. 🔥 Model Residency Manager
+Priority: Now / After Model Router
+Controls which models Atlas wants kept warm rather than manually loading/unloading models.
+
+Qwen3 4B          → frequently resident
+Qwen2.5-Coder 7B  → resident/on-demand depending on VRAM
+
+The goal is reducing model-swap latency while letting Ollama handle the actual loading mechanics.
+
+🔧 Tool-Based Model Specialization
+Goal: Automatically use the coding model whenever Atlas needs to semantically understand, analyze, debug, or generate code.
+
+General tools → Qwen3 4B
+find_file
+read_file
+memory searches
+general search
+conversation
+ordinary planning/actions
+Code-understanding tools → Qwen2.5-Coder 7B
+analyze_code
+read_and_analyze
+debug_code
+edit_code
+code generation/modification
+semantic codebase analysis
+
+Implementation: Give relevant tools a modelRequirement/modelType flag such as "general" or "coding". The model selector checks that requirement and overrides the normal Qwen3 default when necessary.
+Key rule:
+If Atlas only needs to retrieve a file, use Qwen3. If Atlas needs to understand what the code means or change it, use the coder model.
+Benefit: Keeps Qwen3 responsible for the vast majority of Atlas's lightweight tasks while ensuring coding operations automatically get the specialized model—without making the intent/reasoning router unnecessarily complicated.
+==========================================================================================================
+3. ⚡ Project State Cache (Implemented)
+Priority: High
+
+Create a fast local representation of each project's filesystem.
+
+Atlas Project
+├── file tree
+├── file hashes
+├── file metadata
+├── cached contents
+└── file relationships
+
+Instead of:
+Search → recursively scan → find file → read file
+
+Atlas can do:
+Cache → "I already know controller.js."
+
+The filesystem remains the source of truth; hashes detect stale files.
+==========================================================================================================
+4. 📚 Project Knowledge / Memory
+Priority: High
+Separate project knowledge from the raw file cache.
+For example:
+
+{
+  "purpose": "Controls reasoning configuration",
+  "exports": ["getReasoningOptions"],
+  "related_files": [
+    "intent/router.js",
+    "modelAdapter.js"
+  ]
+}
+
+Atlas can answer basic project questions from the summary without loading the entire source file.
+==========================================================================================================
+5. 💬 Hot Conversation Cache
+Priority: Medium
+Treat the current conversation as temporary working memory.
+
+Conversation
+     ↓
+HOT CACHE
+     ↓
+Reflection
+     ↓
+Long-term memory / Session history
+     ↓
+Clear hot cache
+
+This prevents every conversation from permanently becoming part of the active context.
+==========================================================================================================
+6. 🗂️ Context Cache
+Priority: Medium
+Keep frequently relevant information readily available without repeatedly searching memory.
+
+Examples:
+Current project
+Current task
+Recently relevant memories
+Active tools
+Recent decisions
+
+Think of it as RAM for Atlas's cognition.
+==========================================================================================================
+7. 🔐 Tool Permission & Risk Layer
+Priority: High
+Inspired heavily by ADA.
+Every tool gets a risk/permission policy:
+
+read_file      → automatic
+search_web     → automatic
+write_file     → conditional
+run_code       → conditional
+modify_atlas   → confirmation
+production     → confirmation REQUIRED
+
+This will become particularly important for Atlas's future self-improvement system.
+==========================================================================================================
+8. 🔄 Background Task Manager
+Priority: High / Future
+Allow long-running operations to happen asynchronously.
+
+Atlas
+ ↓
+Start task
+ ↓
+Background worker
+ ↓
+Progress events
+ ↓
+Completion
+
+Example:
+"Atlas, analyze the entire project."
+
+Instead of blocking the conversation for two minutes, Atlas starts a task and reports progress.
+==========================================================================================================
+9. 📡 Unified Event System
+Priority: Medium
+Create one event pipeline for Atlas's internal activity.
+
+model.selected
+tool.started
+tool.completed
+task.started
+task.progress
+sandbox.test_failed
+sandbox.test_passed
+model.switched
+
+Your existing activity/notification system can consume these events.
+This is inspired by ADA's callback/status architecture.
+==========================================================================================================
+10. 🧪 Sandbox Self-Improvement Pipeline
+Priority: Future
+Combine the coding model, cache, permissions, and background tasks.
+
+Problem
+ ↓
+Analyze
+ ↓
+Inspect cached project
+ ↓
+Qwen2.5-Coder
+ ↓
+Propose patch
+ ↓
+Sandbox
+ ↓
+Run tests
+ ↓
+Analyze results
+ ↓
+Revise
+ ↓
+Verify
+
+Only after passing verification would Atlas potentially request permission to modify its real codebase.
+==========================================================================================================
+11. 📦 Self-Improvement Artifacts
+Priority: Future
+Keep a record of Atlas's development attempts.
+
+attempt_042/
+├── analysis.json
+├── changes.patch
+├── test_results.json
+├── sandbox.log
+└── result.json
+
+This gives Atlas a historical engineering record and makes failed experiments recoverable/debuggable.
+==========================================================================================================
+🔄 Mini Roadmap — Dynamic Context & Memory
+12. 🔥 Hot / Warm / Cold Context
+Priority: Future
+Give cached information different residency levels.
+
+🔥 HOT   → currently being used
+🟡 WARM  → recently/relevantly used
+🧊 COLD  → persistent storage
+
+Example:
+Atlas Project → HOT
+Bindex Project → WARM
+Old Music Project → COLD
+
+Atlas can swap these in and out instead of rebuilding context.
+==========================================================================================================
+13. 🧠 Dynamic Context Manager
+Priority: Future
+A central system decides what information Atlas needs right now.
+
+Task → Context Manager
+          ↓
+   ┌──────┼──────┐
+Project  Memory  Search
+   ↓       ↓       ↓
+        MODEL
+
+Rather than giving the model everything, only relevant information becomes active.
+==========================================================================================================
+14. 🔍 Search Cache
+Priority: Future
+Cache recent searches and their useful results.
+
+"Find Ollama coding models"
+        ↓
+    Search Cache
+        ↓
+Results + summary + timestamp
+
+If the same subject comes up later, Atlas can reuse the existing research instead of searching again.
+==========================================================================================================
+15. 🗃️ Context Budget
+Priority: Future
+Give every request a maximum context budget and dynamically allocate it.
+
+16,000 tokens
+├── System       1,500
+├── Conversation 3,500
+├── Project      6,000
+├── Memory       3,000
+└── Search       2,000
+
+If the task changes, Atlas reallocates the budget.
+==========================================================================================================
+16. 🧩 Memory Activation
+Priority: Future
+Separate "remembered" from "currently relevant."
+A memory can exist permanently without being loaded into every conversation.
+
+10,000,000 memories
+        ↓
+Retrieval
+        ↓
+Top 10 relevant memories
+        ↓
+HOT CONTEXT
+
+This becomes extremely important as Atlas grows older.
+==========================================================================================================
+17. 🧬 Memory Consolidation & Archival
+Priority: Long-term
+Prevent Atlas's memory database from becoming an ever-growing pile of equally weighted information.
+
+Raw sessions
+     ↓
+Reflection
+     ↓
+Memory
+     ↓
+Consolidation
+     ↓
+Active / Archived / Historical
+
+Use relevance, recency, importance, frequency, and project association to determine what gets activated.
+Goal: Atlas can theoretically remember decades of history without needing to think about decades of history for every request.
+==========================================================================================================
+🏗️ The Bigger Picture
+Once these pieces come together, Atlas starts looking something like:
+
+                         ATLAS
+                           │
+                 ┌─────────┴─────────┐
+                 │                   │
+            Model Router        Context System
+                 │                   │
+        ┌────────┴───────┐     ┌─────┴──────────┐
+        │                │     │                │
+    Qwen3 4B       Coder 7B  Memory          Cache
+        │                │     │                │
+        └────────┬───────┘     │       ┌────────┴────────┐
+                 │             │       │                 │
+                 │          Long-term Project       Conversation
+                 │             │       Cache             Cache
+                 │             │
+                 └──────┬──────┘
+                        │
+                 Tool / Action Layer
+                        │
+                ┌───────┴────────┐
+                │                │
+             Permissions     Task Manager
+                │                │
+                └───────┬────────┘
+                        │
+                     Sandbox
+                        │
+                  Self-Improvement
+
+The overall philosophy
+Don't make the LLM do work the architecture can do faster.
+
+Cache files instead of repeatedly searching for them.
+Cache context instead of repeatedly retrieving it.
+Use structured tool calls instead of paragraphs of internal explanation.
+Use Qwen3 for general tasks instead of unnecessarily loading a larger model.
+Use the coding specialist when coding genuinely demands it.
+Use background tasks for long operations instead of blocking the assistant.
+Use permissions before giving Atlas increasingly powerful abilities.
+
+That gives us a pretty clear direction for Atlas without turning the next phase into an enormous rewrite.
+
+🔄 Development Hot Reload / Live Backend Updates
+
+Priority: Medium / Development Quality-of-Life
+
+Allow Atlas's backend to automatically detect source-code changes and reload/restart without requiring the Electron UI to be closed and reopened.
+
+Developer edits Atlas code
+        ↓
+File watcher detects change
+        ↓
+Backend reloads/restarts
+        ↓
+Electron reconnects
+        ↓
+Atlas remains open
+
+Goals:
+
+Keep the Electron UI open while developing Atlas.
+Automatically detect changes within src/.
+Restart/reload the backend without restarting Electron.
+Preserve persistent state through Supabase/database and caches where appropriate.
+Automatically reconnect the Electron frontend after a backend restart.
+Ignore node_modules, logs, cache files, builds, sandbox artifacts, etc.
+Use Vite/HMR for frontend changes if supported by the UI stack.
+Show a temporary Updating... / Reconnecting... state in the UI during backend reloads.
+
+Development workflow:
+
+Edit code
+   ↓
+Save
+   ↓
+Atlas automatically reloads
+   ↓
+Test
+   ↓
+Edit again
+   ↓
+Save
+   ↓
+Test again
+
+Long-term benefit:
+Creates a much faster development loop without requiring Atlas/Electron to be manually restarted after every backend change.

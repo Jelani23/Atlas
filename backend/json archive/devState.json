@@ -1,0 +1,97 @@
+[
+  {
+    "feature": "Memory System 1.0 (Personal, Project, Knowledge)",
+    "status": "implemented",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Memory System 2.0 (Episodic, Relationship, Context Inheritance)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T12:00:00.000Z"
+  },
+  {
+    "feature": "Reflection & Session Summarization",
+    "status": "implemented",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Task Normalizer (LLM-driven Intent Routing)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T12:00:00.000Z"
+  },
+  {
+    "feature": "Web Search Pipeline (3-Tier: Serper, DuckDuckGo, Wikipedia)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T12:00:00.000Z"
+  },
+  {
+    "feature": "File Management (Notes Read/Write/Edit/Delete/Rename)",
+    "status": "implemented",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Adaptive Personality System",
+    "status": "implemented",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Code Self-Analysis (Recursive Traversal, Fuzzy Matching, Multi-File Read)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T12:00:00.000Z"
+  },
+  {
+    "feature": "World Model (Ground truth capabilities and limitations)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T12:00:00.000Z"
+  },
+  {
+    "feature": "Model Management (Dynamic Multi-Model Swapping)",
+    "status": "planned",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Planning Engine (Goal -> Plan -> Tasks -> Execute)",
+    "status": "implemented",
+    "updated_at": "2026-08-07T03:35:15.922Z"
+  },
+  {
+    "feature": "UI / Visual Interface",
+    "status": "planned",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Fail-safe System / Crash Prevention",
+    "status": "planned",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Text-to-Speech (TTS)",
+    "status": "planned",
+    "updated_at": "2026-08-05T12:00:00.000Z"
+  },
+  {
+    "feature": "Intent Confidence And Clarification System",
+    "status": "implemented",
+    "updated_at": "2026-08-07T05:04:50.328Z"
+  },
+  {
+    "feature": "Code Change Proposal System",
+    "status": "implemented",
+    "updated_at": "2026-08-07T05:06:21.761Z"
+  },
+  {
+    "feature": "Context Builder Optimization",
+    "status": "implemented",
+    "updated_at": "2026-08-07T05:13:32.203Z"
+  },
+  {
+    "feature": "Context Inheritance",
+    "status": "implemented",
+    "updated_at": "2026-08-07T05:13:32.203Z"
+  },
+  {
+    "feature": "Apple Watch App",
+    "status": "planned",
+    "updated_at": "2026-08-07T05:36:21.549Z"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "name": "atlas",
+  "version": "0.1.0",
+  "description": "Personal AI companion - Stage 1: Conversation Engine",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "check:supabase": "node scripts/checkSupabaseConnection.js",
+    "migrate:supabase": "node scripts/migrateToSupabase.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.6.1",
+    "ollama": "^0.6.3",
+    "openai": "^4.104.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^13.0.3"
+  }
+}

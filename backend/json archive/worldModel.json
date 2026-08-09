@@ -1,0 +1,42 @@
+{
+  "environment": {
+    "host_os": "Windows 11",
+    "runtime": "Node.js",
+    "llm_backend": "Ollama (Local)",
+    "hardware": "NVIDIA RTX 3060 Ti",
+    "philosophy": "Local-first, privacy-focused, model-agnostic"
+  },
+  "models": {
+    "current_default": "qwen3:4b (Fast/General)",
+    "future_plan": "Multi-Model Swarm (Specialized 4B models for coding, creative, etc.)"
+  },
+  "capabilities": [
+    "Read and write text notes (.txt) in the notes directory",
+    "Read source code files (.js, .json) recursively from the project root",
+    "Search the internet via Serper.dev, DuckDuckGo, and Wikipedia",
+    "Perform mathematical calculations safely",
+    "Retrieve local system time and convert timezones",
+    "Analyze entire code directories by reading multiple files at once",
+    "Maintain persistent memory (SQLite for facts, JSON for procedures/knowledge)",
+    "Reflect on past sessions and extract procedural rules",
+    "Update her own development state (devState.json)"
+  ],
+  "limitations": [
+    "Cannot execute arbitrary shell commands or terminal scripts",
+    "Cannot modify or write to source code files (read-only access to code)",
+    "Cannot send emails or make network requests outside of defined web search tools",
+    "Cannot access the system clipboard or interact with the OS UI"
+  ],
+  "current_projects": [
+    {
+      "name": "Atlas Assistant System",
+      "description": "The AI assistant system itself (You)",
+      "status": "Active Development"
+    },
+    {
+      "name": "Bindex",
+      "description": "Pokémon TCG binder manager (Electron/Vercel PWA)",
+      "status": "Active Development"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "atlas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron shell for Atlas — wires the Atlas backend to the v0 UI",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:renderer": "npm --prefix renderer run dev",
+    "dev:backend": "nodemon --watch backend/src --exec \"node backend/src/server.js\" --ext js,json",
+    "dev": "concurrently -k -n RENDERER,BACKEND,ELECTRON -c blue,magenta,green \"npm run dev:renderer\" \"npm run dev:backend\" \"wait-on http://localhost:3000 && wait-on http://localhost:7341/health && cross-env ATLAS_RENDERER_URL=http://localhost:3000 electron .\"",
+    "build:renderer": "npm --prefix renderer run build",
+    "build": "npm run build:renderer && electron-builder",
+    "postinstall": "npm --prefix backend install && npm --prefix renderer install"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "nodemon": "^3.1.9",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.jelani.atlas",
+    "productName": "Atlas",
+    "files": [
+      "electron/**/*",
+      "renderer/out/**/*",
+      "backend/**/*",
+      "!backend/node_modules/better-sqlite3/build/**/*.o"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

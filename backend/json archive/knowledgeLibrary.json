@@ -1,0 +1,8 @@
+[
+  {
+    "subject": "general",
+    "key": "file_reading_snippet",
+    "value": "fs.readFileSync('path', 'utf8')",
+    "updatedAt": "2026-08-05T21:29:20.770Z"
+  }
+]
