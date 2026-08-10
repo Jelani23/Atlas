@@ -4,9 +4,17 @@
   { "input": "What's 15% from 200?", "expectedIntent": "percentage", "expectedTool": "percentage" },
   { "input": "How many feet is 158 centimeters?", "expectedIntent": "convertUnit", "expectedTool": "convertUnit" },
   { "input": "158 cm to ft", "expectedIntent": "convertUnit", "expectedTool": "convertUnit" },
-  { "input": "Word count of this is a test", "expectedIntent": "wordCount", "expectedTool": "wordCount" },
-  { "input": "How many words in this is a test", "expectedIntent": "wordCount", "expectedTool": "wordCount" },
-  { "input": "Find file conversationEngine", "expectedIntent": "findFile", "expectedTool": "findFile" },
-  { "input": "Where is conversationEngine.js?", "expectedIntent": "findFile", "expectedTool": "findFile" },
-  { "input": "Locate the conversation engine module", "expectedIntent": "findFile", "expectedTool": "findFile" }
+  { "input": "How much is 50 dollars in euros", "expectedIntent": "convertCurrency", "expectedTool": "convertCurrency" },
+  { "input": "Give me the mean of 5 10 and 15", "expectedIntent": "statistics", "expectedTool": "statistics" },
+  { "input": "What is the current time", "expectedIntent": "getTime", "expectedTool": "getTime" },
+  { "input": "What time is it in JST", "expectedIntent": "convertTime", "expectedTool": "convertTime" },
+  { "input": "Show my notes", "expectedIntent": "listNotes", "expectedTool": "listNotes" },
+  { "input": "Open note test note", "expectedIntent": "readNote", "expectedTool": "readNote" },
+  { "input": "Add time travel to the dev state as planned", "expectedIntent": "updateDevState", "expectedTool": "updateDevState" },
+  { "input": "Where is eventBus used", "expectedIntent": "searchCode", "expectedTool": "searchCode" },
+  { "input": "Show me the code for planner", "expectedIntent": "readCode", "expectedTool": "readCode" },
+  { "input": "What is the project structure", "expectedIntent": "getDirectoryTree", "expectedTool": "getDirectoryTree" },
+  { "input": "Hash of server js", "expectedIntent": "getFileHash", "expectedTool": "getFileHash" },
+  { "input": "Is this valid JSON {}", "expectedIntent": "validateJSON", "expectedTool": "validateJSON" },
+  { "input": "Keywords for this text", "expectedIntent": "extractKeywords", "expectedTool": "extractKeywords" }
 ]

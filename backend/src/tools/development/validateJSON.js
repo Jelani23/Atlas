@@ -14,7 +14,7 @@ module.exports = {
     intentSchema: {
         name: 'validateJSON',
         domain: 'FILES',
-        triggers: ['validate json', 'validate this json', 'is this valid json'],
+        triggers: ['validate json', 'validate this json', 'is this valid json', 'valid json'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const m = message.match(/(?:validate this json|validate json|is this valid json)\s*(.*)/i);

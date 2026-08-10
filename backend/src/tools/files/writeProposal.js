@@ -31,4 +31,17 @@ async function writeProposal(targetFilename, reason, risk, proposedCode) {
         return `Error creating proposal: ${error.message}`;
     }
 }
-module.exports = writeProposal;
+
+module.exports = {
+    execute: writeProposal,
+    intentSchema: {
+        name: 'propose_code_change',
+        domain: 'FILES',
+        triggers: ['propose a change', 'write a proposal', 'fix the code', 'review and fix', 'propose a fix'],
+        requiredEntities: [],
+        extractParams: (message, entities) => {
+            const m = message.match(/(?:proposal for|propose a change for|propose a fix for|fix the code for|review and fix for|fix the)\s+(?:the\s+)?(.+?)(?:\s+file|\?|$)/i);
+            return [m ? m[1].trim() : null];
+        }
+    }
+};

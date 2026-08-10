@@ -26,6 +26,22 @@ class TaskManager {
     constructor() {
         this.tasks = new Map();
         this.taskCounter = 1;
+
+        // Listen for parent request completion to release queued background tasks
+        eventBus.on(EventTypes.REQUEST_COMPLETED, ({ taskId }) => {
+            this._releaseQueuedTasks(taskId);
+        });
+        eventBus.on(EventTypes.REQUEST_FAILED, ({ taskId }) => {
+            this._releaseQueuedTasks(taskId);
+        });
+    }
+
+    _releaseQueuedTasks(parentTaskId) {
+        for (const task of this.tasks.values()) {
+            if (task.parentTaskId === parentTaskId && task.status === TaskStates.QUEUED) {
+                this._executeTask(task.taskId, task.workFn);
+            }
+        }
     }
 
     async createTask(type, workFn, parentTaskId = null, requestId = null, priority = TaskPriorities.NORMAL) {
@@ -38,7 +54,7 @@ class TaskManager {
             requestId,
             type,
             priority,
-            status: TaskStates.CREATED,
+            status: TaskStates.QUEUED, // Start in QUEUED
             progress: 0,
             stage: 'Initializing',
             createdAt: now,
@@ -46,17 +62,19 @@ class TaskManager {
             completedAt: null,
             duration: null,
             result: null,
-            error: null
+            error: null,
+            workFn: workFn // Store the function so we can run it later
         };
 
         this.tasks.set(taskId, task);
-        
-        // Explicitly transition to QUEUED, then RUNNING
-        task.status = TaskStates.QUEUED;
         eventBus.emit(EventTypes.TASK_CREATED, { taskId, parentTaskId, requestId, type, priority, timestamp: now });
         
-        // Execute asynchronously
-        this._executeTask(taskId, workFn);
+        // If there's no parent task, execute immediately. 
+        // Otherwise, wait for the parent request to complete.
+        if (!parentTaskId) {
+            this._executeTask(taskId, workFn);
+        }
+        
         return taskId;
     }
 
@@ -66,6 +84,8 @@ class TaskManager {
         
         // If it was cancelled before it even started, abort.
         if (task.status === TaskStates.CANCELLED) return;
+        // Prevent double execution if released twice
+        if (task.status === TaskStates.RUNNING) return; 
 
         const now = Date.now();
         task.status = TaskStates.RUNNING;
@@ -123,7 +143,7 @@ class TaskManager {
             requestId,
             parentTaskId,
             type,
-            priority: TaskPriorities.CRITICAL, // Foreground requests are critical
+            priority: TaskPriorities.CRITICAL,
             status: TaskStates.RUNNING,
             createdAt: now,
             startedAt: now,

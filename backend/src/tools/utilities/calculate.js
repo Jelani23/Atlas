@@ -15,7 +15,7 @@ module.exports = {
     intentSchema: {
         name: 'calculate',
         domain: 'MATH',
-        triggers: ["calculate","math"],
+        triggers: ['calculate', 'math', 'times', 'plus', 'minus', 'divided by', '*'],
         requiredEntities: ["MATH_EXPR"],
         extractParams: (message, entities) => {
         const mathExpr = entities.find(e => e.type === 'MATH_EXPR');

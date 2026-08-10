@@ -110,6 +110,11 @@ class AtlasInterface extends EventEmitter {
             }
         });
 
+        eventBus.on(EventTypes.TASK_FAILED, ({ taskId, error }) => {
+            const friendlyError = `I ran into an issue with that background task (${taskId}): ${error}`;
+            this.emit('atlas.response', { text: friendlyError, isBackground: true });
+        });
+
         eventBus.on(EventTypes.REQUEST_FAILED, ({ error }) => {
             this.emit('atlas.error', { message: error });
         });

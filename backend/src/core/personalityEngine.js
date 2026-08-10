@@ -61,7 +61,8 @@ function inferMode(intent) {
   }
 }
 
-function getSystemPrompt(mode = DEFAULT_MODE) {
+// Updated to accept policy
+function getSystemPrompt(mode = DEFAULT_MODE, policy = 'NONE') {
   const actualMode = mode === 'auto' ? 'casual' : mode;
   const addition = MODE_ADDITIONS[actualMode] || MODE_ADDITIONS['casual'];
   return `${CORE_IDENTITY}\n\n${addition}`;

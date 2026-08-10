@@ -4,7 +4,8 @@ const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
 
-async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history }) {
+// ADD 'policy' to the destructured arguments
+async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy }) {
     console.time("buildContext");
     
     const relevantMemory = await contextManager.getRelevantContext(userInput, history, intent);
@@ -65,7 +66,8 @@ Limitations:
 `;
     }
 
-    const systemPrompt = personalityEngine.getSystemPrompt(mode);
+    // PASS policy to getSystemPrompt
+    const systemPrompt = personalityEngine.getSystemPrompt(mode, policy);
 
     let toolContext = "No tools used.";
     if (toolResult && toolResult.needsTool) {

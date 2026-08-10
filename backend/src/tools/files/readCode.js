@@ -40,12 +40,13 @@ module.exports = {
     intentSchema: {
         name: 'readCode',
         domain: 'FILES',
-        triggers: ['read the code for', 'read me the code for', 'read code for', 'show the code for', 'open the code for', 'inspect the code for', 'read code', 'read me the code'],
-        requiredEntities: [],
+        triggers: ['read the code for', 'read me the code for', 'read code for', 'show the code for', 'show me the code for', 'open the code for', 'inspect the code for', 'read code', 'read me the code', 'read file', 'read the file', 'read me the file', 'read'],
+        requiredEntities: ['FILE'],
         extractParams: (message, entities) => {
-            const m = message.match(/(?:read the code for|read me the code for|read code for|show the code for|open the code for|inspect the code for|read code|read me the code)\s+(?:the\s+)?(.+?)(?:\s+file|\?|$)/i);
+            const m = message.match(/(?:read the code for|read me the code for|read code for|show the code for|open the code for|inspect the code for|read code|read me the code|read file|read the file)\s+(?:the\s+)?(.+?)(?:\s+file|\?|$)/i);
             let filename = m ? m[1].trim() : null;
             if (filename) {
+                const projectCache = require('../../core/projectCache');
                 const foundPath = projectCache.findFile(filename);
                 if (foundPath) return [foundPath];
             }

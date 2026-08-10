@@ -8,5 +8,11 @@
   { "input": "Take a note: The system needs a refactor", "expectedIntent": "create_note", "expectedTool": "writeNote" },
   { "input": "yes", "expectedIntent": "CONFIRMATION", "expectedTool": "confirmation" },
   { "input": "nevermind", "expectedIntent": "CANCEL", "expectedTool": "confirmation" },
-  { "input": "bg-0042", "expectedIntent": "getTaskProgress", "expectedTool": "getTaskProgress" }
+  { "input": "bg-0042", "expectedIntent": "getTaskProgress", "expectedTool": "getTaskProgress" },
+  { "input": "Write a proposal for planner", "expectedIntent": "propose_code_change", "expectedTool": "propose_code_change" },
+  { "input": "Please run the test suite for me", "expectedIntent": "runTests", "expectedTool": "runTests" },
+  { "input": "Format hello world to lowercase", "expectedIntent": "formatText", "expectedTool": "formatText" },
+  { "input": "Validate JSON string test true", "expectedIntent": "validateJSON", "expectedTool": "validateJSON" },
+  { "input": "Read the code directory for the src folder", "expectedIntent": "readCodeDirectory", "expectedTool": "readCodeDirectory" },
+  { "input": "Search the knowledge library for Atlas", "expectedIntent": "searchKnowledge", "expectedTool": "searchKnowledge" }
 ]

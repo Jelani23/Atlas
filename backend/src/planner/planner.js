@@ -4,7 +4,7 @@ const llmRouter = require('./routing/llmRouter');
 const permissionManager = require('../permissions/permissionManager');
 const state = require('./state');
 
-async function route(intent, message, history = []) {
+async function route(intent, message, history = [], taskId, requestId) {
     // 1. Conversational Confirmation State Machine (for voice UI)
     if (intent.winner === 'confirmation') {
         const isAffirmative = intent.params.isAffirmative;
@@ -23,7 +23,6 @@ async function route(intent, message, history = []) {
             state.pendingAction = null;
             return { needsTool: true, toolName: 'confirmation', toolResult: `Okay, I won't ${denied.replace(/([A-Z])/g, ' $1').toLowerCase()} that.`, shortCircuit: true };
         } else {
-            // Fallback if user says "yes" but nothing is pending
             return { needsTool: true, toolName: 'confirmation', toolResult: `I'm not sure what you're saying yes to. What would you like me to do?`, shortCircuit: true };
         }
     }
@@ -32,7 +31,6 @@ async function route(intent, message, history = []) {
     if (intent.state === 'DETERMINISTIC' && intent.winner) {
         console.log(`[Planner] Executing Deterministic Tool from Resolver: ${intent.winner}`);
         
-        // Check for Permissions Conversationally (but NOT for the confirmation tool itself)
         if (intent.winner !== 'confirmation') {
             const permCheck = permissionManager.check(intent.winner);
             if (permCheck.requiresApproval) {
@@ -69,7 +67,7 @@ async function route(intent, message, history = []) {
     // 4. LLM Path
     const isAffirmative = /\b(yes|yeah|yep|sure|do it|can you do so|please do|go ahead|check it|check for that)\b/i.test(message.toLowerCase().trim());
     if ((intent.state === 'UNKNOWN') && !isAffirmative) {
-        const llmResult = await llmRouter.route(intent, message, history);
+        const llmResult = await llmRouter.route(intent, message, history, taskId, requestId);
         if (llmResult) return llmResult;
     }
 

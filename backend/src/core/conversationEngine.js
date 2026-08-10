@@ -45,7 +45,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // 2. Planner Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'planner', timestamp: Date.now() });
         const plannerStart = Date.now();
-        const toolResult = await planner.route(intent, userInput, history);
+        const toolResult = await planner.route(intent, userInput, history, taskId, requestId);
         const plannerDuration = Date.now() - plannerStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'planner', duration: plannerDuration, timestamp: Date.now() });
 
@@ -89,7 +89,8 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             memoryResult: { action: "deferred", message: "Processing in background" },
             toolResult,
             userInput,
-            history
+            history,
+            policy: reasoning.policy
         });
         const contextDuration = Date.now() - contextStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });

@@ -32,7 +32,7 @@ module.exports = {
     intentSchema: {
         name: 'listCode',
         domain: 'FILES',
-        triggers: ["list code","source files","project structure"],
+        triggers: ['list code', 'source files', 'list files'],
         requiredEntities: [],
         extractParams: (message, entities) => {
         if (message.toLowerCase().includes('source')) return ['src'];

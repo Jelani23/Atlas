@@ -8,7 +8,7 @@ const state = require('../state');
 const INTERNAL_TASK_PROMPT = "You are Atlas, an advanced AI companion. Execute the requested internal task directly and concisely. Provide the technical output without conversational filler or asking for permission. Your user prefers direct action over confirmation.";
 const modelAdapter = createModelAdapter();
 
-async function handleTask(task, message) {
+async function handleTask(task, message, parentTaskId, requestId) {
     switch(task.intent) {
         case 'analyze_and_suggest':
             console.log('[Planner] Executing Background Plan: analyze_and_suggest');
@@ -45,7 +45,7 @@ async function handleTask(task, message) {
                 } else {
                     throw new Error(`Could not read code for analysis. Reason: ${codeToAnalyze}`);
                 }
-            });
+            }, parentTaskId, requestId, 'NORMAL');
             return `I've started analyzing that in the background (Task ID: ${suggestBgTaskId}). I'll let you know the moment I'm finished!`;
 
         case 'analyze_and_save':
@@ -72,7 +72,7 @@ async function handleTask(task, message) {
                 } else {
                     throw new Error("Could not read code for analysis.");
                 }
-            });
+            }, parentTaskId, requestId, 'NORMAL');
             return `I've started analyzing that in the background (Task ID: ${saveBgTaskId}). I'll let you know when the note is saved!`;
 
         case 'propose_code_change':
@@ -114,7 +114,6 @@ async function handleTask(task, message) {
                     const { stripThinking } = require('../../utils/jsonExtractor');
                     let cleanFixResponse = stripThinking(fixResponse).trim();
                     
-                    // Parse XML tags instead of JSON
                     const reasonMatch = cleanFixResponse.match(/<reason>([\s\S]*?)<\/reason>/i);
                     const riskMatch = cleanFixResponse.match(/<risk>([\s\S]*?)<\/risk>/i);
                     const codeMatch = cleanFixResponse.match(/<code>([\s\S]*?)<\/code>/i);
@@ -128,7 +127,6 @@ async function handleTask(task, message) {
                         updateProgress(100, 'Proposal created');
                         return `Successfully created code change proposal for ${task.filename}. Please review it in the proposals folder.`;
                     } else {
-                        // Fallback: If XML parsing fails, save the raw response as a markdown proposal
                         console.warn('[ProposeCodeChange] Failed to parse XML. Saving raw response as markdown.');
                         await execute('writeProposal', [task.filename, "LLM response was not valid XML.", "Unknown", cleanFixResponse]);
                         updateProgress(100, 'Proposal created (raw)');
@@ -137,7 +135,7 @@ async function handleTask(task, message) {
                 } else {
                     throw new Error("Could not read code for proposal.");
                 }
-            });
+            }, parentTaskId, requestId, 'NORMAL');
             return `I've started reviewing that file for bugs in the background (Task ID: ${proposeBgTaskId}). I'll let you know when the proposal is ready!`;
 
         case 'generate_code':
@@ -152,11 +150,11 @@ async function handleTask(task, message) {
                 
                 updateProgress(100, 'Code generation complete');
                 return `Generated Code:\n${generatedCode}`;
-            });
+            }, parentTaskId, requestId, 'NORMAL');
             return `I'm writing that code for you in the background (Task ID: ${genBgTaskId}). I'll paste it here when I'm done!`;
 
         default:
-            return null; // Not a background task
+            return null;
     }
 }
 

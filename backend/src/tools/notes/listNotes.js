@@ -20,7 +20,7 @@ module.exports = {
     intentSchema: {
         name: 'listNotes',
         domain: 'NOTES',
-        triggers: ["list","show","display"],
+        triggers: ['list notes', 'list my notes', 'list all notes', 'show notes', 'show my notes', 'show me my notes', 'show me all my notes'],
         requiredEntities: [],
         extractParams: (message, entities) => { return []; }
     }

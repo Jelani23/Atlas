@@ -3,16 +3,14 @@ const { execute } = require('../../tools/toolExecutor');
 const { extractSmartNoteParams, fastRegexNormalizer } = require('../normalizer');
 const searchPipeline = require('../searchPipeline');
 const permissionManager = require('../../permissions/permissionManager');
-const backgroundRouter = require('./backgroundRouter'); // ADD THIS IMPORT
+const backgroundRouter = require('./backgroundRouter');
 const state = require('../state');
 
-async function route(intent, message, history) {
+async function route(intent, message, history, taskId, requestId) {
     console.log('[Planner] Attempting Fast Regex Normalization (Bypassing LLM Normalizer)...');
     
-    // 1. Try Fast Regex First
     let task = fastRegexNormalizer(message);
     
-    // 2. If Fast Regex fails, we don't use the LLM to normalize. We just treat it as conversation.
     if (!task || !task.intent || task.intent === 'none') {
         console.log('[Planner] Fast Regex failed. Falling back to Main LLM Conversation.');
         return null; 
@@ -20,14 +18,12 @@ async function route(intent, message, history) {
 
     console.log(`[Planner] Fast Regex caught intent: ${task.intent}`);
     
-    // 3. Check if it's a Background Task FIRST (Phase 8E)
-    const bgResult = await backgroundRouter.handleTask(task, message);
+    // PASS taskId and requestId here
+    const bgResult = await backgroundRouter.handleTask(task, message, taskId, requestId);
     if (bgResult) {
-        // Return the instant "I'm working on it" message to the UI
         return { needsTool: true, toolName: task.intent, toolResult: bgResult, shortCircuit: true };
     }
 
-    // 4. Handle direct tool execution (Foreground)
     let toolResultData;
     switch(task.intent) {
         case 'create_note':

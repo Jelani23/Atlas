@@ -23,7 +23,7 @@ module.exports = {
     intentSchema: {
         name: 'checkSyntax',
         domain: 'FILES',
-        triggers: ["check syntax","validate"],
+        triggers: ['check syntax', 'check the syntax', 'syntax of'],
         requiredEntities: ["FILE"],
         extractParams: (message, entities) => {
             const file = entities.find(e => e.type === 'FILE');

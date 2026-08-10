@@ -15,7 +15,7 @@ module.exports = {
     intentSchema: {
         name: 'findFile',
         domain: 'FILES',
-        triggers: ['find', 'locate', 'where is'],
+        triggers: ['find', 'locate'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const queryMatch = message.match(/(?:find|locate|where is)\s+(?:me\s+|the\s+|your\s+)?(.+?)(?:\s+(?:file|module|script))?(?:\?|$)/i);

@@ -17,7 +17,7 @@ module.exports = {
     intentSchema: {
         name: 'updateDevState',
         domain: 'MEMORY',
-        triggers: ['mark', 'update feature', 'dev state', 'add to dev state', 'add to the dev state'],
+        triggers: ['mark', 'update feature', 'dev state', 'add to dev state', 'add to the dev state', 'as plan', 'as implemented', 'as in progress', 'as in development'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             // Added "in development" to the regex

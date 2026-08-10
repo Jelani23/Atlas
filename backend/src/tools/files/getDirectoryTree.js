@@ -47,7 +47,7 @@ module.exports = {
     intentSchema: {
         name: 'getDirectoryTree',
         domain: 'FILES',
-        triggers: ["directory tree","tree view"],
+        triggers: ['directory tree', 'tree view', 'project structure', 'project tree'],
         requiredEntities: [],
         extractParams: (message, entities) => { return ['']; }
     }

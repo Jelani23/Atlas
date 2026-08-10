@@ -9,7 +9,7 @@ module.exports = {
     intentSchema: {
         name: 'getTime',
         domain: 'TIME',
-        triggers: ["time","date"],
+        triggers: ['what time', 'current time', 'what is the time', 'tell me the time'],
         requiredEntities: [],
         extractParams: (message, entities) => { return []; }
     }

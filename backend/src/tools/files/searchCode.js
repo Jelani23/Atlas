@@ -33,7 +33,7 @@ module.exports = {
     intentSchema: {
         name: 'searchCode',
         domain: 'SEARCH', // Changed to SEARCH so it catches the lexical signal
-        triggers: ['search code', 'grep', 'references to', 'search for'],
+        triggers: ['search code', 'grep', 'references to', 'search for', 'where is', 'used', 'any references to'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const queryMatch = message.match(/(?:search code for|find in code|grep|do we use|any references to|where is|search for|search)\s+(.*?)(?:\s+anywhere|\s+in the code|\s+in the|\?|$)/i);
