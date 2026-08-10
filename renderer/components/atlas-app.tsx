@@ -220,20 +220,28 @@ export function AtlasApp() {
       setState("speaking")
       setMessages((prev) => {
         const last = prev[prev.length - 1]
-        // If we were streaming, fill in the final processed text and close
-        // out the message — same id throughout, so no remount/re-animate.
         if (last && last.role === "atlas" && last.streaming) {
           return [
             ...prev.slice(0, -1),
             { ...last, streaming: false, text: result.reply ?? last.text },
           ]
         }
-        // Fallback for non-streamed responses (like instant tool executions)
         return [
           ...prev,
           { id: crypto.randomUUID(), role: "atlas", text: result.reply ?? "" },
         ]
       })
+
+      // 10F: Play TTS audio if provided
+      if ((result as any).audio) {
+        try {
+          const audioObj = new Audio((result as any).audio)
+          await audioObj.play()
+        } catch (err) {
+          console.error("Audio playback failed:", err)
+        }
+      }
+
       settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
     } else {
       setState("error")

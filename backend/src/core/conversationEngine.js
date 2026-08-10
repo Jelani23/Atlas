@@ -63,7 +63,8 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             await memory.workingMemory.append({ role: 'assistant', content: instantReply }, sessionId);
             taskManager.endRequest(taskId);
             eventBus.emit(EventTypes.REQUEST_COMPLETED, { taskId, requestId, reply: instantReply, timestamp: Date.now(), duration: Date.now() - requestStart });
-            return instantReply;
+            // Return object with audio: null so the type is consistent
+            return { reply: instantReply, audio: null };
         }
 
         const modelChoice = modelRouter.getModelForTask(toolResult.toolName);
@@ -171,14 +172,27 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 return null;
             }, taskId, requestId, 'NORMAL'); // Pass priority
         }
-        
-        return reply;
+        // 7. Text-to-Speech (Phase 10E)
+        let audioBase64 = null;
+        try {
+            // Require it RIGHT HERE, inside the function
+            const ttsManager = require('../voice/tts/ttsManager.js'); 
+            const ttsResult = await ttsManager.speak(reply);
+            if (ttsResult) {
+                audioBase64 = `data:audio/${ttsResult.format};base64,${ttsResult.buffer.toString('base64')}`;
+            }
+        } catch (e) {
+            console.error("[TTS] Generation failed:", e.message);
+        }
+
+        return { reply, audio: audioBase64 };
+
     } catch (error) {
         taskManager.endRequest(taskId);
         console.error("[Atlas] handleMessage failed:", error);
         const fallback = "Something went wrong on my end processing that - try again?";
         eventBus.emit(EventTypes.REQUEST_FAILED, { taskId, requestId, error: error.message, timestamp: Date.now(), duration: Date.now() - requestStart });
-        return fallback;
+        return { reply: fallback, audio: null };
     }
 }
 

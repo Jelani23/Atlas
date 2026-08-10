@@ -285,14 +285,14 @@ class AtlasInterface extends EventEmitter {
         const requestId = `REQ-${String(this.taskCounter++).padStart(4, '0')}`;
 
         try {
-            const reply = await conversationEngine.handleMessage(trimmed, {
+            const resultObj = await conversationEngine.handleMessage(trimmed, {
                 memory,
                 mode: this.mode,
                 sessionId: this.sessionId,
                 taskId,
                 requestId
             });
-            return reply;
+            return resultObj; 
         } catch (err) {
             this.emit('atlas.error', { message: err.message });
             throw err;

@@ -56,7 +56,11 @@ wss.on('connection', (ws) => {
         const { id, method, args = [] } = msg;
         try {
             let result;
-            if (method === 'sendMessage') result = { ok: true, reply: await atlas.sendMessage(...args) };
+            if (method === 'sendMessage') {
+                const res = await atlas.sendMessage(...args);
+                // Spread so frontend gets { ok: true, reply: "...", audio: "..." }
+                result = { ok: true, ...res }; 
+            }
             else if (method === 'getState') result = atlas.getState();
             else if (method === 'listModes') result = atlas.listModes();
             else if (method === 'setMode') result = { ok: true, mode: atlas.setMode(...args) };
