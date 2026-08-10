@@ -73,6 +73,10 @@ wss.on('connection', (ws) => {
             else if (method === 'newConversation') result = { ok: true, sessionId: await atlas.newConversation() };
             else if (method === 'deleteConversation') result = await atlas.deleteConversation(...args);
             else if (method === 'renameConversation') result = await atlas.renameConversation(...args);
+            else if (method === 'shutdown') {
+                await atlas.shutdown();
+                result = { ok: true };
+            }
             ws.send(JSON.stringify({ id, result }));
         } catch (err) {
             ws.send(JSON.stringify({ id, error: err.message }));
@@ -97,8 +101,11 @@ server.listen(PORT, async () => {
     }
 });
 
-process.on('SIGINT', async () => {
-    console.log('[Atlas Backend] Shutting down...');
+async function gracefulShutdown(signal) {
+    console.log(`[Atlas Backend] Shutting down (${signal})...`);
     await atlas.shutdown();
     process.exit(0);
-});
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

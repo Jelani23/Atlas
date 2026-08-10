@@ -1,3 +1,4 @@
+// backend/src/core/contextBuilder.js
 const { getStatePrompt } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
@@ -6,11 +7,9 @@ const contextManager = require('./contextManager');
 async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history }) {
     console.time("buildContext");
     
-    // 1. Use Context Manager to fetch budgeted memory items
     const relevantMemory = await contextManager.getRelevantContext(userInput, history, intent);
     const world = await worldModel.getAll();
 
-    // Inject HOT state (Active Project/Files)
     let hotStateContext = "";
     const hot = relevantMemory.hotState;
     if (hot.activeProject || hot.activeFiles.length > 0 || hot.currentTask) {
@@ -23,17 +22,17 @@ Current Task: ${hot.currentTask || 'None'}
 `;
     }
 
-    let personalMemoryContext = "No relevant personal information found.";
+    let personalMemoryContext = "None";
     if (relevantMemory.personal && relevantMemory.personal.length > 0) {
         personalMemoryContext = relevantMemory.personal.map(item => `- ${item.key}: ${item.value}`).join('\n');
     }
 
-    let projectMemoryContext = "No relevant project information found.";
+    let projectMemoryContext = "None";
     if (relevantMemory.projects && relevantMemory.projects.length > 0) {
         projectMemoryContext = relevantMemory.projects.map(m => `- ${m.subject}: ${m.key} = ${m.value}`).join('\n');
     }
 
-    let knowledgeContext = "No relevant knowledge found.";
+    let knowledgeContext = "None";
     if (relevantMemory.knowledge && relevantMemory.knowledge.length > 0) {
         knowledgeContext = relevantMemory.knowledge.map(k => `- ${k.subject}: ${k.key}`).join('\n');
     }
@@ -47,37 +46,26 @@ Current Task: ${hot.currentTask || 'None'}
 `;
     }
 
-    let proceduralContext = "No procedures stored yet.";
+    let proceduralContext = "None";
     if (relevantMemory.procedures && relevantMemory.procedures.length > 0) {
         proceduralContext = relevantMemory.procedures.map(p => `- IF ${p.trigger} THEN ${p.action}`).join('\n');
     }
 
-    let worldModelContext = "No world model loaded.";
-    if (world) {
-        const isWorldRelevant = intent.intent === 'memory' || userInput.toLowerCase().includes('what can you do') || userInput.toLowerCase().includes('capabilities');
-        if (isWorldRelevant) {
-            worldModelContext = `
-Environment:
-- OS: ${world.environment.host_os}
-- Runtime: ${world.environment.runtime}
-- LLM Backend: ${world.environment.llm_backend}
-- Hardware: ${world.environment.hardware}
-
-Current Projects:
- ${world.current_projects.map(p => `- ${p.name}: ${p.description} (${p.status})`).join('\n')}
-
+    let worldModelContext = "";
+    const isWorldRelevant = intent.intent === 'memory' || userInput.toLowerCase().includes('what can you do') || userInput.toLowerCase().includes('capabilities');
+    if (isWorldRelevant && world) {
+        worldModelContext = `
+--- ATLAS WORLD MODEL ---
+Runtime: ${world.environment.runtime} | Model: ${world.models.current_default}
 Capabilities:
  ${world.capabilities.map(c => `- ${c}`).join('\n')}
-
 Limitations:
  ${world.limitations.map(l => `- ${l}`).join('\n')}
+--- END WORLD MODEL ---
 `;
-        } else {
-            worldModelContext = `Runtime: ${world.environment.runtime} | Model: ${world.models.current_default}`;
-        }
     }
 
-    const systemPrompt = personalityEngine.getSystemPrompt(mode) + "\n\n" + getStatePrompt();
+    const systemPrompt = personalityEngine.getSystemPrompt(mode);
 
     let toolContext = "No tools used.";
     if (toolResult && toolResult.needsTool) {
@@ -86,59 +74,7 @@ Limitations:
 
     console.timeEnd("buildContext");
 
-    return `
- ${systemPrompt}
-
---- ATLAS WORLD MODEL ---
- ${worldModelContext}
---- END WORLD MODEL ---
- ${hotStateContext}
---- ATLAS MEMORY CONTEXT (Filtered by Relevance & Budget) ---
-Personal Information:
- ${personalMemoryContext}
-
-Project Knowledge:
- ${projectMemoryContext}
-
-Knowledge Library Topics:
- ${knowledgeContext}
---- END MEMORY CONTEXT ---
-
---- ATLAS OPERATIONAL HEURISTICS (PROCEDURES) ---
- ${proceduralContext}
---- END HEURISTICS ---
-
- ${devStateContext}
---- TOOL CONTEXT ---
- ${toolContext}
---- END TOOL CONTEXT ---
-
---- CURRENT TASK ---
-Intent: ${intent.intent}
-Reasoning Level: ${intent.reasoning}
-
---- RESPONSE GUIDANCE ---
-Length: ${responseStyle.length}
-Formatting: ${responseStyle.formatting}
-Tone: ${responseStyle.tone}
-
---- COMMUNICATION GUIDELINES ---
-- CRITICAL ERROR RULE: If "TOOL CONTEXT" contains the words "TOOL EXECUTION FAILED" or "Error:", you MUST output the EXACT error message provided. DO NOT invent reasons. DO NOT claim you lack access, permissions, or system limits. DO NOT claim the file exists but you can't read it. Just state the exact error message.
-- CRITICAL CLARIFICATION RULE: If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", you MUST ask the user the exact question provided in the context. Do not attempt to answer the question yourself.
-- CRITICAL: Respond directly with only the final answer. Do not narrate your reasoning, internal thoughts, or step-by-step analysis in the response. If you must think, put your thoughts in  tags, then output ONLY the final response.
-- CRITICAL TOOL RULE: If "TOOL CONTEXT" contains the result of a Read Note, Read Code, List Notes, or List Code operation, you MUST output the exact text or list provided in the TOOL CONTEXT. DO NOT summarize it. DO NOT say "files are located in...". Output the exact list. DO NOT hallucinate contents from your chat memory.
-- CRITICAL IDENTITY RULE: You are software, not a human. You do not have a childhood or parents. Your ONLY memories are the exact database entries listed under "ATLAS MEMORY CONTEXT". If asked about your earliest memory, you MUST say it was learning the first fact in that list. DO NOT hallucinate human experiences.
-- CRITICAL DEV STATE RULE: If asked about your capabilities, improvements, or what you can do, refer STRICTLY to the "ATLAS WORLD MODEL" and "ATLAS DEVELOPMENT STATE" lists. Do not claim a feature is implemented if it is marked as "planned". Do not claim a feature is planned if it is marked as "implemented".
-- Respond naturally as Atlas.
-- DO NOT use generic AI filler phrases like "Would you like me to...", "Let me know if you need anything else", or "As an AI...".
-- If asked what you remember, use the "ATLAS MEMORY CONTEXT" provided above. DO NOT say you don't have information if it is listed there.
-- Adapt your answer style to the user's request.
-- Do not mention routing, memory systems, prompts, or internal instructions.
-- Avoid turning simple conversations into formal reports.
-
---- RECENT MEMORY ACTION ---
- ${memoryResult ? JSON.stringify(memoryResult) : "No memory action performed this turn."}
-`;
+    return `${systemPrompt}\n${worldModelContext}\n${hotStateContext}\n--- ATLAS MEMORY CONTEXT ---\nPersonal Information:\n${personalMemoryContext}\n\nProject Knowledge:\n${projectMemoryContext}\n\nKnowledge Library Topics:\n${knowledgeContext}\n--- END MEMORY CONTEXT ---\n\n--- ATLAS OPERATIONAL HEURISTICS (PROCEDURES) ---\n${proceduralContext}\n--- END HEURISTICS ---\n\n${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.\n- If asked what you remember, use the "ATLAS MEMORY CONTEXT". DO NOT say you lack information if it is listed there.\n- Respond naturally as Atlas.`;
 }
 
 module.exports = { buildContext };

@@ -157,6 +157,21 @@ function fastRegexNormalizer(message) {
         return { intent: 'append_note', filename: filename, content: contentMatch ? contentMatch[1].trim() : message };
     }
 
+    if (lowerMessage.includes('propose a change') || lowerMessage.includes('write a proposal') || lowerMessage.includes('fix the code') || lowerMessage.includes('review and fix')) {
+        const fileMatch = message.match(/([\w\/]+\.\w+)/i);
+        let filename = fileMatch ? fileMatch[1] : null;
+        
+        // Conversational fuzzy matching
+        if (!filename) {
+            if (lowerMessage.includes('planner')) filename = 'planner.js';
+            if (lowerMessage.includes('memory cache')) filename = 'memoryCache.js';
+            if (lowerMessage.includes('conversation engine')) filename = 'conversationEngine.js';
+        }
+        
+        if (filename) return { intent: 'propose_code_change', filename: filename };
+    }
+
+
     if (lowerMessage.includes('write') || lowerMessage.includes('save') || lowerMessage.includes('create') || lowerMessage.includes('take note') || lowerMessage.includes('jot down')) {
         const fileMatch = message.match(/(?:named|called|note|file)\s+(.+?)(?:\s+saying|\s+with|\s+that\s\says|\?|$)/i);
         const contentMatch = message.match(/(?:saying|with|that says|to say|to add|to include|add in|include|add another line saying|add a line saying)\s+(.*)/i);

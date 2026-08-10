@@ -1,20 +1,20 @@
+// backend/src/core/contextManager.js
 const memoryCache = require('./memoryCache');
 
 // --- 1. TOKEN ESTIMATOR ---
 function estimateTokens(text) {
     if (!text) return 0;
-    // Rough English approximation (4 chars = 1 token)
     return Math.ceil(text.length / 4);
 }
 
-// --- 2. INTENT-BASED CONTEXT PROFILES ---
+// --- 2. INTENT-BASED CONTEXT PROFILES (OPTIMIZED) ---
 const CONTEXT_PROFILES = {
-    conversation: { personal: 1000, project: 500,  knowledge: 500,  procedures: 800, devState: 300 },
-    action:       { personal: 500,  project: 1000, knowledge: 300,  procedures: 500, devState: 500 },
-    coding:       { personal: 500,  project: 2000, knowledge: 500,  procedures: 1000, devState: 500 },
-    planning:     { personal: 500,  project: 1500, knowledge: 800,  procedures: 800, devState: 500 },
-    search:       { personal: 500,  project: 500,  knowledge: 300,  procedures: 500, devState: 300 },
-    memory:       { personal: 4000, project: 2000, knowledge: 1000, procedures: 1000, devState: 500 } // Used for isAskingAboutSelf
+    conversation: { personal: 200, project: 0,  knowledge: 0,  procedures: 100, devState: 0 },
+    action:       { personal: 0,  project: 0, knowledge: 0,  procedures: 0, devState: 0 },
+    coding:       { personal: 0,  project: 500, knowledge: 0,  procedures: 200, devState: 0 },
+    planning:     { personal: 0,  project: 300, knowledge: 100,  procedures: 200, devState: 100 },
+    search:       { personal: 0,  project: 0,  knowledge: 0,  procedures: 0, devState: 0 },
+    memory:       { personal: 1500, project: 300, knowledge: 200, procedures: 200, devState: 100 } // Used for isAskingAboutSelf
 };
 
 // --- 3. BUDGET ALLOCATOR ---
@@ -22,7 +22,6 @@ function allocateBudget(items, budget) {
     const selected = [];
     let used = 0;
     
-    // Sort by final score descending
     const sorted = items.sort((a, b) => b._finalScore - a._finalScore);
     
     for (const item of sorted) {
@@ -79,7 +78,6 @@ async function getRelevantContext(userInput, history, intent) {
     const isAskingAboutSelf = lowerInput.includes('know about me') || lowerInput.includes('what do you remember') || lowerInput.includes('who am i') || lowerInput.includes('what do you know');
     const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas');
 
-    // Score & Rank (Stage 2)
     let personalScored = personalIdx.map(item => scoreAndBoost('user_profile', item, keywords))
         .filter(m => m._relevanceScore > 0 || personalIdx.length <= 3 || isAskingAboutSelf);
         
@@ -95,11 +93,9 @@ async function getRelevantContext(userInput, history, intent) {
     const isDevRelevant = intent.action || intent.coding || intent.planning || isAskingAboutAtlas || isAskingAboutSelf || keywords.has('feature') || keywords.has('state');
     let devScored = isDevRelevant ? featuresIdx.map(item => scoreAndBoost('dev_state', item, keywords)).filter(f => f._relevanceScore > 0 || featuresIdx.length <= 5) : [];
 
-    // Determine Profile (Override to 'memory' if explicitly asking about self)
     const profileName = isAskingAboutSelf ? 'memory' : intent.intent;
     const budgetProfile = CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation;
 
-    // Allocate Budget (Stage 3)
     const personalAlloc = allocateBudget(personalScored, budgetProfile.personal);
     const projectAlloc = allocateBudget(projectScored, budgetProfile.project);
     const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge);
@@ -108,7 +104,6 @@ async function getRelevantContext(userInput, history, intent) {
 
     console.timeEnd("[ContextManager] Total Processing");
 
-    // Build Manifest for Telemetry
     const totalUsed = personalAlloc.usedTokens + projectAlloc.usedTokens + knowledgeAlloc.usedTokens + proceduresAlloc.usedTokens + devAlloc.usedTokens;
     const manifest = {
         task: profileName,

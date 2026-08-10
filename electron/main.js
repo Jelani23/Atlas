@@ -191,7 +191,40 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+// before-quit needs to be async (so the reflection write in atlas.shutdown()
+// has time to land in Supabase before the process dies), but Electron's
+// 'before-quit' handler itself can't be awaited — so we preventDefault() the
+// first time through, do the async RPC, then call app.quit() again.
+// shutdownComplete guards that second pass from looping back into this same
+// async block.
+let shutdownComplete = false;
+
+app.on('before-quit', (event) => {
+    if (shutdownComplete) return;
+
+    event.preventDefault();
     isShuttingDown = true;
-    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+
+    (async () => {
+        try {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // The shutdown RPC waits on an LLM call (session reflection)
+                // — don't let a hung/slow model block quitting forever.
+                await Promise.race([
+                    callAtlas('shutdown'),
+                    new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('shutdown RPC timed out')), 8000)
+                    ),
+                ]);
+            }
+        } catch (err) {
+            // Backend already gone, unreachable, etc. — nothing to do, just
+            // proceed with quitting rather than hang the app on exit.
+            console.error('[Electron] Backend shutdown RPC failed:', err);
+        } finally {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+            shutdownComplete = true;
+            app.quit();
+        }
+    })();
 });

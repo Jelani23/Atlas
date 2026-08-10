@@ -8,8 +8,10 @@ module.exports = {
     REQUEST_STARTED: 'request.started',
     REQUEST_COMPLETED: 'request.completed',
     REQUEST_FAILED: 'request.failed',
+    REQUEST_CANCELLED: 'request.cancelled',
 
     // Task Lifecycle (Background Work)
+    TASK_CREATED: 'task.created',
     TASK_STARTED: 'task.started',
     TASK_PROGRESS: 'task.progress',
     TASK_COMPLETED: 'task.completed',
@@ -20,11 +22,19 @@ module.exports = {
     MODEL_SELECTED: 'model.selected',
     MODEL_STARTED: 'model.started',
     MODEL_COMPLETED: 'model.completed',
+    LLM_FIRST_TOKEN: 'llm.first_token',
+    LLM_FIRST_CONTENT: 'llm.first_content', // NEW: TTFC
+    LLM_TOKEN_STREAM: 'llm.token_stream',
+    LLM_METRICS: 'llm.metrics',
 
     // Tool Operations
     TOOL_STARTED: 'tool.started',
     TOOL_COMPLETED: 'tool.completed',
     TOOL_FAILED: 'tool.failed',
+
+    // Context Operations
+    CONTEXT_CACHE_HIT: 'context.cache_hit',
+    CONTEXT_CACHE_MISS: 'context.cache_miss',
 
     // Permission Operations
     PERMISSION_CHECKED: 'permission.checked',
@@ -40,7 +50,5 @@ module.exports = {
 
     // Performance Diagnostics
     STAGE_STARTED: 'stage.started',
-    STAGE_COMPLETED: 'stage.completed',
-
-    LLM_TOKEN_STREAM: 'llm.token_stream'
+    STAGE_COMPLETED: 'stage.completed'
 };

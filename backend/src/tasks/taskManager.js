@@ -2,8 +2,9 @@
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
 
-// NEW: Explicit task states
+// Explicit task states
 const TaskStates = {
+    CREATED: 'CREATED',
     QUEUED: 'QUEUED',
     RUNNING: 'RUNNING',
     COMPLETED: 'COMPLETED',
@@ -13,13 +14,21 @@ const TaskStates = {
     RECOVERING: 'RECOVERING'
 };
 
+// Task priorities
+const TaskPriorities = {
+    CRITICAL: 'CRITICAL',
+    HIGH: 'HIGH',
+    NORMAL: 'NORMAL',
+    LOW: 'LOW'
+};
+
 class TaskManager {
     constructor() {
         this.tasks = new Map();
         this.taskCounter = 1;
     }
 
-    async createTask(type, workFn, parentTaskId = null, requestId = null) {
+    async createTask(type, workFn, parentTaskId = null, requestId = null, priority = TaskPriorities.NORMAL) {
         const taskId = `BG-${String(this.taskCounter++).padStart(4, '0')}`;
         const now = Date.now();
         
@@ -28,7 +37,8 @@ class TaskManager {
             parentTaskId,
             requestId,
             type,
-            status: TaskStates.QUEUED, // Use constant
+            priority,
+            status: TaskStates.CREATED,
             progress: 0,
             stage: 'Initializing',
             createdAt: now,
@@ -40,14 +50,19 @@ class TaskManager {
         };
 
         this.tasks.set(taskId, task);
-        eventBus.emit(EventTypes.TASK_STARTED, { taskId, parentTaskId, requestId, type, timestamp: now });
-
+        
+        // Explicitly transition to QUEUED, then RUNNING
+        task.status = TaskStates.QUEUED;
+        eventBus.emit(EventTypes.TASK_CREATED, { taskId, parentTaskId, requestId, type, priority, timestamp: now });
+        
+        // Execute asynchronously
         this._executeTask(taskId, workFn);
         return taskId;
     }
 
     async _executeTask(taskId, workFn) {
         const task = this.tasks.get(taskId);
+        if (!task) return;
         
         // If it was cancelled before it even started, abort.
         if (task.status === TaskStates.CANCELLED) return;
@@ -55,6 +70,7 @@ class TaskManager {
         const now = Date.now();
         task.status = TaskStates.RUNNING;
         task.startedAt = now;
+        eventBus.emit(EventTypes.TASK_STARTED, { taskId, parentTaskId: task.parentTaskId, requestId: task.requestId, type: task.type, timestamp: now });
         
         try {
             const result = await workFn({
@@ -64,11 +80,9 @@ class TaskManager {
                     task.stage = stage;
                     eventBus.emit(EventTypes.TASK_PROGRESS, { taskId, progress, stage, timestamp: Date.now() });
                 },
-                // Cancellation checker
                 isCancelled: () => task.status === TaskStates.CANCELLED
             });
             
-            // Check if it was cancelled during execution
             if (task.status === TaskStates.CANCELLED) return;
 
             const completedAt = Date.now();
@@ -78,7 +92,6 @@ class TaskManager {
             task.result = result;
             eventBus.emit(EventTypes.TASK_COMPLETED, { taskId, result, timestamp: completedAt, duration: task.duration });
         } catch (error) {
-            // If it was cancelled, a throw is expected, but we don't want to mark it as FAILED.
             if (task.status === TaskStates.CANCELLED) return;
 
             const failedAt = Date.now();
@@ -91,10 +104,9 @@ class TaskManager {
         }
     }
 
-    // Task cancellation
     cancelTask(taskId) {
         const task = this.tasks.get(taskId);
-        if (task && (task.status === TaskStates.RUNNING || task.status === TaskStates.QUEUED)) {
+        if (task && (task.status === TaskStates.RUNNING || task.status === TaskStates.QUEUED || task.status === TaskStates.CREATED)) {
             const now = Date.now();
             task.status = TaskStates.CANCELLED;
             task.completedAt = now;
@@ -111,7 +123,8 @@ class TaskManager {
             requestId,
             parentTaskId,
             type,
-            status: TaskStates.RUNNING, // Use constant
+            priority: TaskPriorities.CRITICAL, // Foreground requests are critical
+            status: TaskStates.RUNNING,
             createdAt: now,
             startedAt: now,
             completedAt: null,
@@ -125,7 +138,7 @@ class TaskManager {
         const task = this.tasks.get(taskId);
         if (task) {
             const now = Date.now();
-            task.status = TaskStates.COMPLETED; // Use constant
+            task.status = TaskStates.COMPLETED;
             task.completedAt = now;
             task.duration = now - task.startedAt;
         }
@@ -134,7 +147,7 @@ class TaskManager {
     getActiveTaskCount() {
         let count = 0;
         for (const task of this.tasks.values()) {
-            if (task.status === TaskStates.RUNNING || task.status === TaskStates.QUEUED) count++;
+            if (task.status === TaskStates.RUNNING || task.status === TaskStates.QUEUED || task.status === TaskStates.CREATED) count++;
         }
         return count;
     }
@@ -148,6 +161,6 @@ class TaskManager {
     }
 }
 
-// Export TaskStates so other files can use it
 module.exports = new TaskManager();
 module.exports.TaskStates = TaskStates;
+module.exports.TaskPriorities = TaskPriorities;

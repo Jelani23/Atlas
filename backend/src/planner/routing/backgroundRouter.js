@@ -84,19 +84,21 @@ async function handleTask(task, message) {
                 
                 if (originalCode && !originalCode.toLowerCase().startsWith('error:')) {
                     updateProgress(30, 'Analyzing and generating fix');
-                    const fixPrompt = `You are tasked with analyzing the following source code from ${task.filename}. 
-                    Identify any bugs, typos, or inefficiencies.
-                    Generate a structured fix.
+                    const fixPrompt = `You are an expert code reviewer analyzing the source code of "${task.filename}".
+                    
+                    Your job:
+                    1. Identify any bugs, typos, or inefficiencies.
+                    2. Provide the SPECIFIC corrected code block (not the whole file).
 
                     CRITICAL INSTRUCTIONS:
-                    - The code IS provided below. Do NOT claim it is missing or that you lack access.
-                    - Base your analysis STRICTLY on the provided code.
-                    - Return ONLY valid JSON with this exact format:
-                    {
-                        "reason": "Brief explanation of the problem and fix",
-                        "risk": "Low, Medium, or High",
-                        "proposed_code": "The complete, fixed code file as a string. Use \\n for newlines."
-                    }
+                    - The code IS provided below in full. Do NOT claim it is missing or incomplete.
+                    - In the <code> block, output ONLY the specific function or block that contains the fix.
+                    - Return your response in this exact format:
+                    <reason>Brief explanation of the problem and fix</reason>
+                    <risk>Low, Medium, or High</risk>
+                    <code>
+                    The specific corrected code block
+                    </code>
 
                     Source Code:
                     \`\`\`javascript
@@ -109,16 +111,28 @@ async function handleTask(task, message) {
                     ], { think: false, temperature: 0.2, ...modelRouter.getModelForTask(task.intent) });
                     
                     updateProgress(80, 'Writing proposal file');
-                    const { extractJSON } = require('../normalizer');
-                    const cleanFixResponse = fixResponse.replace(/💭[\s\S]*?<\/think>/g, '').trim(); 
-                    const fixData = extractJSON(cleanFixResponse);
+                    const { stripThinking } = require('../../utils/jsonExtractor');
+                    let cleanFixResponse = stripThinking(fixResponse).trim();
                     
-                    if (fixData && fixData.proposed_code) {
-                        await execute('writeProposal', [task.filename, fixData.reason, fixData.risk, fixData.proposed_code]);
+                    // Parse XML tags instead of JSON
+                    const reasonMatch = cleanFixResponse.match(/<reason>([\s\S]*?)<\/reason>/i);
+                    const riskMatch = cleanFixResponse.match(/<risk>([\s\S]*?)<\/risk>/i);
+                    const codeMatch = cleanFixResponse.match(/<code>([\s\S]*?)<\/code>/i);
+                    
+                    if (codeMatch && codeMatch[1] && codeMatch[1].trim().length > 0) {
+                        const reason = reasonMatch ? reasonMatch[1].trim() : "No reason provided.";
+                        const risk = riskMatch ? riskMatch[1].trim() : "Unknown";
+                        const code = codeMatch[1].trim();
+                        
+                        await execute('writeProposal', [task.filename, reason, risk, code]);
                         updateProgress(100, 'Proposal created');
                         return `Successfully created code change proposal for ${task.filename}. Please review it in the proposals folder.`;
                     } else {
-                        throw new Error("LLM failed to generate valid code proposal JSON.");
+                        // Fallback: If XML parsing fails, save the raw response as a markdown proposal
+                        console.warn('[ProposeCodeChange] Failed to parse XML. Saving raw response as markdown.');
+                        await execute('writeProposal', [task.filename, "LLM response was not valid XML.", "Unknown", cleanFixResponse]);
+                        updateProgress(100, 'Proposal created (raw)');
+                        return `Created a raw proposal for ${task.filename} (XML parsing failed). Please review it in the proposals folder.`;
                     }
                 } else {
                     throw new Error("Could not read code for proposal.");

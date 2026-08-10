@@ -71,7 +71,13 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         if (modelChoice.supportsThinking === false) {
             reasoning.think = false;
         }
-        eventBus.emit(EventTypes.MODEL_SELECTED, { taskId, requestId, model: reasoning.model, reason: reasoning.reason, timestamp: Date.now() });
+        
+        // Phase 8B: LLM Call Attribution
+        const llmReason = toolResult.needsTool && !toolResult.shortCircuit 
+            ? 'tool_interpretation' 
+            : 'response_generation';
+            
+        eventBus.emit(EventTypes.MODEL_SELECTED, { taskId, requestId, model: reasoning.model, reason: llmReason, timestamp: Date.now() });
 
         // 3. Build Context
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'context', timestamp: Date.now() });
@@ -97,18 +103,43 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'llm', timestamp: Date.now() });
         const llmStart = Date.now();
         let reply = '';
+        let firstTokenEmitted = false;
+        let firstContentEmitted = false;
+        let isCurrentlyThinking = false;
+
         try {
-            // Check if streaming is available
             if (modelAdapter.streamComplete) {
-                const stream = modelAdapter.streamComplete(messages, reasoning);
+                const stream = modelAdapter.streamComplete(messages, { ...reasoning, requestId });
                 for await (const chunk of stream) {
-                    reply += chunk;
-                    // Emit the chunk to the UI instantly!
-                    eventBus.emit(EventTypes.LLM_TOKEN_STREAM, { taskId, requestId, token: chunk });
+                    if (!firstTokenEmitted) {
+                        firstTokenEmitted = true;
+                        eventBus.emit(EventTypes.LLM_FIRST_TOKEN, { taskId, requestId, llmStart, timestamp: Date.now() });
+                    }
+                    
+                    if (chunk.type === 'thinking') {
+                        if (!isCurrentlyThinking) {
+                            isCurrentlyThinking = true;
+                            eventBus.emit(EventTypes.TASK_PROGRESS, { taskId, requestId, stage: 'thinking', timestamp: Date.now() });
+                        }
+                        // Telemetry only: do not append to reply
+                        eventBus.emit(EventTypes.LLM_TOKEN_STREAM, { taskId, requestId, token: chunk.text, tokenType: 'thinking' });
+                    } else if (chunk.type === 'content') {
+                        if (isCurrentlyThinking) {
+                            isCurrentlyThinking = false;
+                            eventBus.emit(EventTypes.TASK_PROGRESS, { taskId, requestId, stage: 'generating', timestamp: Date.now() });
+                        }
+                        if (!firstContentEmitted) {
+                            firstContentEmitted = true;
+                            eventBus.emit(EventTypes.LLM_FIRST_CONTENT, { taskId, requestId, llmStart, timestamp: Date.now() });
+                        }
+                        reply += chunk.text;
+                        eventBus.emit(EventTypes.LLM_TOKEN_STREAM, { taskId, requestId, token: chunk.text, tokenType: 'content' });
+                    }
                 }
             } else {
-                // Fallback for providers without streaming
-                reply = await modelAdapter.complete(messages, reasoning);
+                reply = await modelAdapter.complete(messages, { ...reasoning, requestId });
+                eventBus.emit(EventTypes.LLM_FIRST_TOKEN, { taskId, requestId, llmStart, timestamp: Date.now() });
+                eventBus.emit(EventTypes.LLM_FIRST_CONTENT, { taskId, requestId, llmStart, timestamp: Date.now() });
             }
         } finally {
             const llmDuration = Date.now() - llmStart;
@@ -137,7 +168,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                     console.error("[MemoryExtraction_BG] Failed:", err.message);
                 }
                 return null;
-            }, taskId, requestId); // Pass parentTaskId and requestId for correlation
+            }, taskId, requestId, 'NORMAL'); // Pass priority
         }
         
         return reply;
