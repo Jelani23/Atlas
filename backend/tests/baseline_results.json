@@ -1,0 +1,314 @@
+{
+  "summary": {
+    "totalTests": 38,
+    "totalLLMCalls": 7,
+    "averageLatency": 128.44216315789473,
+    "accuracy": 0.42105263157894735
+  },
+  "results": [
+    {
+      "input": "What is 15% of 200?",
+      "expected": "percentage",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 2.09,
+      "success": false
+    },
+    {
+      "input": "What time is it?",
+      "expected": "getTime",
+      "got": "getTime",
+      "llmCalled": false,
+      "duration": 15.2,
+      "success": true
+    },
+    {
+      "input": "List my notes",
+      "expected": "listNotes",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.47,
+      "success": false
+    },
+    {
+      "input": "Show source files",
+      "expected": "listCode",
+      "got": "listCode",
+      "llmCalled": false,
+      "duration": 0.85,
+      "success": true
+    },
+    {
+      "input": "What files changed?",
+      "expected": "getChangedFiles",
+      "got": "getChangedFiles",
+      "llmCalled": false,
+      "duration": 0.2,
+      "success": true
+    },
+    {
+      "input": "Run tests",
+      "expected": "runTests",
+      "got": "runTests",
+      "llmCalled": false,
+      "duration": 411.27,
+      "success": true
+    },
+    {
+      "input": "List active tasks",
+      "expected": "listActiveTasks",
+      "got": "listActiveTasks",
+      "llmCalled": false,
+      "duration": 0.21,
+      "success": true
+    },
+    {
+      "input": "158 centimeters to feet",
+      "expected": "convertUnit",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.03,
+      "success": false
+    },
+    {
+      "input": "Calculate 25 * 4",
+      "expected": "calculate",
+      "got": "calculate",
+      "llmCalled": false,
+      "duration": 0.33,
+      "success": true
+    },
+    {
+      "input": "Search code for eventBus",
+      "expected": "searchCode",
+      "got": "searchCode",
+      "llmCalled": false,
+      "duration": 0.29,
+      "success": true
+    },
+    {
+      "input": "Calculate 15 percent of 200",
+      "expected": "percentage",
+      "got": "percentage",
+      "llmCalled": false,
+      "duration": 0.24,
+      "success": true
+    },
+    {
+      "input": "How much is 15 percent of 200?",
+      "expected": "percentage",
+      "got": "percentage",
+      "llmCalled": false,
+      "duration": 0.14,
+      "success": true
+    },
+    {
+      "input": "What's 15% from 200?",
+      "expected": "percentage",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.04,
+      "success": false
+    },
+    {
+      "input": "How many feet is 158 centimeters?",
+      "expected": "convertUnit",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.04,
+      "success": false
+    },
+    {
+      "input": "158 cm to ft",
+      "expected": "convertUnit",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "Word count of this is a test",
+      "expected": "wordCount",
+      "got": "wordCount",
+      "llmCalled": false,
+      "duration": 0.23,
+      "success": true
+    },
+    {
+      "input": "How many words in this is a test",
+      "expected": "wordCount",
+      "got": "wordCount",
+      "llmCalled": false,
+      "duration": 0.12,
+      "success": true
+    },
+    {
+      "input": "Find file conversationEngine",
+      "expected": "findFile",
+      "got": "findFile",
+      "llmCalled": false,
+      "duration": 0.43,
+      "success": true
+    },
+    {
+      "input": "Where is conversationEngine.js?",
+      "expected": "findFile",
+      "got": "findFile",
+      "llmCalled": false,
+      "duration": 0.24,
+      "success": true
+    },
+    {
+      "input": "Locate the conversation engine module",
+      "expected": "findFile",
+      "got": "findFile",
+      "llmCalled": false,
+      "duration": 0.12,
+      "success": true
+    },
+    {
+      "input": "Search for taskManager",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 1150.47,
+      "success": false
+    },
+    {
+      "input": "Look up NVIDIA",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 0.3,
+      "success": false
+    },
+    {
+      "input": "Find the thing",
+      "expected": "CLARIFY",
+      "got": "findFile",
+      "llmCalled": false,
+      "duration": 0.14,
+      "success": false
+    },
+    {
+      "input": "Show me the file",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 0.3,
+      "success": false
+    },
+    {
+      "input": "Convert 50",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 0.29,
+      "success": false
+    },
+    {
+      "input": "Delete the note",
+      "expected": "CLARIFY",
+      "got": "delete_note",
+      "llmCalled": false,
+      "duration": 0.59,
+      "success": false
+    },
+    {
+      "input": "Search up Raphael",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 0.22,
+      "success": false
+    },
+    {
+      "input": "Run it",
+      "expected": "CLARIFY",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "If I had 5 apples and gave you 2, how many do I have?",
+      "expected": "LLM",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "Search the web for NVIDIA news but also check my code for NVIDIA",
+      "expected": "webSearch",
+      "got": "search_web",
+      "llmCalled": true,
+      "duration": 3294.47,
+      "success": false
+    },
+    {
+      "input": "What can you do?",
+      "expected": "LLM",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.03,
+      "success": false
+    },
+    {
+      "input": "Do you remember my name?",
+      "expected": "LLM",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "Read memoryCache.js and tell me what it does",
+      "expected": "readCode",
+      "got": "readCode",
+      "llmCalled": false,
+      "duration": 0.66,
+      "success": true
+    },
+    {
+      "input": "Can you check the syntax of router.js?",
+      "expected": "checkSyntax",
+      "got": "LLM_Conversation",
+      "llmCalled": true,
+      "duration": 0.3,
+      "success": false
+    },
+    {
+      "input": "Take a note: The system needs a refactor",
+      "expected": "writeNote",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "yes",
+      "expected": "confirmation",
+      "got": "confirmation",
+      "llmCalled": false,
+      "duration": 0.39,
+      "success": true
+    },
+    {
+      "input": "nevermind",
+      "expected": "confirmation",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.02,
+      "success": false
+    },
+    {
+      "input": "bg-0042",
+      "expected": "getTaskProgress",
+      "got": "LLM_Conversation",
+      "llmCalled": false,
+      "duration": 0.01,
+      "success": false
+    }
+  ]
+}

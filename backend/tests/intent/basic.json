@@ -1,0 +1,12 @@
+[
+  { "input": "What is 15% of 200?", "expectedIntent": "percentage", "expectedTool": "percentage" },
+  { "input": "What time is it?", "expectedIntent": "getTime", "expectedTool": "getTime" },
+  { "input": "List my notes", "expectedIntent": "list_notes", "expectedTool": "listNotes" },
+  { "input": "Show source files", "expectedIntent": "list_code", "expectedTool": "listCode" },
+  { "input": "What files changed?", "expectedIntent": "getChangedFiles", "expectedTool": "getChangedFiles" },
+  { "input": "Run tests", "expectedIntent": "runTests", "expectedTool": "runTests" },
+  { "input": "List active tasks", "expectedIntent": "listActiveTasks", "expectedTool": "listActiveTasks" },
+  { "input": "158 centimeters to feet", "expectedIntent": "convertUnit", "expectedTool": "convertUnit" },
+  { "input": "Calculate 25 * 4", "expectedIntent": "calculate", "expectedTool": "calculate" },
+  { "input": "Search code for eventBus", "expectedIntent": "searchCode", "expectedTool": "searchCode" }
+]

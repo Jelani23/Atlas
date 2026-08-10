@@ -1,0 +1,12 @@
+[
+  { "input": "Calculate 15 percent of 200", "expectedIntent": "percentage", "expectedTool": "percentage" },
+  { "input": "How much is 15 percent of 200?", "expectedIntent": "percentage", "expectedTool": "percentage" },
+  { "input": "What's 15% from 200?", "expectedIntent": "percentage", "expectedTool": "percentage" },
+  { "input": "How many feet is 158 centimeters?", "expectedIntent": "convertUnit", "expectedTool": "convertUnit" },
+  { "input": "158 cm to ft", "expectedIntent": "convertUnit", "expectedTool": "convertUnit" },
+  { "input": "Word count of this is a test", "expectedIntent": "wordCount", "expectedTool": "wordCount" },
+  { "input": "How many words in this is a test", "expectedIntent": "wordCount", "expectedTool": "wordCount" },
+  { "input": "Find file conversationEngine", "expectedIntent": "findFile", "expectedTool": "findFile" },
+  { "input": "Where is conversationEngine.js?", "expectedIntent": "findFile", "expectedTool": "findFile" },
+  { "input": "Locate the conversation engine module", "expectedIntent": "findFile", "expectedTool": "findFile" }
+]

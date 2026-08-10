@@ -47,15 +47,21 @@ export function HomeView({
           its own content, never on a sibling row's — so the chat bar growing
           as you type can never push the stage (cloud + response) upward. */}
       <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] overflow-hidden">
-        {/* stage — cloud and response are themselves two more independent
-            grid rows (auto / 1fr). The cloud's row is sized purely by its
-            own fixed height classes, so a long response — which scrolls
-            within its own row instead of growing it — can never nudge the
-            cloud. Same "own container space" pattern as the floating layer
-            above; reuse it for any future stage element. */}
-        <div className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden px-4">
-          <div className="mx-auto w-full max-w-4xl pt-10 md:pt-16">
-            <div className="mx-auto h-[30vh] max-h-[340px] min-h-[180px] w-full">
+        {/* stage — three independent grid rows (1fr / auto / 1fr). The top
+            1fr is a pure spacer that pushes the cloud row down to the
+            vertical center of the stage; the cloud's own row is sized only
+            by its fixed height classes, so it can never be nudged by its
+            neighbors. The bottom 1fr — the same size as the spacer above,
+            so the cloud lands dead-center — is exactly the space between
+            the cloud and the chat bar, and that's where the response lives,
+            scrolling within its own row instead of growing it. Same "own
+            container space" pattern as the floating layer above; reuse it
+            for any future stage element. */}
+        <div className="grid min-h-0 grid-rows-[1fr_auto_1fr] overflow-hidden px-4">
+          <div aria-hidden="true" />
+
+          <div className="mx-auto w-full max-w-4xl">
+            <div className="mx-auto h-[26vh] max-h-[300px] min-h-[160px] w-full">
               <AtlasCloud state={state} />
             </div>
           </div>

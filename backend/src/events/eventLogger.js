@@ -5,11 +5,11 @@ const EventTypes = require('./eventTypes');
 function logEvent(type, payload) {
     // Keep logs concise
     const summary = JSON.stringify(payload).substring(0, 120);
-    console.log(`[EventBus] ${type} - ${summary}`);
+    // console.log(`[EventBus] ${type} - ${summary}`);
 }
 
 function initialize() {
-    console.log('[EventLogger] Initializing debug logger...');
+    // console.log('[EventLogger] Initializing debug logger...');
     Object.values(EventTypes).forEach(type => {
         eventBus.on(type, (payload) => logEvent(type, payload));
     });

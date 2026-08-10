@@ -1,6 +1,4 @@
-// Every provider in ./providers must export complete(messages, options) -> Promise<string>.
-// Nothing outside this file should ever import a provider directly - that's what keeps
-// the LLM swappable per the "LLM is not the assistant" principle.
+// backend/src/models/modelAdapter.js
 const providers = {
   openai: require('./providers/openai'),
   qwen: require('./providers/qwen'),
@@ -14,6 +12,12 @@ function createModelAdapter(providerName = process.env.ATLAS_MODEL_PROVIDER || '
     const available = Object.keys(providers).join(', ');
     throw new Error(`Unknown model provider "${providerName}". Available: ${available}`);
   }
+  
+  // Safety check to ensure the provider supports streaming
+  if (!provider.streamComplete) {
+    console.warn(`[ModelAdapter] Provider ${providerName} does not support streaming.`);
+  }
+  
   return provider;
 }
 

@@ -96,39 +96,54 @@ export function AtlasApp() {
     }
 
     const unsubscribe = bridge.onEvent((event) => {
+      console.log("[Frontend] Received event:", event.type, event.payload);
       const nextState = stateForEvent(event)
       if (nextState) setState(nextState)
 
       const step = describeEvent(event)
       if (step) setSteps((prev) => [...prev, step])
 
-      // Cast to any to bypass strict AtlasEvent type checking for new payload properties
-      const e = event as any
+      // Live LLM tokens as the backend generates them — appended onto a
+      // single in-progress message (streaming: true) so the reply grows in
+      // place instead of flashing a new bubble per token. The id is set
+      // once here and never changes again for this message — runFlow()
+      // below only flips `streaming` to false and fills in the final text,
+      // so the id (and therefore the message's React key) stays stable for
+      // its whole life and the rise-in animation never replays mid-stream
+      // or right as streaming finishes.
+      if (event.type === "atlas.streaming") {
+        const token = typeof event.payload?.token === "string" ? event.payload.token : ""
+        if (!token) return
 
-      // Catch delayed background responses and errors
-      if (e.type === "atlas.response") {
         setTyping(false)
         setState("speaking")
         setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last && last.role === "atlas" && last.streaming) {
+            return [...prev.slice(0, -1), { ...last, text: last.text + token }]
+          }
           return [
             ...prev,
-            { id: crypto.randomUUID(), role: "atlas", text: e.payload?.text ?? "" },
+            { id: crypto.randomUUID(), role: "atlas", text: token, streaming: true },
           ]
         })
+      }
+      // Delayed replies from background tasks — always a brand-new bubble,
+      // never merged into a streaming one.
+      else if (event.type === "atlas.response") {
+        const text = typeof event.payload?.text === "string" ? event.payload.text : ""
+        setTyping(false)
+        setState("speaking")
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "atlas", text }])
         settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
-      } else if (e.type === "atlas.error") {
+      } else if (event.type === "atlas.error") {
+        const message =
+          typeof event.payload?.message === "string"
+            ? event.payload.message
+            : "Something went wrong talking to Atlas."
         setTyping(false)
         setState("error")
-        setMessages((prev) => {
-          return [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "atlas",
-              text: e.payload?.message ?? "Something went wrong talking to Atlas.",
-            },
-          ]
-        })
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "atlas", text: message }])
       }
     })
 
@@ -197,15 +212,28 @@ export function AtlasApp() {
     // Atlas always keeps (and returns) the complete response. Any preview /
     // truncation happens purely in the Home view's presentation layer — the
     // full text below is exactly what's stored and shown in Conversations.
+    // Atlas always keeps (and returns) the complete response. 
     const result = await bridge.sendMessage(userText)
     setTyping(false)
 
     if (result.ok) {
       setState("speaking")
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "atlas", text: result.reply ?? "" },
-      ])
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        // If we were streaming, fill in the final processed text and close
+        // out the message — same id throughout, so no remount/re-animate.
+        if (last && last.role === "atlas" && last.streaming) {
+          return [
+            ...prev.slice(0, -1),
+            { ...last, streaming: false, text: result.reply ?? last.text },
+          ]
+        }
+        // Fallback for non-streamed responses (like instant tool executions)
+        return [
+          ...prev,
+          { id: crypto.randomUUID(), role: "atlas", text: result.reply ?? "" },
+        ]
+      })
       settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
     } else {
       setState("error")

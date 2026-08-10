@@ -1,0 +1,10 @@
+[
+  { "input": "Search for taskManager", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Look up NVIDIA", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Find the thing", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Show me the file", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Convert 50", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Delete the note", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Search up Raphael", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" },
+  { "input": "Run it", "expectedIntent": "AMBIGUOUS", "expectedTool": "CLARIFY" }
+]

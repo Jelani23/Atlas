@@ -1,5 +1,5 @@
 const { createModelAdapter } = require('../models/modelAdapter');
-const tools = require('../tools/registry');
+const tools = require('../tools');
 const { stripThinking } = require('../utils/jsonExtractor');
 
 const modelAdapter = createModelAdapter();

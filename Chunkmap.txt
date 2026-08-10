@@ -565,3 +565,24 @@ Identity → personality/profile
 Self-maintenance → sandbox/update system
 
 That's a much cleaner mental model than a giant list of features.
+
+One architectural rule I'd establish now
+
+This is probably the biggest thing I'd want you to keep in mind while implementing all of this:
+
+Don't turn every new capability into an LLM-powered feature.
+
+Atlas should increasingly look like this:
+
+                         ┌── Deterministic Tool
+                         │
+                         ├── Specialized Handler
+User → Router → Planner ─┼── Cached Result
+                         │
+                         ├── Small LLM
+                         │
+                         └── Heavy Reasoning
+                                ↓
+                           Background Task
+
+That's the architecture that will let your 4B + 7B models punch way above their weight.

@@ -32,9 +32,15 @@ module.exports = {
     PERMISSION_APPROVED: 'permission.approved',
     PERMISSION_DENIED: 'permission.denied',
 
-    // Reload Operations (For Phase 10)
+    // Reload Operations
     RELOAD_REQUESTED: 'reload.requested',
     RELOAD_STARTED: 'reload.started',
     RELOAD_COMPLETED: 'reload.completed',
-    RELOAD_DEFERRED: 'reload.deferred'
+    RELOAD_DEFERRED: 'reload.deferred',
+
+    // Performance Diagnostics
+    STAGE_STARTED: 'stage.started',
+    STAGE_COMPLETED: 'stage.completed',
+
+    LLM_TOKEN_STREAM: 'llm.token_stream'
 };

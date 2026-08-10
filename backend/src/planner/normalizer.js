@@ -4,7 +4,7 @@ const modelRouter = require('../models/modelRouter');
 const projectCache = require('../core/projectCache');
 const memoryCache = require('../core/memoryCache');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
-const { getTemplates } = require('../intent/intentTemplates');
+const getTemplates = async () => [];
 const modelAdapter = createModelAdapter();
 
 async function normalizeTask(message, history = []) {
@@ -46,9 +46,30 @@ Available Source Files:
 Intent Templates:
  ${templateString}
 
+Additional Available Tools (use if requested):
+- findFile: Finds a file by name. Params: query (string)
+- searchCode: Searches code for a string. Params: query (string)
+- getFileHash: Gets MD5 hash of a file. Params: filename (string)
+- getChangedFiles: Lists modified files. Params: none
+- checkSyntax: Validates JS syntax. Params: filename (string)
+- getTaskProgress: Gets status of a background task. Params: taskId (string)
+- listActiveTasks: Lists running background tasks. Params: none
+- validateJSON: Validates a JSON string. Params: jsonString (string)
+- fileExists: Checks if a file exists. Params: filePath (string)
+- getFileMetadata: Gets file size, mtime, hash. Params: filePath (string)
+- convertUnit: Converts units (e.g., 5 mb to gb). Params: value, fromUnit, toUnit
+- convertCurrency: Converts currency (e.g., 5 usd to eur). Params: amount, fromCurrency, toCurrency
+- percentage: Calculates percentage (e.g., 15 is what percent of 90). Params: value, total
+- statistics: Calculates mean, median, mode, etc. Params: dataString (e.g., "1, 2, 3")
+- wordCount: Counts words in text. Params: text
+- characterCount: Counts characters in text. Params: text
+- formatText: Formats text to uppercase, lowercase, titlecase, etc. Params: text, format
+- extractKeywords: Extracts top keywords from text. Params: text, count (optional)
+
 Return ONLY a flat JSON object with "intent" and its parameters.
 Example: {"intent": "read_code", "filename": "src/intent/intentAnalyzer.js"}
-Example: {"intent": "delete_note", "filename": "test_note"}`;
+Example: {"intent": "delete_note", "filename": "test_note"}
+Example: {"intent": "searchCode", "query": "TaskManager"}`;
 
     try {
         const response = await modelAdapter.complete([
@@ -107,7 +128,7 @@ function fastRegexNormalizer(message) {
     if (lowerMessage.includes('add a new feature') || lowerMessage.includes('add a feature') || (lowerMessage.includes('mark') && lowerMessage.includes('as'))) {
         const featureMatch = message.match(/(?:add a new feature called|add a feature called|mark the|mark)\s+(.+?)\s+(?:as|and mark it as)/i);
         if (featureMatch) {
-            const statusMatch = message.match(/(?:as|mark it as)\s+(?:implemented|planned|in progress|in_progress)/i);
+            const statusMatch = message.match(/(?:as|mark it as)\s+(implemented|planned|in progress|in_progress)/i);
             let status = statusMatch ? statusMatch[1].toLowerCase().replace('_', ' ') : 'implemented';
             return { intent: 'update_dev_state', feature: featureMatch[1].trim(), status: status };
         }
@@ -153,7 +174,8 @@ function fastRegexNormalizer(message) {
         }
     }
 
-    if (lowerMessage.startsWith('search') || lowerMessage.startsWith('look up') || lowerMessage.startsWith('find')) {
+    // Only trigger web search for explicit web queries to stop hijacking "find file"
+    if (lowerMessage.startsWith('search web for') || lowerMessage.startsWith('look up online') || lowerMessage.startsWith('google') || lowerMessage.startsWith('search the web')) {
         return { intent: 'search_web' };
     }
 

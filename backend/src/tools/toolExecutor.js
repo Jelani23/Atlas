@@ -1,8 +1,7 @@
 // backend/src/tools/toolExecutor.js
-const tools = require('./registry');
+const tools = require('./');
 const permissionManager = require('../permissions/permissionManager');
 
-// Update signature to accept options
 async function execute(toolName, args = [], options = {}) {
     const permission = permissionManager.check(toolName);
     
@@ -16,13 +15,26 @@ async function execute(toolName, args = [], options = {}) {
         return `Error: ${toolName} is disabled. Reason: ${permission.reason}`;
     }
     
-    if (typeof tools[toolName] !== 'function') {
+    const toolExport = tools[toolName];
+    if (!toolExport) {
         return `Error: Tool ${toolName} does not exist.`;
+    }
+
+    // Support both new { execute } format and old single-function format
+    const toolFunction = typeof toolExport === 'object' ? toolExport.execute : toolExport;
+    if (typeof toolFunction !== 'function') {
+        return `Error: Tool ${toolName} is invalid.`;
     }
     
     try {
         console.log(`[ToolExecutor] Executing ${toolName}...`);
-        return await tools[toolName](...args);
+        
+        // If args is an array (from the new Intent Resolver), spread it directly
+        if (args.length === 1 && Array.isArray(args[0])) {
+            return await toolFunction(...args[0]);
+        }
+        
+        return await toolFunction(...args);
     } catch (e) {
         console.error(`[ToolExecutor] Error executing ${toolName}:`, e);
         return `Error executing ${toolName}: ${e.message}`;

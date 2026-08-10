@@ -2,6 +2,8 @@ export interface Message {
   id: string
   role: "atlas" | "user"
   text: string
+  /** True while this message is still receiving live atlas.streaming tokens. */
+  streaming?: boolean
 }
 
 /** One entry in the conversation history list (Conversations tab sidebar). */

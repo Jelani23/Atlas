@@ -1,0 +1,12 @@
+[
+  { "input": "If I had 5 apples and gave you 2, how many do I have?", "expectedIntent": "conversation", "expectedTool": "LLM" },
+  { "input": "Search the web for NVIDIA news but also check my code for NVIDIA", "expectedIntent": "search_web", "expectedTool": "webSearch" },
+  { "input": "What can you do?", "expectedIntent": "conversation", "expectedTool": "LLM" },
+  { "input": "Do you remember my name?", "expectedIntent": "memory", "expectedTool": "LLM" },
+  { "input": "Read memoryCache.js and tell me what it does", "expectedIntent": "read_code", "expectedTool": "readCode" },
+  { "input": "Can you check the syntax of router.js?", "expectedIntent": "checkSyntax", "expectedTool": "checkSyntax" },
+  { "input": "Take a note: The system needs a refactor", "expectedIntent": "create_note", "expectedTool": "writeNote" },
+  { "input": "yes", "expectedIntent": "CONFIRMATION", "expectedTool": "confirmation" },
+  { "input": "nevermind", "expectedIntent": "CANCEL", "expectedTool": "confirmation" },
+  { "input": "bg-0042", "expectedIntent": "getTaskProgress", "expectedTool": "getTaskProgress" }
+]

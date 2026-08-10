@@ -12,6 +12,8 @@ export type AtlasEventType =
   | "atlas.error"
   | "atlas.status"
   | "atlas.model_changed"
+  // One LLM token, streamed live as the backend generates it (payload: { token: string }).
+  | "atlas.streaming"
 
 export interface AtlasEvent {
   type: AtlasEventType
