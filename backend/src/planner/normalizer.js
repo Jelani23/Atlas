@@ -157,17 +157,12 @@ function fastRegexNormalizer(message) {
         return { intent: 'append_note', filename: filename, content: contentMatch ? contentMatch[1].trim() : message };
     }
 
-    if (lowerMessage.includes('propose a change') || lowerMessage.includes('write a proposal') || lowerMessage.includes('fix the code') || lowerMessage.includes('review and fix')) {
-        const fileMatch = message.match(/([\w\/]+\.\w+)/i);
-        let filename = fileMatch ? fileMatch[1] : null;
+    if (lowerMessage.includes('propose a change') || lowerMessage.includes('write a proposal') || lowerMessage.includes('fix the code') || lowerMessage.includes('review and fix') || lowerMessage.includes('propose a fix')) {
+        // Extract any word after "for"
+        const m = message.match(/(?:proposal for|propose a change for|propose a fix for|fix the code for|review and fix for|fix the)\s+(?:the\s+)?(.+?)(?:\s+file|\?|$)/i);
+        let filename = m ? m[1].trim() : null;
         
-        // Conversational fuzzy matching
-        if (!filename) {
-            if (lowerMessage.includes('planner')) filename = 'planner.js';
-            if (lowerMessage.includes('memory cache')) filename = 'memoryCache.js';
-            if (lowerMessage.includes('conversation engine')) filename = 'conversationEngine.js';
-        }
-        
+        // If we found a filename, return the intent immediately so it doesn't fall through
         if (filename) return { intent: 'propose_code_change', filename: filename };
     }
 
