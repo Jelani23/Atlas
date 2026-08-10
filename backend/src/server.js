@@ -77,6 +77,7 @@ wss.on('connection', (ws) => {
                 await atlas.shutdown();
                 result = { ok: true };
             }
+            else if (method === 'transcribeAudio') result = await atlas.transcribeAudio(...args);
             ws.send(JSON.stringify({ id, result }));
         } catch (err) {
             ws.send(JSON.stringify({ id, error: err.message }));

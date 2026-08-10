@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('atlasBridge', {
     newConversation: () => ipcRenderer.invoke('atlas:newConversation'),
     deleteConversation: (sessionId) => ipcRenderer.invoke('atlas:deleteConversation', sessionId),
     renameConversation: (sessionId, title) => ipcRenderer.invoke('atlas:renameConversation', sessionId, title),
+    transcribeAudio: (base64Audio) => ipcRenderer.invoke('atlas:transcribeAudio', base64Audio),
 
     // Subscribe to the standardized Atlas event stream. Returns an
     // unsubscribe function.

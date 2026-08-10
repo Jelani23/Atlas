@@ -248,12 +248,86 @@ export function AtlasApp() {
     }
   }, [])
 
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
+
+  // 9E: Microphone capture refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data)
+      }
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+        
+        // Convert to Base64 to send over WebSocket
+        const reader = new FileReader()
+        reader.readAsDataURL(audioBlob)
+        reader.onloadend = async () => {
+          const base64Audio = reader.result as string
+          
+          // Update UI to show we are processing the voice
+          setTyping(true)
+          setState("thinking")
+          setSteps((prev) => [...prev, "Transcribing audio…"])
+          
+          try {
+            const result = await (window.atlasBridge as any).transcribeAudio(base64Audio)
+            if (result.ok && result.text.trim()) {
+              // 9G: Feed transcript directly into existing conversation pipeline
+              runFlow(result.text)
+            } else {
+              setTyping(false)
+              setState("idle")
+              setSteps([])
+              setMessages((prev) => [
+                ...prev,
+                { id: crypto.randomUUID(), role: "atlas", text: "I couldn't catch that. Could you try again?" },
+              ])
+            }
+          } catch (err) {
+            setTyping(false)
+            setState("error")
+          }
+        }
+      }
+
+      mediaRecorder.start()
+      mediaRecorderRef.current = mediaRecorder
+      setListening(true)
+      setState("listening")
+    } catch (err) {
+      console.error("Microphone access denied or failed:", err)
+      setState("error")
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "atlas", text: "I need microphone permissions to listen." },
+      ])
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop()
+      // Stop all audio tracks to turn off the mic hardware
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop())
+    }
+    setListening(false)
+  }
+
   const handleMic = () => {
-    setListening((prev) => {
-      const next = !prev
-      setState(next ? "listening" : "idle")
-      return next
-    })
+    if (listening) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
   }
 
   const openConversations = useCallback(() => {

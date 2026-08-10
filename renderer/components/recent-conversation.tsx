@@ -38,7 +38,7 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
         {recent.map((m) => (
           <li key={m.id} className="truncate text-xs leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground/80">
-              {m.role === "atlas" ? "Atlas: " : "You: "}
+              {m.role === "atlas" ? "Alice: " : "You: "}
             </span>
             {previewLine(m.text)}
           </li>

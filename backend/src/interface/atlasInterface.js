@@ -299,6 +299,24 @@ class AtlasInterface extends EventEmitter {
         }
     }
 
+    // Phase 9F: Transcribe audio received from frontend
+    async transcribeAudio(base64Audio) {
+        try {
+            const { createSttAdapter } = require('../voice/stt/sttAdapter');
+            const stt = createSttAdapter();
+            
+            // Strip the data URI prefix (e.g., "data:audio/webm;base64,")
+            const base64Data = base64Audio.split(',')[1];
+            const audioBuffer = Buffer.from(base64Data, 'base64');
+            
+            const result = await stt.transcribe(audioBuffer);
+            return { ok: true, text: result.text };
+        } catch (error) {
+            console.error('[Atlas Backend] STT failed:', error.message);
+            return { ok: false, error: error.message };
+        }
+    }
+
     resolvePermission(id, decision) {
         permissionManager.resolve(id, decision);
     }
