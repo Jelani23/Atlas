@@ -5,7 +5,7 @@ const modelRouter = require('../../models/modelRouter');
 const taskManager = require('../../tasks/taskManager');
 const state = require('../state');
 
-const INTERNAL_TASK_PROMPT = "You are Atlas, an advanced AI companion. Execute the requested internal task directly and concisely. Provide the technical output without conversational filler or asking for permission. Your user prefers direct action over confirmation.";
+const INTERNAL_TASK_PROMPT = "You are Alice, an AI companion operating on the ATLAS OS. Execute the requested internal task directly and concisely. Provide the technical output without conversational filler or asking for permission. Your user prefers direct action over confirmation.";
 const modelAdapter = createModelAdapter();
 
 async function handleTask(task, message, parentTaskId, requestId) {

@@ -1,10 +1,9 @@
-// backend/src/core/contextBuilder.js
 const { getStatePrompt } = require('./atlasState');
+const { atlasState } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
 
-// ADD 'policy' to the destructured arguments
 async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy }) {
     console.time("buildContext");
     
@@ -15,7 +14,7 @@ async function buildContext({ mode, intent, responseStyle, memoryResult, toolRes
     const hot = relevantMemory.hotState;
     if (hot.activeProject || hot.activeFiles.length > 0 || hot.currentTask) {
         hotStateContext = `
---- ATLAS HOT CONTEXT (Current Working State) ---
+--- ATLAS OS HOT CONTEXT (Current Working State) ---
 Active Project: ${hot.activeProject || 'None'}
 Active Files: ${hot.activeFiles.length > 0 ? hot.activeFiles.join(', ') : 'None'}
 Current Task: ${hot.currentTask || 'None'}
@@ -41,7 +40,7 @@ Current Task: ${hot.currentTask || 'None'}
     let devStateContext = "";
     if (relevantMemory.features && relevantMemory.features.length > 0) {
         devStateContext = `
---- ATLAS DEVELOPMENT STATE ---
+--- ATLAS OS DEVELOPMENT STATE ---
  ${relevantMemory.features.map(f => `- ${f.feature} [${f.status}]`).join('\n')}
 --- END DEV STATE ---
 `;
@@ -56,7 +55,7 @@ Current Task: ${hot.currentTask || 'None'}
     const isWorldRelevant = intent.intent === 'memory' || userInput.toLowerCase().includes('what can you do') || userInput.toLowerCase().includes('capabilities');
     if (isWorldRelevant && world) {
         worldModelContext = `
---- ATLAS WORLD MODEL ---
+--- ATLAS OS WORLD MODEL ---
 Runtime: ${world.environment.runtime} | Model: ${world.models.current_default}
 Capabilities:
  ${world.capabilities.map(c => `- ${c}`).join('\n')}
@@ -66,7 +65,6 @@ Limitations:
 `;
     }
 
-    // PASS policy to getSystemPrompt
     const systemPrompt = personalityEngine.getSystemPrompt(mode, policy);
 
     let toolContext = "No tools used.";
@@ -76,7 +74,7 @@ Limitations:
 
     console.timeEnd("buildContext");
 
-    return `${systemPrompt}\n${worldModelContext}\n${hotStateContext}\n--- ATLAS MEMORY CONTEXT ---\nPersonal Information:\n${personalMemoryContext}\n\nProject Knowledge:\n${projectMemoryContext}\n\nKnowledge Library Topics:\n${knowledgeContext}\n--- END MEMORY CONTEXT ---\n\n--- ATLAS OPERATIONAL HEURISTICS (PROCEDURES) ---\n${proceduralContext}\n--- END HEURISTICS ---\n\n${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.\n- If asked what you remember, use the "ATLAS MEMORY CONTEXT". DO NOT say you lack information if it is listed there.\n- Respond naturally as Atlas.`;
+    return `${systemPrompt}\n${worldModelContext}\n${hotStateContext}\n--- ALICE MEMORY CONTEXT ---\nPersonal Information:\n${personalMemoryContext}\n\nProject Knowledge:\n${projectMemoryContext}\n\nKnowledge Library Topics:\n${knowledgeContext}\n--- END MEMORY CONTEXT ---\n\n--- ATLAS OS OPERATIONAL HEURISTICS (PROCEDURES) ---\n${proceduralContext}\n--- END HEURISTICS ---\n\n${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.\n- If asked what you remember, use the "ALICE MEMORY CONTEXT". DO NOT say you lack information if it is listed there.\n- Respond naturally as ${atlasState.identity.name}.`;
 }
 
 module.exports = { buildContext };

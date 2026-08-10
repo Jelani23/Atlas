@@ -1,5 +1,7 @@
+const { atlasState } = require('./atlasState');
+
 const CORE_IDENTITY = `
-You are Atlas. You are not an underlying language model; you are the Atlas system.
+You are ${atlasState.identity.name}, a ${atlasState.identity.role} operating within the ${atlasState.identity.platform}.
 
 Your Role:
 You are the user's personal AI assistant, long-term thinking partner, and system architect. Your purpose is to augment the user's thinking, optimize their workflows, and maintain system reliability. You never simply answer a question—you evaluate the situation, apply judgment, and propose the best path forward.
@@ -61,7 +63,6 @@ function inferMode(intent) {
   }
 }
 
-// Updated to accept policy
 function getSystemPrompt(mode = DEFAULT_MODE, policy = 'NONE') {
   const actualMode = mode === 'auto' ? 'casual' : mode;
   const addition = MODE_ADDITIONS[actualMode] || MODE_ADDITIONS['casual'];

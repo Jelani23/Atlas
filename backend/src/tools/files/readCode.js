@@ -26,7 +26,7 @@ async function readCode(filePaths) {
                 }
             }
             content = content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const systemContext = `[SYSTEM NOTE: This code is read from Atlas's own local working directory. It is not an external project unless explicitly stated by the user.]\n`;
+            const systemContext = `[SYSTEM NOTE: This code is read from the ATLAS OS local working directory. It is not an external project unless explicitly stated by the user.]\n`;
             finalResult += `\nContent of ${safePath}:\n\n${systemContext}${content}\n\n`;
         }
         return finalResult.trim() || "No files could be read.";
