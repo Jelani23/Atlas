@@ -128,8 +128,14 @@ export function AtlasApp() {
           ]
         })
       }
-      // Delayed replies from background tasks — always a brand-new bubble,
-      // never merged into a streaming one.
+      // 10E: Listen for streaming TTS audio chunks
+      if ((event.type as string) === "atlas.audio_chunk") {
+        const audioBase64 = typeof event.payload?.audio === "string" ? event.payload.audio : ""
+        if (audioBase64) {
+          queueAudio(audioBase64)
+        }
+      }
+      // Delayed replies from background tasks...
       else if (event.type === "atlas.response") {
         const text = typeof event.payload?.text === "string" ? event.payload.text : ""
         setTyping(false)
@@ -186,8 +192,47 @@ export function AtlasApp() {
 
   useEffect(() => () => clearTimeout(settleTimer.current), [])
 
+  // 10G: Audio Queue & Playback Manager
+  const audioQueueRef = useRef<string[]>([])
+  const isPlayingRef = useRef(false)
+
+  const playNextAudio = useCallback(() => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingRef.current = false
+      return
+    }
+
+    isPlayingRef.current = true
+    const audioBase64 = audioQueueRef.current.shift()
+    
+    const audio = new Audio(audioBase64)
+    audio.onended = () => {
+      // When this chunk finishes, play the next one
+      playNextAudio()
+    }
+    audio.onerror = () => {
+      console.error("Audio playback error, skipping to next chunk.")
+      playNextAudio()
+    }
+    audio.play().catch(err => {
+      console.error("Audio play failed:", err)
+      playNextAudio()
+    })
+  }, [])
+
+  const queueAudio = useCallback((audioBase64: string) => {
+    audioQueueRef.current.push(audioBase64)
+    if (!isPlayingRef.current) {
+      playNextAudio()
+    }
+  }, [playNextAudio])
+
   const runFlow = useCallback(async (userText: string) => {
     clearTimeout(settleTimer.current)
+    
+    audioQueueRef.current = []
+    isPlayingRef.current = false
+    
     setListening(false)
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: userText }])
     setSteps([])
@@ -231,16 +276,6 @@ export function AtlasApp() {
           { id: crypto.randomUUID(), role: "atlas", text: result.reply ?? "" },
         ]
       })
-
-      // 10F: Play TTS audio if provided
-      if ((result as any).audio) {
-        try {
-          const audioObj = new Audio((result as any).audio)
-          await audioObj.play()
-        } catch (err) {
-          console.error("Audio playback failed:", err)
-        }
-      }
 
       settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
     } else {

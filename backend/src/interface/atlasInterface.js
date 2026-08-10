@@ -125,6 +125,11 @@ class AtlasInterface extends EventEmitter {
                 this.emit('atlas.streaming', { token });
             }
         });
+        
+        // streaming TTS audio chunks to the UI
+        eventBus.on(EventTypes.TTS_AUDIO_CHUNK, ({ audio }) => {
+            this.emit('atlas.audio_chunk', { audio });
+        });
     }
 
     async _reflectOnSession(sessionId) {

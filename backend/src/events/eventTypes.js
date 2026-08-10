@@ -23,8 +23,9 @@ module.exports = {
     MODEL_STARTED: 'model.started',
     MODEL_COMPLETED: 'model.completed',
     LLM_FIRST_TOKEN: 'llm.first_token',
-    LLM_FIRST_CONTENT: 'llm.first_content', // NEW: TTFC
+    LLM_FIRST_CONTENT: 'llm.first_content',
     LLM_TOKEN_STREAM: 'llm.token_stream',
+    LLM_AUDIO_STREAM: 'llm.audio_stream',
     LLM_METRICS: 'llm.metrics',
 
     // Tool Operations
@@ -50,5 +51,8 @@ module.exports = {
 
     // Performance Diagnostics
     STAGE_STARTED: 'stage.started',
-    STAGE_COMPLETED: 'stage.completed'
+    STAGE_COMPLETED: 'stage.completed',
+
+    // Streaming TTS Audio Chunks
+    TTS_AUDIO_CHUNK: 'tts.audio_chunk',
 };

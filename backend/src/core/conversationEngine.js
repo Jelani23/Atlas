@@ -108,6 +108,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         let firstTokenEmitted = false;
         let firstContentEmitted = false;
         let isCurrentlyThinking = false;
+        let sentenceBuffer = ''; // NEW: Buffer for streaming TTS
 
         try {
             if (modelAdapter.streamComplete) {
@@ -123,7 +124,6 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                             isCurrentlyThinking = true;
                             eventBus.emit(EventTypes.TASK_PROGRESS, { taskId, requestId, stage: 'thinking', timestamp: Date.now() });
                         }
-                        // Telemetry only: do not append to reply
                         eventBus.emit(EventTypes.LLM_TOKEN_STREAM, { taskId, requestId, token: chunk.text, tokenType: 'thinking' });
                     } else if (chunk.type === 'content') {
                         if (isCurrentlyThinking) {
@@ -136,12 +136,25 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                         }
                         reply += chunk.text;
                         eventBus.emit(EventTypes.LLM_TOKEN_STREAM, { taskId, requestId, token: chunk.text, tokenType: 'content' });
+
+                        // Phase 10E: Sentence Streaming TTS
+                        sentenceBuffer += chunk.text;
+                        // Check for sentence boundaries (. ! ? or newline)
+                        if (/[.!?](\s|$)|\n/.test(sentenceBuffer)) {
+                            const ttsManager = require('../voice/tts/ttsManager.js');
+                            ttsManager.enqueue(sentenceBuffer.trim(), { requestId });
+                            sentenceBuffer = ''; // Clear buffer
+                        }
                     }
                 }
             } else {
                 reply = await modelAdapter.complete(messages, { ...reasoning, requestId });
                 eventBus.emit(EventTypes.LLM_FIRST_TOKEN, { taskId, requestId, llmStart, timestamp: Date.now() });
                 eventBus.emit(EventTypes.LLM_FIRST_CONTENT, { taskId, requestId, llmStart, timestamp: Date.now() });
+                
+                // If non-streaming, just enqueue the whole reply
+                const ttsManager = require('../voice/tts/ttsManager.js');
+                ttsManager.enqueue(reply, { requestId });
             }
         } finally {
             const llmDuration = Date.now() - llmStart;
@@ -152,6 +165,12 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         if (!reply || !reply.trim()) {
             reply = "I generated a response but it came back empty after processing - possibly ran out of token budget mid-thought. Try again, or ask me something more specific.";
+        }
+
+        // Flush any remaining text in the buffer
+        if (sentenceBuffer.trim()) {
+            const ttsManager = require('../voice/tts/ttsManager.js');
+            ttsManager.enqueue(sentenceBuffer.trim(), { requestId });
         }
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
@@ -170,8 +189,12 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                     console.error("[MemoryExtraction_BG] Failed:", err.message);
                 }
                 return null;
-            }, taskId, requestId, 'NORMAL'); // Pass priority
+            }, taskId, requestId, 'NORMAL');
         }
+
+        // Phase 10E: Return immediately, audio is streamed via events
+        return { reply, audio: null };
+        
         // 7. Text-to-Speech (Phase 10E)
         let audioBase64 = null;
         try {

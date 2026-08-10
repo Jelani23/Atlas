@@ -21,6 +21,7 @@ const FORWARDED_EVENTS = [
     'atlas.model_changed',
     'permission.requested',
     'atlas.streaming',
+    'atlas.audio_chunk',
 ];
 
 // Phase B: Health endpoint for wait-on and Electron to poll
