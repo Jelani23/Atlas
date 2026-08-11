@@ -9,6 +9,19 @@ import { HomeView } from "./home-view"
 import { TitleBarControls } from "./title-bar-controls"
 import { type AtlasState } from "./atlas-state"
 import type { AtlasEvent } from "@/lib/atlas-events"
+import { attachAudioElement, setPlaying as setSpeechPlaying } from "@/lib/audio-level"
+import { setEmotion } from "@/lib/emotion"
+import { emotionState } from "@/lib/emotion"
+
+// Dev-only: exposes setEmotion + the live emotion engine state on window so
+// you can trigger AND verify emotion states from the browser devtools
+// console without waiting for a real error, e.g. `aliceEmotion("happy", 0.8)`
+// then watch `aliceEmotionState.current` climb toward 0.8 over ~half a
+// second. Safe to remove once the emotion layer has real trigger points wired up.
+if (typeof window !== "undefined") {
+  ;(window as unknown as { aliceEmotion?: typeof setEmotion }).aliceEmotion = setEmotion
+  ;(window as unknown as { aliceEmotionState?: typeof emotionState }).aliceEmotionState = emotionState
+}
 import type { Message } from "@/lib/types"
 
 // The window is created with frame: false (electron/main.js), so this whole
@@ -146,9 +159,10 @@ export function AtlasApp() {
         const message =
           typeof event.payload?.message === "string"
             ? event.payload.message
-            : "Something went wrong talking to Atlas."
+            : "Something went wrong talking to Alice."
         setTyping(false)
         setState("error")
+        setEmotion("angry", 0.6)
         setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "atlas", text: message }])
       }
     })
@@ -199,6 +213,9 @@ export function AtlasApp() {
   const playNextAudio = useCallback(() => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false
+      // No more chunks queued — tell the cloud Alice has stopped talking so
+      // her speaking envelope eases back down instead of holding its last value.
+      setSpeechPlaying(false)
       return
     }
 
@@ -206,6 +223,10 @@ export function AtlasApp() {
     const audioBase64 = audioQueueRef.current.shift()
     
     const audio = new Audio(audioBase64)
+    // Route this chunk's live amplitude into the shared speechLevel signal
+    // AliceCloud reads, so her motion follows the actual TTS waveform.
+    attachAudioElement(audio)
+    setSpeechPlaying(true)
     audio.onended = () => {
       // When this chunk finishes, play the next one
       playNextAudio()
@@ -232,7 +253,8 @@ export function AtlasApp() {
     
     audioQueueRef.current = []
     isPlayingRef.current = false
-    
+    setSpeechPlaying(false)
+
     setListening(false)
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: userText }])
     setSteps([])
@@ -243,6 +265,7 @@ export function AtlasApp() {
     if (!bridge) {
       setTyping(false)
       setState("error")
+      setEmotion("angry", 0.6)
       setMessages((prev) => [
         ...prev,
         {
@@ -280,12 +303,13 @@ export function AtlasApp() {
       settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
     } else {
       setState("error")
+      setEmotion("angry", 0.6)
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "atlas",
-          text: result.error ?? "Something went wrong talking to Atlas.",
+          text: result.error ?? "Something went wrong talking to Alice.",
         },
       ])
     }
@@ -338,6 +362,7 @@ export function AtlasApp() {
           } catch (err) {
             setTyping(false)
             setState("error")
+            setEmotion("angry", 0.5)
           }
         }
       }
@@ -349,6 +374,7 @@ export function AtlasApp() {
     } catch (err) {
       console.error("Microphone access denied or failed:", err)
       setState("error")
+      setEmotion("angry", 0.5)
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "atlas", text: "I need microphone permissions to listen." },

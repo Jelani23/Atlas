@@ -1,7 +1,7 @@
 "use client"
 
 import { ActivityPanel } from "./activity-panel"
-import { AtlasCloud } from "./atlas-cloud"
+import { AliceCloud } from "./alice-cloud"
 import { ChatInput } from "./chat-input"
 import { HomeResponse } from "./home-response"
 import { RecentConversation } from "./recent-conversation"
@@ -62,7 +62,7 @@ export function HomeView({
 
           <div className="mx-auto w-full max-w-4xl">
             <div className="mx-auto h-[26vh] max-h-[300px] min-h-[160px] w-full">
-              <AtlasCloud state={state} />
+              <AliceCloud state={state} />
             </div>
           </div>
 

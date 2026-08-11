@@ -62,17 +62,17 @@ export function ChatInput({ onSend, listening, onToggleMic }: ChatInputProps) {
           <Paperclip className="h-[18px] w-[18px]" aria-hidden="true" />
         </button>
 
-        <label htmlFor="atlas-input" className="sr-only">
-          Message Atlas
+        <label htmlFor="alice-input" className="sr-only">
+          Message Alice
         </label>
         <textarea
           ref={textareaRef}
-          id="atlas-input"
+          id="alice-input"
           rows={1}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Atlas anything…"
+          placeholder="Ask Alice anything…"
           className="themed-scroll flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
           style={{ maxHeight: MAX_INPUT_HEIGHT_PX }}
         />
@@ -80,14 +80,33 @@ export function ChatInput({ onSend, listening, onToggleMic }: ChatInputProps) {
         <button
           type="button"
           onClick={onToggleMic}
-          className={`mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${
+          className={`relative mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${
             listening
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:bg-secondary hover:text-foreground"
           }`}
-          aria-label={listening ? "Stop listening" : "Speak to Atlas"}
+          aria-label={listening ? "Stop listening" : "Speak to Alice"}
           aria-pressed={listening}
         >
+          {listening && (
+            <>
+              {/* rings emanating outward while the mic is live, staggered
+                  so they read as one continuous pulse rather than three
+                  separate ripples */}
+              <span
+                aria-hidden="true"
+                className="animate-mic-wave pointer-events-none absolute inset-0 rounded-full border border-primary/60"
+              />
+              <span
+                aria-hidden="true"
+                className="animate-mic-wave pointer-events-none absolute inset-0 rounded-full border border-primary/60 [animation-delay:0.6s]"
+              />
+              <span
+                aria-hidden="true"
+                className="animate-mic-wave pointer-events-none absolute inset-0 rounded-full border border-primary/60 [animation-delay:1.2s]"
+              />
+            </>
+          )}
           <Mic
             className={`h-[18px] w-[18px] ${listening ? "animate-pulse" : ""}`}
             aria-hidden="true"

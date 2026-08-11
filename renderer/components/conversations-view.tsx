@@ -194,7 +194,7 @@ export function ConversationsView({
 
           {!listLoading && conversations.length === 0 && (
             <p className="px-2.5 py-3 text-xs leading-relaxed text-muted-foreground/60">
-              Nothing logged yet. Conversations show up here as you talk to Atlas.
+              Nothing logged yet. Conversations show up here as you talk to Alice.
             </p>
           )}
 

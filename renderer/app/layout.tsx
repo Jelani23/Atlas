@@ -17,9 +17,9 @@ const quicksand = Quicksand({
 })
 
 export const metadata: Metadata = {
-  title: 'Atlas — Your AI Companion',
+  title: 'Atlas OS — Alice, Your AI Companion',
   description:
-    'Atlas is a calm, elegant personal AI companion. A living presence in the sky, always ready to help.',
+    'Alice is a calm, elegant personal AI companion running on Atlas OS. A living presence in the sky, always ready to help.',
   generator: 'v0.app',
   icons: {
     icon: [

@@ -28,7 +28,7 @@ export function ConversationThread({ messages, typing, focusMessageId }: Convers
         <p className="font-display text-lg font-medium text-muted-foreground/70 text-balance">
           No conversation yet.
           <span className="mt-1 block text-sm font-normal text-muted-foreground/50">
-            Anything you ask Atlas shows up here in full.
+            Anything you ask Alice shows up here in full.
           </span>
         </p>
       </div>
@@ -48,7 +48,7 @@ export function ConversationThread({ messages, typing, focusMessageId }: Convers
           } max-w-[85%] ${m.id === focusMessageId ? "ring-2 ring-primary/40" : ""}`}
         >
           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-primary/70">
-            {m.role === "atlas" ? "Atlas" : "You"}
+            {m.role === "atlas" ? "Alice" : "You"}
           </span>
           <p className="whitespace-pre-wrap text-pretty text-[15px] leading-relaxed text-foreground">
             {m.text}

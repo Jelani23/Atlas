@@ -10,7 +10,7 @@ export function SkyBackground() {
       {/* soft warm sunlight pooling from behind the cloud, upper-center */}
       <div className="absolute -top-[22%] left-1/2 h-[70vh] w-[85vw] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(253,242,210,0.7)_0%,rgba(253,242,210,0.12)_52%,rgba(253,242,210,0)_72%)] blur-2xl" />
 
-      {/* drifting atmospheric cloud masses — soft, secondary to Atlas */}
+      {/* drifting atmospheric cloud masses — soft, secondary to Alice */}
       <div className="animate-drift absolute left-[6%] top-[20%] h-[28vh] w-[40vw] rounded-full bg-white/55 blur-[75px]" />
       <div className="animate-drift-slow absolute right-[4%] top-[10%] h-[24vh] w-[32vw] rounded-full bg-white/50 blur-[65px]" />
       <div className="animate-drift-slow absolute bottom-[6%] left-[14%] h-[32vh] w-[46vw] rounded-full bg-white/45 blur-[85px]" />

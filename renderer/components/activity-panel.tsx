@@ -33,7 +33,7 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
         <ul className="space-y-1.5">
           {steps.length === 0 && (
             <li className="text-xs leading-relaxed text-muted-foreground/70">
-              Atlas is resting. Ask her anything.
+              Alice is resting. Ask her anything.
             </li>
           )}
           {steps.map((step, i) => {

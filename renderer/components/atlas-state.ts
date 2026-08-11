@@ -33,75 +33,85 @@ export interface StateProfile {
   glow: number
   // sun-ray reach/visibility 0..1
   rays: number
+  // slow "jello" squash/stretch wobble intensity 0..1 — Alice's resting
+  // liveliness. Recedes in states that already have their own dominant
+  // motion (speech stretch, working churn) so the motions never fight.
+  wobble: number
   // rgb tint for the cool inner cloud layers + halo
   tint: [number, number, number]
 }
 
 export const STATE_PROFILE: Record<AtlasState, StateProfile> = {
   idle: {
-    speed: 0.32,
-    drift: 0.62,
-    breath: 0.02,
+    speed: 0.55,
+    drift: 1.0,
+    breath: 0.075,
     speech: 0,
     wisp: 0.32,
     particles: 0.28,
     glow: 0.5,
     rays: 0.38,
+    wobble: 1.15,
     tint: [186, 214, 242],
   },
   listening: {
-    speed: 0.48,
-    drift: 0.8,
-    breath: 0.032,
+    speed: 0.75,
+    drift: 1.15,
+    breath: 0.09,
     speech: 0,
     wisp: 0.5,
     particles: 0.48,
     glow: 0.72,
     rays: 0.52,
+    wobble: 0.8,
     tint: [176, 210, 244],
   },
   thinking: {
-    speed: 0.78,
-    drift: 0.95,
-    breath: 0.032,
+    speed: 1.15,
+    drift: 1.35,
+    breath: 0.1,
     speech: 0,
     wisp: 0.9,
     particles: 0.75,
     glow: 0.78,
     rays: 0.58,
+    wobble: 0.55,
     tint: [168, 202, 240],
   },
   speaking: {
-    speed: 0.58,
-    drift: 0.78,
-    breath: 0.028,
+    speed: 0.85,
+    drift: 1.1,
+    breath: 0.08,
     speech: 1,
     wisp: 0.55,
     particles: 0.52,
     glow: 0.85,
     rays: 0.6,
+    wobble: 0.35,
     tint: [196, 220, 248],
   },
   working: {
-    speed: 1.0,
-    drift: 1.0,
-    breath: 0.04,
+    speed: 1.4,
+    drift: 1.5,
+    breath: 0.12,
     speech: 0.3,
     wisp: 0.95,
     particles: 0.95,
     glow: 0.95,
     rays: 0.72,
+    wobble: 0.4,
     tint: [232, 210, 160],
   },
   error: {
-    speed: 0.6,
-    drift: 0.9,
-    breath: 0.025,
+    speed: 1.0,
+    drift: 1.3,
+    breath: 0.09,
     speech: 0,
     wisp: 0.4,
     particles: 0.35,
     glow: 0.6,
     rays: 0.3,
+    wobble: 0.5,
     tint: [232, 168, 168],
   },
 }

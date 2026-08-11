@@ -225,6 +225,24 @@
   animation: atlas-rise 0.5s ease-out both;
 }
 
+/* Rings that emanate outward from the mic button while listening — see
+   ChatInput. Each ring is the same element staggered with animation-delay,
+   so they read as a continuous pulse instead of three separate ripples. */
+@keyframes mic-wave {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.animate-mic-wave {
+  animation: mic-wave 1.8s ease-out infinite;
+}
+
 /* Themed scrollbar for any inner scroll region (Conversations thread, the
    home response preview, and later things like project/task lists). Apply
    the `.themed-scroll` class to the element that has overflow-y: auto. */
