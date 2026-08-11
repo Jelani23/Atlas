@@ -13,6 +13,7 @@ let isReady = false;
 
 const FORWARDED_EVENTS = [
     'user.message',
+    'atlas.request_started',
     'atlas.thinking',
     'atlas.tool_started',
     'atlas.tool_progress',
@@ -85,6 +86,10 @@ wss.on('connection', (ws) => {
                 result = { ok: true };
             }
             else if (method === 'transcribeAudio') result = await atlas.transcribeAudio(...args);
+            else if (method === 'interrupt') {
+                atlas.interrupt();
+                result = { ok: true };
+            }
             ws.send(JSON.stringify({ id, result }));
         } catch (err) {
             ws.send(JSON.stringify({ id, error: err.message }));

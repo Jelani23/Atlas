@@ -61,6 +61,7 @@ class AtlasInterface extends EventEmitter {
         this._initPromise = null;
         
         this.taskCounter = 1; 
+        this.activeRequestId = null;
 
         eventLogger.initialize();
 
@@ -72,8 +73,10 @@ class AtlasInterface extends EventEmitter {
     }
 
     _wireEventBusToUI() {
-        eventBus.on(EventTypes.REQUEST_STARTED, ({ text }) => {
+        eventBus.on(EventTypes.REQUEST_STARTED, ({ requestId, text }) => {
+            this.activeRequestId = requestId;
             this.emit('user.message', { text });
+            this.emit('atlas.request_started', { requestId });
         });
         
         eventBus.on(EventTypes.TASK_PROGRESS, ({ stage }) => {
@@ -120,17 +123,18 @@ class AtlasInterface extends EventEmitter {
         });
         
         // 8G.1: Only forward 'content' tokens to the UI as visible chat
-        eventBus.on(EventTypes.LLM_TOKEN_STREAM, ({ token, tokenType }) => {
+        eventBus.on(EventTypes.LLM_TOKEN_STREAM, ({ token, tokenType, requestId }) => {
             if (tokenType === 'content') {
-                this.emit('atlas.streaming', { token });
+                this.emit('atlas.streaming', { token, requestId });
             }
         });
         
         // streaming TTS audio chunks to the UI
-        eventBus.on(EventTypes.TTS_AUDIO_CHUNK, ({ audio }) => {
-            this.emit('atlas.audio_chunk', { audio });
+        eventBus.on(EventTypes.TTS_AUDIO_CHUNK, ({ audio, requestId }) => {
+            this.emit('atlas.audio_chunk', { audio, requestId });
         });
     }
+
 
     async _reflectOnSession(sessionId) {
         if (!sessionId) return;
@@ -301,6 +305,17 @@ class AtlasInterface extends EventEmitter {
         } catch (err) {
             this.emit('atlas.error', { message: err.message });
             throw err;
+        }
+    }
+
+    // Phase 11.6: Backend Interrupt Signal
+    interrupt() {
+        if (this.activeRequestId) {
+            console.log(`[AtlasInterface] Interrupting active request: ${this.activeRequestId}`);
+            const ttsManager = require('../voice/tts/ttsManager');
+            // Pass the requestId to ttsQueue.stop() so it permanently ignores late chunks
+            ttsManager.stop(this.activeRequestId);
+            this.activeRequestId = null;
         }
     }
 

@@ -164,6 +164,7 @@ ipcMain.handle('atlas:newConversation', async () => callAtlas('newConversation')
 ipcMain.handle('atlas:deleteConversation', async (_event, sessionId) => callAtlas('deleteConversation', [sessionId]));
 ipcMain.handle('atlas:renameConversation', async (_event, sessionId, title) => callAtlas('renameConversation', [sessionId, title]));
 ipcMain.handle('atlas:transcribeAudio', async (_event, base64Audio) => callAtlas('transcribeAudio', [base64Audio]));
+ipcMain.handle('atlas:interrupt', async () => callAtlas('interrupt', []));
 
 // IPC surface: renderer's custom title bar -> the actual BrowserWindow chrome
 ipcMain.handle('window:minimize', () => {

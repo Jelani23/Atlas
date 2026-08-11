@@ -9,6 +9,7 @@ class TtsQueue {
         this.queue = [];
         this.processing = false;
         this.currentRequestId = null;
+        this.cancelledRequests = new Set();
     }
 
     getAdapter() {
@@ -21,6 +22,9 @@ class TtsQueue {
     enqueue(text, { requestId }) {
         const isEnabled = process.env.TTS_ENABLED === 'true';
         if (!isEnabled || !text || text.trim() === '') return;
+
+        // Phase 11.6: If this request was interrupted, drop the chunk silently
+        if (this.cancelledRequests.has(requestId)) return;
 
         this.currentRequestId = requestId;
         this.queue.push({ text, requestId });
@@ -54,11 +58,8 @@ class TtsQueue {
                 }
             } catch (error) {
                 console.error(`[TTSQueue] Synthesis failed:`, error.message);
-                // Phase 10.3: Tell the manager to disable TTS so we don't spam failed requests
                 const ttsManager = require('./ttsManager'); 
                 ttsManager.markUnhealthy();
-                
-                // Clear the rest of the queue for this request since they will likely fail too
                 this.queue = this.queue.filter(item => item.requestId !== this.currentRequestId);
             }
         }
@@ -66,7 +67,18 @@ class TtsQueue {
         this.processing = false;
     }
 
-    stop() {
+    // Phase 11.6: Updated stop method to permanently blacklist a requestId
+    stop(requestId = null) {
+        if (requestId) {
+            this.cancelledRequests.add(requestId);
+            console.log(`[TTSQueue] Request ${requestId} permanently cancelled.`);
+            
+            // Clean up old requests to prevent memory leak
+            if (this.cancelledRequests.size > 10) {
+                const arr = Array.from(this.cancelledRequests);
+                this.cancelledRequests = new Set(arr.slice(-5));
+            }
+        }
         this.queue = [];
         this.currentRequestId = null;
         console.log('[TTSQueue] Queue cleared.');

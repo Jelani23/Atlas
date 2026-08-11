@@ -14,35 +14,19 @@ import { attachAudioElement, setPlaying as setSpeechPlaying } from "@/lib/audio-
 import { setEmotion } from "@/lib/emotion"
 import { emotionState } from "@/lib/emotion"
 
-// Dev-only: exposes setEmotion + the live emotion engine state on window so
-// you can trigger AND verify emotion states from the browser devtools
-// console without waiting for a real error, e.g. `aliceEmotion("happy", 0.8)`
-// then watch `aliceEmotionState.current` climb toward 0.8 over ~half a
-// second. Safe to remove once the emotion layer has real trigger points wired up.
 if (typeof window !== "undefined") {
   ;(window as unknown as { aliceEmotion?: typeof setEmotion }).aliceEmotion = setEmotion
   ;(window as unknown as { aliceEmotionState?: typeof emotionState }).aliceEmotionState = emotionState
 }
 import type { Message } from "@/lib/types"
 
-// The window is created with frame: false (electron/main.js), so this whole
-// header doubles as the OS drag region. Anything interactive inside it (the
-// nav, the window controls) opts back out with NO_DRAG, or clicks won't land.
 const DRAG: CSSProperties = { WebkitAppRegion: "drag" } as CSSProperties
 const NO_DRAG: CSSProperties = { WebkitAppRegion: "no-drag" } as CSSProperties
 
-// How long the cloud lingers in "speaking" before settling back to idle.
-// Purely cosmetic — there's no "finished speaking" event yet (that'll come
-// with TTS), so this just gives the reply a moment to be read.
-const SPEAKING_SETTLE_MS = 4500
+// Removed SPEAKING_SETTLE_MS - The audio queue is now the source of truth
 
-/**
- * Turns a raw atlas.* event into a human-readable line for the thought-path
- * panel. Returns null for events that shouldn't add a visible step.
- */
 function describeEvent(event: AtlasEvent): string | null {
   const phase = typeof event.payload?.phase === "string" ? event.payload.phase : undefined
-
   switch (event.type) {
     case "atlas.thinking":
       if (phase === "generating") return "Composing a response…"
@@ -68,7 +52,6 @@ function describeEvent(event: AtlasEvent): string | null {
   }
 }
 
-/** Maps an atlas.* event to a cloud/activity state, or null to leave it alone. */
 function stateForEvent(event: AtlasEvent): AtlasState | null {
   switch (event.type) {
     case "atlas.thinking":
@@ -100,7 +83,11 @@ export function AtlasApp() {
   const [connected, setConnected] = useState(true)
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  
+  // Used now ONLY as a fallback for text-only responses (when no audio arrives)
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const activeRequestIdRef = useRef<string | null>(null) // Phase 11.6: Track active request
+  const isGeneratingRef = useRef(false) // Phase 11.7: Track if backend is still generating response
 
   useEffect(() => {
     const bridge = window.atlasBridge
@@ -111,26 +98,30 @@ export function AtlasApp() {
 
     const unsubscribe = bridge.onEvent((event) => {
       console.log("[Frontend] Received event:", event.type, event.payload);
+      
+      // Phase 11.6 & 11.7: Track request lifecycle
+      if ((event.type as string) === "atlas.request_started") {
+        activeRequestIdRef.current = typeof event.payload?.requestId === "string" ? event.payload.requestId : null;
+        isGeneratingRef.current = true; // Backend is now actively generating the response
+      } else if (event.type === "atlas.status" && event.payload?.phase === "reply_ready") {
+        isGeneratingRef.current = false; // Backend LLM stream has finished
+      }
+
       const nextState = stateForEvent(event)
       if (nextState) setState(nextState)
 
       const step = describeEvent(event)
       if (step) setSteps((prev) => [...prev, step])
 
-      // Live LLM tokens as the backend generates them — appended onto a
-      // single in-progress message (streaming: true) so the reply grows in
-      // place instead of flashing a new bubble per token. The id is set
-      // once here and never changes again for this message — runFlow()
-      // below only flips `streaming` to false and fills in the final text,
-      // so the id (and therefore the message's React key) stays stable for
-      // its whole life and the rise-in animation never replays mid-stream
-      // or right as streaming finishes.
       if (event.type === "atlas.streaming") {
         const token = typeof event.payload?.token === "string" ? event.payload.token : ""
-        if (!token) return
+        const reqId = typeof event.payload?.requestId === "string" ? event.payload.requestId : null
+        
+        // Phase 11.6: Ignore tokens from old interrupted requests
+        if (!token || reqId !== activeRequestIdRef.current) return
 
         setTyping(false)
-        setState("speaking")
+        setState("speaking") // Text is streaming, assume speaking unless no audio follows
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (last && last.role === "atlas" && last.streaming) {
@@ -142,20 +133,28 @@ export function AtlasApp() {
           ]
         })
       }
+      
       // 10E: Listen for streaming TTS audio chunks
       if ((event.type as string) === "atlas.audio_chunk") {
         const audioBase64 = typeof event.payload?.audio === "string" ? event.payload.audio : ""
-        if (audioBase64) {
+        const reqId = typeof event.payload?.requestId === "string" ? event.payload.requestId : null
+        
+        // Phase 11.6: Ignore audio from old interrupted requests
+        if (audioBase64 && reqId === activeRequestIdRef.current) {
+          // Audio arrived! Cancel the text-only fallback timer.
+          clearTimeout(settleTimer.current)
           queueAudio(audioBase64)
         }
       }
+      
       // Delayed replies from background tasks...
       else if (event.type === "atlas.response") {
         const text = typeof event.payload?.text === "string" ? event.payload.text : ""
         setTyping(false)
         setState("speaking")
         setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "atlas", text }])
-        settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
+        // Fallback timer in case this text has no TTS audio
+        settleTimer.current = setTimeout(() => setState("idle"), 3000)
       } else if (event.type === "atlas.error") {
         const message =
           typeof event.payload?.message === "string"
@@ -171,9 +170,7 @@ export function AtlasApp() {
     return unsubscribe
   }, [])
 
-  // Restore whatever's already in the current session from Supabase, so a
-  // renderer reload (Cmd/Ctrl+R) doesn't wipe the conversation — it's only
-  // ever cleared by explicitly starting a new one.
+  // Restore session
   useEffect(() => {
     const bridge = window.atlasBridge
     if (!bridge) return
@@ -196,7 +193,7 @@ export function AtlasApp() {
           })),
         )
       } catch {
-        // Backend not reachable yet or history unavailable — just start fresh.
+        // Backend not reachable yet
       }
     })()
 
@@ -207,17 +204,22 @@ export function AtlasApp() {
 
   useEffect(() => () => clearTimeout(settleTimer.current), [])
 
-  // 10G: Audio Queue & Playback Manager
+  // 10G: Audio Queue & Playback Manager (Now drives the UI State!)
   const audioQueueRef = useRef<string[]>([])
   const isPlayingRef = useRef(false)
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null) // <-- NEW: Track active audio element
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const playNextAudio = useCallback(() => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false
-      currentAudioRef.current = null // <-- NEW: Clear ref when done
-      // No more chunks queued — tell the cloud Alice has stopped talking
+      currentAudioRef.current = null
       setSpeechPlaying(false)
+      
+      // Phase 11.7: Only transition to IDLE if the backend is finished generating 
+      // AND the audio queue is truly empty. Prevents UI flicker between streamed TTS chunks.
+      if (!isGeneratingRef.current) {
+        setState("idle")
+      }
       return
     }
 
@@ -225,9 +227,8 @@ export function AtlasApp() {
     const audioBase64 = audioQueueRef.current.shift()
     
     const audio = new Audio(audioBase64)
-    currentAudioRef.current = audio // <-- NEW: Assign to ref
+    currentAudioRef.current = audio
     
-    // Route this chunk's live amplitude into the shared speechLevel signal
     attachAudioElement(audio)
     setSpeechPlaying(true)
     
@@ -251,6 +252,8 @@ export function AtlasApp() {
 
   const queueAudio = useCallback((audioBase64: string) => {
     audioQueueRef.current.push(audioBase64)
+    // If we weren't already playing, kick off the queue. 
+    // The state transition to "speaking" happens inside playNextAudio when audio actually starts.
     if (!isPlayingRef.current) {
       playNextAudio()
     }
@@ -260,11 +263,10 @@ export function AtlasApp() {
   const stopAudioPlayback = useCallback(() => {
     audioQueueRef.current = [] // Clear pending chunks
     if (currentAudioRef.current) {
-      // Detach handlers FIRST so clearing the src doesn't trigger onerror
       currentAudioRef.current.onended = null
       currentAudioRef.current.onerror = null
       currentAudioRef.current.pause()
-      currentAudioRef.current.src = "" // Force stop the media resource
+      currentAudioRef.current.src = "" 
       currentAudioRef.current = null
     }
     isPlayingRef.current = false
@@ -280,6 +282,7 @@ export function AtlasApp() {
     setListening(false)
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: userText }])
     setSteps([])
+    // If we were transcribing, transition to thinking. If we were idle, start thinking.
     setState("thinking")
     setTyping(true)
 
@@ -299,15 +302,11 @@ export function AtlasApp() {
       return
     }
 
-    // Atlas always keeps (and returns) the complete response. Any preview /
-    // truncation happens purely in the Home view's presentation layer — the
-    // full text below is exactly what's stored and shown in Conversations.
-    // Atlas always keeps (and returns) the complete response. 
     const result = await bridge.sendMessage(userText)
     setTyping(false)
 
     if (result.ok) {
-      setState("speaking")
+      setState("speaking") // Assume speaking (if no audio chunks arrive, the fallback timer handles it)
       setMessages((prev) => {
         const last = prev[prev.length - 1]
         if (last && last.role === "atlas" && last.streaming) {
@@ -322,7 +321,9 @@ export function AtlasApp() {
         ]
       })
 
-      settleTimer.current = setTimeout(() => setState("idle"), SPEAKING_SETTLE_MS)
+      // Phase 11.3: Fallback timer. If no TTS audio arrives within 3 seconds, assume text-only and go idle.
+      // This timer is cancelled instantly if queueAudio() receives an audio_chunk.
+      settleTimer.current = setTimeout(() => setState("idle"), 3000)
     } else {
       setState("error")
       setEmotion("angry", 0.6)
@@ -335,7 +336,7 @@ export function AtlasApp() {
         },
       ])
     }
-  }, [])
+  }, [stopAudioPlayback])
 
   useEffect(() => () => clearTimeout(settleTimer.current), [])
 
@@ -345,6 +346,18 @@ export function AtlasApp() {
 
   const startRecording = async () => {
     try {
+      // Phase 11.6: BARGE-IN. Kill frontend audio AND tell backend to stop.
+      stopAudioPlayback()
+      clearTimeout(settleTimer.current)
+      
+      // Tell backend to permanently cancel the old TTS/LLM stream
+      try {
+        await (window.atlasBridge as any).interrupt()
+        activeRequestIdRef.current = null // Clear local tracking
+      } catch (e) {
+        console.warn("Backend interrupt failed", e)
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mediaRecorder = new MediaRecorder(stream)
       audioChunksRef.current = []
@@ -356,21 +369,19 @@ export function AtlasApp() {
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
         
-        // Convert to Base64 to send over WebSocket
         const reader = new FileReader()
         reader.readAsDataURL(audioBlob)
         reader.onloadend = async () => {
           const base64Audio = reader.result as string
           
-          // Update UI to show we are processing the voice
           setTyping(true)
-          setState("thinking")
+          // Phase 11.10: Explicit TRANSCRIBING state before transitioning to THINKING
+          setState("transcribing")
           setSteps((prev) => [...prev, "Transcribing audio…"])
           
           try {
             const result = await (window.atlasBridge as any).transcribeAudio(base64Audio)
             if (result.ok && result.text.trim()) {
-              // 9G: Feed transcript directly into existing conversation pipeline
               runFlow(result.text)
             } else {
               setTyping(false)
@@ -407,7 +418,6 @@ export function AtlasApp() {
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop()
-      // Stop all audio tracks to turn off the mic hardware
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop())
     }
     setListening(false)
@@ -432,16 +442,15 @@ export function AtlasApp() {
     setTab(id)
   }
 
-  // Shared by "New conversation" and "deleted the conversation I'm
-  // currently in" — both land on a fresh, empty live session the same way.
   const resetLiveSession = useCallback((newSessionId: string) => {
     clearTimeout(settleTimer.current)
+    stopAudioPlayback()
     setSessionId(newSessionId)
     setMessages([])
     setSteps([])
     setState("idle")
     setFocusMessageId(null)
-  }, [])
+  }, [stopAudioPlayback])
 
   const handleNewConversation = useCallback(async () => {
     const bridge = window.atlasBridge
@@ -450,9 +459,6 @@ export function AtlasApp() {
     resetLiveSession(result.sessionId)
   }, [resetLiveSession])
 
-  // Called by ConversationsView after a right-click "Delete" — only acts
-  // when the deleted conversation was the live one (backend hands back the
-  // replacement session it already started).
   const handleConversationDeleted = useCallback(
     (newSessionId: string | null) => {
       if (newSessionId) resetLiveSession(newSessionId)
@@ -462,11 +468,6 @@ export function AtlasApp() {
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden">
-      {/* atmospheric sky handled by parent */}
-
-      {/* top bar — also the custom title bar (the OS one is turned off).
-          Identity, nav, date, and window controls all inline in one
-          fixed-height, draggable row. */}
       <header className="relative z-10 flex items-center gap-3 px-4 py-3 md:px-8" style={DRAG}>
         <div className="flex shrink-0 items-center gap-2.5 pl-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">

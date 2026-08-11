@@ -1,14 +1,16 @@
-export type AtlasState =
-  | "idle"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "working"
-  | "error"
+export type AtlasState = 
+| "idle" 
+| "listening" 
+| "transcribing" 
+| "thinking" 
+| "working" 
+| "speaking" 
+| "error"
 
 export const STATE_LABEL: Record<AtlasState, string> = {
   idle: "Resting",
   listening: "Listening",
+  transcribing: "Transcribing",
   thinking: "Thinking",
   speaking: "Speaking",
   working: "Working",
@@ -43,6 +45,18 @@ export interface StateProfile {
 
 export const STATE_PROFILE: Record<AtlasState, StateProfile> = {
   idle: {
+    speed: 0.55,
+    drift: 1.0,
+    breath: 0.075,
+    speech: 0,
+    wisp: 0.32,
+    particles: 0.28,
+    glow: 0.5,
+    rays: 0.38,
+    wobble: 1.15,
+    tint: [186, 214, 242],
+  },
+  transcribing: {
     speed: 0.55,
     drift: 1.0,
     breath: 0.075,
