@@ -136,16 +136,15 @@ export function setEmotion(
   const holdMs = opts?.holdMs ?? 1000
   emotionState.type = type
   emotionState.target = Math.max(0, Math.min(1, intensity))
-  // Slightly underdamped by default — that's what produces the overshoot
-  // and settle-wobble instead of a dead linear approach.
-  emotionState.stiffness = opts?.stiffness ?? 170
-  emotionState.damping = opts?.damping ?? 11
+  // Gently underdamped — enough for a soft settle-wobble, not a boing.
+  emotionState.stiffness = opts?.stiffness ?? 120
+  emotionState.damping = opts?.damping ?? 16
   emotionState.holdUntil = performance.now() + holdMs
   // Anticipation: a small kick in the opposite direction of travel before
   // the spring's own pull takes over, so a rising reaction visibly winds
   // up first instead of just accelerating from a standstill.
   if (emotionState.target > emotionState.current) {
-    emotionState.velocity -= 1.6
+    emotionState.velocity -= 0.6
   }
 }
 

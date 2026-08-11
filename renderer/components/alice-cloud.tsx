@@ -189,12 +189,12 @@ export function AliceCloud({ state }: { state: AtlasState }) {
 
       // kick the transition-punch spring whenever activity changes
       if (stateRef.current !== prevActivity) {
-        punchVel -= 2.4
+        punchVel -= 0.9
         prevActivity = stateRef.current
       }
       const punchDt = Math.min(0.05, Math.max(0, (now - lastPunchTick) / 1000)) || 1 / 60
       lastPunchTick = now
-      const punchAccel = (0 - punchVal) * 130 - punchVel * 8.5
+      const punchAccel = (0 - punchVal) * 70 - punchVel * 13
       punchVel += punchAccel * punchDt
       punchVal += punchVel * punchDt
 
@@ -248,7 +248,7 @@ export function AliceCloud({ state }: { state: AtlasState }) {
         : simulatedWave
       const speechTarget = prefersReduced ? 0 : speechAmt * cur.speech * speechWave
       const followingAudio = isSpeaking && liveLevel > 0.02
-      const easeRate = followingAudio ? 0.28 : speechTarget > speechEnv ? 0.14 : 0.05
+      const easeRate = followingAudio ? 0.35 : speechTarget > speechEnv ? 0.16 : 0.06
       speechEnv = lerp(speechEnv, speechTarget, easeRate)
 
       // whole-cloud breathing — fast/big enough to read as an actively
@@ -256,15 +256,28 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       const breathe = 1 + Math.sin(t * 1.8) * cur.breath * breathMult * 1.6
       // speech stretch + the emotion's own squash/stretch + the transition
       // punch bounce, all layered additively so none of them fight.
-      const stretch = speechEnv * 0.05 + emo.squash * emoRaw + punchVal * 0.11
+      // Speech is deliberately the biggest single contributor here — this
+      // is what makes Alice's body pulse with her actual voice rather than
+      // just doing one bounce when speaking starts and coasting after.
+      const stretch = speechEnv * 0.32 + emo.squash * emoRaw + punchVal * 0.11
+      // a quick secondary pulse layered on top, phase-locked to speechEnv
+      // rather than a fixed clock, so it only ever moves when there's
+      // actually something to react to
+      const talkPulse = isSpeaking
+        ? Math.sin(elapsed * 13) * speechEnv * speechEnv * 0.05
+        : 0
 
       // --- jello wobble: squash/stretch that keeps Alice bouncing and
-      // jiggling like a physical, springy character even at rest.
+      // jiggling like a physical, springy character even at rest. Recedes
+      // while she's actively talking so the audio-driven speech motion
+      // reads clearly instead of fighting the resting jiggle.
       const wobblePhase = elapsed * 0.6
-      const wobbleY = Math.sin(wobblePhase) * 0.16 * cur.wobble * wobbleMult
-      const wobbleX = Math.sin(wobblePhase * 0.7 + 1.4) * 0.19 * cur.wobble * wobbleMult
+      const wobbleQuiet = isSpeaking ? lerp(1, 0.45, Math.min(1, speechEnv * 2)) : 1
+      const wobbleY = Math.sin(wobblePhase) * 0.16 * cur.wobble * wobbleMult * wobbleQuiet
+      const wobbleX =
+        Math.sin(wobblePhase * 0.7 + 1.4) * 0.19 * cur.wobble * wobbleMult * wobbleQuiet
 
-      const R = baseR * breathe
+      const R = baseR * breathe * (1 + talkPulse)
       const Ry = R * (1 + stretch + wobbleY)
       const Rx = R * (1 - stretch * 0.35 + wobbleX)
       // sinks Alice's center of mass for sad/angry-hunch, lifts it for
@@ -307,8 +320,10 @@ export function AliceCloud({ state }: { state: AtlasState }) {
         const indivDy =
           Math.cos(t * lobe.dSpeed * 2.2 * 0.8 + lobe.phase * 1.3) * R * 0.018 * drift
 
-        // a soft ripple that flows lobe-to-lobe while Alice speaks
-        const ripple = 1 + Math.sin(elapsed * 3.2 + lobe.phase * 1.6) * speechEnv * 0.06
+        // a ripple that flows lobe-to-lobe while Alice speaks, directly
+        // tied to the live speech envelope — this is the main thing that
+        // should visibly pulse in sync with her actual voice
+        const ripple = 1 + Math.sin(elapsed * 5.5 + lobe.phase * 1.6) * speechEnv * 0.16
 
         // soft cap on total positional offset — guarantees cohesion no
         // matter how extreme the multipliers get during a strong emotion

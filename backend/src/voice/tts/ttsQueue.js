@@ -22,7 +22,6 @@ class TtsQueue {
         const isEnabled = process.env.TTS_ENABLED === 'true';
         if (!isEnabled || !text || text.trim() === '') return;
 
-        // Assign the current request ID (used for cancellation later)
         this.currentRequestId = requestId;
         this.queue.push({ text, requestId });
         
@@ -38,33 +37,38 @@ class TtsQueue {
         while (this.queue.length > 0) {
             const item = this.queue.shift();
             
-            // If a stop() invalidated this request, skip remaining items
             if (item.requestId !== this.currentRequestId) continue;
 
             try {
                 console.log(`[TTSQueue] Synthesizing: "${item.text.substring(0, 30)}..."`);
                 const result = await this.getAdapter().synthesize(item.text);
                 
-                if (result) {
+                if (item.requestId === this.currentRequestId && result) {
                     const audioBase64 = `data:audio/${result.format};base64,${result.buffer.toString('base64')}`;
-                    // Emit chunk to the UI immediately
                     eventBus.emit(EventTypes.TTS_AUDIO_CHUNK, { 
                         requestId: item.requestId, 
                         audio: audioBase64 
                     });
+                } else {
+                    console.log(`[TTSQueue] Synthesis completed for stale request ${item.requestId}, discarding.`);
                 }
             } catch (error) {
                 console.error(`[TTSQueue] Synthesis failed:`, error.message);
+                // Phase 10.3: Tell the manager to disable TTS so we don't spam failed requests
+                const ttsManager = require('./ttsManager'); 
+                ttsManager.markUnhealthy();
+                
+                // Clear the rest of the queue for this request since they will likely fail too
+                this.queue = this.queue.filter(item => item.requestId !== this.currentRequestId);
             }
         }
         
         this.processing = false;
     }
 
-    // Phase 10G: Stop/cancel plumbing
     stop() {
         this.queue = [];
-        this.currentRequestId = null; // Invalidate current processing
+        this.currentRequestId = null;
         console.log('[TTSQueue] Queue cleared.');
     }
 }

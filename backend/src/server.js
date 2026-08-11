@@ -4,6 +4,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '../../.env') }
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { AtlasInterface } = require('./interface/atlasInterface');
+const ttsManager = require('./voice/tts/ttsManager');
+const kokoroProcess = require('./voice/tts/providers/kokoroProcess');
 
 const PORT = process.env.ATLAS_PORT || 7341;
 const atlas = new AtlasInterface();
@@ -98,18 +100,32 @@ wss.on('connection', (ws) => {
 server.listen(PORT, async () => {
     console.log(`[Atlas Backend] HTTP/WS Server listening on port ${PORT}`);
     try {
-        await atlas.initialize();
+        // Phase 10.4: Run TTS init concurrently with Atlas init to save time
+        await Promise.all([
+            atlas.initialize(),
+            (async () => {
+                console.log('[Atlas Backend] Initializing TTS Provider...');
+                await ttsManager.checkHealth();
+            })()
+        ]);
+        
         isReady = true;
         console.log('[Atlas Backend] Atlas is fully initialized and ready.');
     } catch (e) {
         console.error('[Atlas Backend] Initialization failed:', e);
-        process.exit(1); // Exit so nodemon can restart it
+        process.exit(1);
     }
 });
 
 async function gracefulShutdown(signal) {
     console.log(`[Atlas Backend] Shutting down (${signal})...`);
     await atlas.shutdown();
+    
+    // Phase 10.4: Kill Kokoro if auto-started
+    if (process.env.KOKORO_AUTOSTART === 'true') {
+        kokoroProcess.stop();
+    }
+    
     process.exit(0);
 }
 

@@ -13,6 +13,9 @@ const personalityEngine = require('./personalityEngine');
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
 const taskManager = require('../tasks/taskManager');
+const ttsQueue = require('../voice/tts/ttsQueue');
+const ttsManager = require('../voice/tts/ttsManager.js');
+const { prepareForTTS } = require('../voice/tts/speechPreprocessor');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
@@ -21,6 +24,8 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
     const requestStart = Date.now();
 
     try {
+        ttsQueue.stop();
+
         taskManager.startRequest(taskId, requestId);
         eventBus.emit(EventTypes.REQUEST_STARTED, { taskId, requestId, text: userInput, timestamp: requestStart });
         
@@ -57,13 +62,22 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             eventBus.emit(EventTypes.TOOL_COMPLETED, { taskId, requestId, tool: null, success: true, timestamp: Date.now() });
         }
 
-        // Short-Circuit for Background Tasks
+        // Short-Circuit for Deterministic Tools & Background Tasks
         if (toolResult.shortCircuit) {
             const instantReply = toolResult.toolResult;
             await memory.workingMemory.append({ role: 'assistant', content: instantReply }, sessionId);
             taskManager.endRequest(taskId);
             eventBus.emit(EventTypes.REQUEST_COMPLETED, { taskId, requestId, reply: instantReply, timestamp: Date.now(), duration: Date.now() - requestStart });
-            // Return object with audio: null so the type is consistent
+            
+            // Phase 10B: Feed deterministic tool responses straight into TTS pipeline
+            try {
+                const ttsManager = require('../voice/tts/ttsManager.js');
+                const cleanReply = prepareForTTS(instantReply);
+                ttsManager.enqueue(instantReply, { requestId });
+            } catch (e) {
+                console.error("[TTS] Deterministic generation failed:", e.message);
+            }
+
             return { reply: instantReply, audio: null };
         }
 
@@ -108,7 +122,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         let firstTokenEmitted = false;
         let firstContentEmitted = false;
         let isCurrentlyThinking = false;
-        let sentenceBuffer = ''; // NEW: Buffer for streaming TTS
+        let sentenceBuffer = ''; // Buffer for streaming TTS
 
         try {
             if (modelAdapter.streamComplete) {
@@ -141,7 +155,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                         sentenceBuffer += chunk.text;
                         // Check for sentence boundaries (. ! ? or newline)
                         if (/[.!?](\s|$)|\n/.test(sentenceBuffer)) {
-                            const ttsManager = require('../voice/tts/ttsManager.js');
+                            const cleanText = prepareForTTS(sentenceBuffer.trim());
                             ttsManager.enqueue(sentenceBuffer.trim(), { requestId });
                             sentenceBuffer = ''; // Clear buffer
                         }
@@ -170,7 +184,10 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // Flush any remaining text in the buffer
         if (sentenceBuffer.trim()) {
             const ttsManager = require('../voice/tts/ttsManager.js');
-            ttsManager.enqueue(sentenceBuffer.trim(), { requestId });
+            const cleanText = prepareForTTS(sentenceBuffer.trim());
+            if (cleanText) { // Only enqueue if there's actually text left to speak
+                ttsManager.enqueue(cleanText, { requestId });
+            }
         }
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
@@ -194,21 +211,6 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         // Phase 10E: Return immediately, audio is streamed via events
         return { reply, audio: null };
-        
-        // 7. Text-to-Speech (Phase 10E)
-        let audioBase64 = null;
-        try {
-            // Require it RIGHT HERE, inside the function
-            const ttsManager = require('../voice/tts/ttsManager.js'); 
-            const ttsResult = await ttsManager.speak(reply);
-            if (ttsResult) {
-                audioBase64 = `data:audio/${ttsResult.format};base64,${ttsResult.buffer.toString('base64')}`;
-            }
-        } catch (e) {
-            console.error("[TTS] Generation failed:", e.message);
-        }
-
-        return { reply, audio: audioBase64 };
 
     } catch (error) {
         taskManager.endRequest(taskId);

@@ -1,15 +1,16 @@
 // backend/src/voice/tts/providers/kokoro.js
 const fs = require('fs');
-
-const GRADIO_URL = "http://localhost:7860";
-const ENDPOINT = "/gradio_api/call/generate_speech";
+const config = require('../ttsConfig');
+const kokoroProcess = require('./kokoroProcess');
 
 async function synthesize(text, options = {}) {
-    const voice = options.voice || process.env.TTS_VOICE || 'af_heart';
-    const speed = options.speed || Number(process.env.TTS_SPEED) || 1.0;
+    const voice = options.voice || config.voice;
+    const speed = options.speed || config.speed;
+    const gradioUrl = config.kokoro.url;
+    const endpoint = config.kokoro.endpoint;
 
     // Step 1: POST to start generation
-    const postRes = await fetch(`${GRADIO_URL}${ENDPOINT}`, {
+    const postRes = await fetch(`${gradioUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: [text, voice, speed] })
@@ -22,7 +23,7 @@ async function synthesize(text, options = {}) {
     if (!eventId) throw new Error("Kokoro did not return an event_id");
 
     // Step 2: GET to stream the result
-    const getRes = await fetch(`${GRADIO_URL}${ENDPOINT}/${eventId}`);
+    const getRes = await fetch(`${gradioUrl}${endpoint}/${eventId}`);
     if (!getRes.ok || !getRes.body) throw new Error(`Kokoro GET failed: ${getRes.status}`);
 
     const reader = getRes.body.getReader();
@@ -68,4 +69,87 @@ async function synthesize(text, options = {}) {
     };
 }
 
-module.exports = { synthesize };
+async function checkServer() {
+    try {
+        const start = Date.now();
+        const res = await fetch(config.kokoro.url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000)
+        });
+        return {
+            available: res.ok,
+            provider: 'kokoro',
+            latency: Date.now() - start
+        };
+    } catch (error) {
+        return {
+            available: false,
+            provider: 'kokoro',
+            error: error.message
+        };
+    }
+}
+
+async function waitForServer(timeout = config.kokoro.startupTimeout) {
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+        const result = await checkServer();
+        if (result.available) {
+            return result;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    return {
+        available: false,
+        provider: 'kokoro',
+        error: `Kokoro did not become available within ${timeout}ms`
+    };
+}
+
+async function healthCheck() {
+    if (!config.enabled) {
+        return {
+            available: false,
+            provider: 'kokoro',
+            error: 'TTS_DISABLED'
+        };
+    }
+
+    // First: see if Kokoro is already running.
+    let result = await checkServer();
+
+    if (result.available) {
+        return result;
+    }
+
+    // Second: optionally start Kokoro.
+    if (!config.kokoro.autoStart) {
+        return result;
+    }
+
+    try {
+        console.log('[Kokoro] Server unavailable. Attempting automatic startup...');
+        await kokoroProcess.start();
+        console.log('[Kokoro] Process started. Waiting for server...');
+        
+        result = await waitForServer();
+
+        if (result.available) {
+            console.log('[Kokoro] Server is ready.');
+        }
+        return result;
+    } catch (error) {
+        return {
+            available: false,
+            provider: 'kokoro',
+            error: `Automatic startup failed: ${error.message}`
+        };
+    }
+}
+
+module.exports = {
+    synthesize,
+    healthCheck
+};

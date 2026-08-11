@@ -21,7 +21,7 @@ module.exports = {
     intentSchema: {
         name: 'convertTime',
         domain: 'TIME',
-        triggers: ['convert time', 'timezone', 'jst', 'est', 'pst', 'gmt', 'time in'],
+        triggers: ['convert time', 'timezone', 'jst', 'est', 'pst', 'gmt', 'current time in', 'time is it in', 'tell me the time in'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const zoneMatch = message.match(/\b([a-zA-Z]{2,4})\b(?=\s*$|\s*[\?.!])/i) || message.match(/\bto\s+([a-zA-Z]{2,4})\b/i) || message.match(/time in\s+(.*)/i);

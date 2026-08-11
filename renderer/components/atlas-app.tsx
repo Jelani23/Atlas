@@ -1,3 +1,4 @@
+// renderer/components/atlas-app.tsx
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
@@ -209,12 +210,13 @@ export function AtlasApp() {
   // 10G: Audio Queue & Playback Manager
   const audioQueueRef = useRef<string[]>([])
   const isPlayingRef = useRef(false)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null) // <-- NEW: Track active audio element
 
   const playNextAudio = useCallback(() => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false
-      // No more chunks queued — tell the cloud Alice has stopped talking so
-      // her speaking envelope eases back down instead of holding its last value.
+      currentAudioRef.current = null // <-- NEW: Clear ref when done
+      // No more chunks queued — tell the cloud Alice has stopped talking
       setSpeechPlaying(false)
       return
     }
@@ -223,20 +225,26 @@ export function AtlasApp() {
     const audioBase64 = audioQueueRef.current.shift()
     
     const audio = new Audio(audioBase64)
+    currentAudioRef.current = audio // <-- NEW: Assign to ref
+    
     // Route this chunk's live amplitude into the shared speechLevel signal
-    // AliceCloud reads, so her motion follows the actual TTS waveform.
     attachAudioElement(audio)
     setSpeechPlaying(true)
+    
     audio.onended = () => {
-      // When this chunk finishes, play the next one
-      playNextAudio()
+      currentAudioRef.current = null
+      setTimeout(() => {
+        playNextAudio()
+      }, 150)
     }
     audio.onerror = () => {
       console.error("Audio playback error, skipping to next chunk.")
+      currentAudioRef.current = null 
       playNextAudio()
     }
     audio.play().catch(err => {
       console.error("Audio play failed:", err)
+      currentAudioRef.current = null
       playNextAudio()
     })
   }, [])
@@ -248,12 +256,26 @@ export function AtlasApp() {
     }
   }, [playNextAudio])
 
+  // Phase 10.1: Systemic audio cancellation
+  const stopAudioPlayback = useCallback(() => {
+    audioQueueRef.current = [] // Clear pending chunks
+    if (currentAudioRef.current) {
+      // Detach handlers FIRST so clearing the src doesn't trigger onerror
+      currentAudioRef.current.onended = null
+      currentAudioRef.current.onerror = null
+      currentAudioRef.current.pause()
+      currentAudioRef.current.src = "" // Force stop the media resource
+      currentAudioRef.current = null
+    }
+    isPlayingRef.current = false
+    setSpeechPlaying(false)
+  }, [])
+
   const runFlow = useCallback(async (userText: string) => {
     clearTimeout(settleTimer.current)
     
-    audioQueueRef.current = []
-    isPlayingRef.current = false
-    setSpeechPlaying(false)
+    // Phase 10.1: Kill active audio immediately
+    stopAudioPlayback()
 
     setListening(false)
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", text: userText }])
