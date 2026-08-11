@@ -343,6 +343,17 @@ export function AtlasApp() {
   // 9E: Microphone capture refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  
+  // 11.8: VAD (Voice Activity Detection) refs
+  const vadAudioContextRef = useRef<AudioContext | null>(null)
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null)
+  const vadAnimationFrameRef = useRef<number | null>(null)
+  const vadSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const vadHasSpeechRef = useRef(false)
+  
+  // VAD Configuration (Tunable)
+  const VAD_THRESHOLD = 0.02; // Volume required to be considered "speech" (0.0 - 1.0)
+  const VAD_SILENCE_DURATION = 1500; // How long to wait in silence before stopping (ms)
 
   const startRecording = async () => {
     try {
@@ -404,6 +415,54 @@ export function AtlasApp() {
       mediaRecorderRef.current = mediaRecorder
       setListening(true)
       setState("listening")
+
+      // --- 11.8: START VAD ---
+      vadHasSpeechRef.current = false
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 512
+      const source = audioContext.createMediaStreamSource(stream)
+      source.connect(analyser)
+      
+      vadAudioContextRef.current = audioContext
+      vadAnalyserRef.current = analyser
+
+      const buffer = new Uint8Array(analyser.frequencyBinCount)
+
+      const checkAudio = () => {
+        if (!vadAnalyserRef.current || !mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') {
+          return // Stop loop if recording stopped
+        }
+
+        vadAnalyserRef.current.getByteTimeDomainData(buffer)
+        
+        // Calculate RMS (Root Mean Square) volume
+        let sum = 0
+        for (let i = 0; i < buffer.length; i++) {
+          const val = (buffer[i] - 128) / 128.0
+          sum += val * val
+        }
+        const volume = Math.sqrt(sum / buffer.length)
+
+        if (volume > VAD_THRESHOLD) {
+          vadHasSpeechRef.current = true // User has started speaking
+          if (vadSilenceTimerRef.current) {
+            clearTimeout(vadSilenceTimerRef.current) // Cancel silence timer
+            vadSilenceTimerRef.current = null
+          }
+        } else if (vadHasSpeechRef.current && !vadSilenceTimerRef.current) {
+          // User was speaking, but is now silent. Start the grace period timer.
+          vadSilenceTimerRef.current = setTimeout(() => {
+            console.log("[VAD] Sustained silence detected. Stopping recording.")
+            stopRecording()
+          }, VAD_SILENCE_DURATION)
+        }
+
+        vadAnimationFrameRef.current = requestAnimationFrame(checkAudio)
+      }
+
+      checkAudio()
+
     } catch (err) {
       console.error("Microphone access denied or failed:", err)
       setState("error")
@@ -416,6 +475,21 @@ export function AtlasApp() {
   }
 
   const stopRecording = () => {
+    // --- 11.8: STOP VAD ---
+    if (vadAnimationFrameRef.current) {
+      cancelAnimationFrame(vadAnimationFrameRef.current)
+      vadAnimationFrameRef.current = null
+    }
+    if (vadSilenceTimerRef.current) {
+      clearTimeout(vadSilenceTimerRef.current)
+      vadSilenceTimerRef.current = null
+    }
+    if (vadAudioContextRef.current) {
+      vadAudioContextRef.current.close()
+      vadAudioContextRef.current = null
+      vadAnalyserRef.current = null
+    }
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop()
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop())
