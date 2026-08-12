@@ -46,9 +46,10 @@ function checkEligibility(message) {
         }
     }
 
-    // Simple heuristic: questions are rarely memories
-    if (lowerMsg.includes('?') && score < 6) {
-        return { eligible: false, score, reason: 'Question with low confidence' };
+    // Phase 5: Aggressively filter out questions. 
+    // Unless it's an explicit memory command ("Remember that...?"), questions are not memories.
+    if (lowerMsg.includes('?') && score < 8) {
+        return { eligible: false, score, reason: 'Question (below high-confidence threshold)' };
     }
 
     const eligible = score >= THRESHOLD;

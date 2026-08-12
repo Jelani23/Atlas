@@ -1,6 +1,7 @@
 // backend/src/intent/intentResolver.js
 const { extractEntities } = require('./entityExtractor');
 const { getSchemas } = require('../tools/toolRegistry');
+const permissionManager = require('../permissions/permissionManager'); // <-- IMPORT
 
 function resolve(message) {
     const lower = message.toLowerCase().trim();
@@ -17,12 +18,14 @@ function resolve(message) {
     if (/\b(task|progress|status|background|active)\b/.test(lower)) lexical.push({ signal: 'TASKS', weight: 0.4 });
     if (/\b(time|date|timezone|jst|est|pst|gmt)\b/.test(lower)) lexical.push({ signal: 'TIME', weight: 0.5 });
     if (/\b(delete|remove)\b/.test(lower)) lexical.push({ signal: 'DELETE', weight: 0.6 });
-    if (/\b(list|show|display)\b/.test(lower)) lexical.push({ signal: 'LIST', weight: 0.3 });
+    
+    // Phase 3C.5: Tightened LIST to require "all" or "the" to prevent hijacking normal chat
+    if (/\b(list all|show all|display all|list the|show the)\b/.test(lower)) lexical.push({ signal: 'LIST', weight: 0.3 });
+    
     if (/\b(read|open|inspect)\b/.test(lower)) lexical.push({ signal: 'READ', weight: 0.4 });
     if (/\b(check the syntax|check syntax|validate)\b/.test(lower)) lexical.push({ signal: 'SYNTAX', weight: 0.5 });
     if (/\b(run tests|npm test|test suite)\b/.test(lower)) lexical.push({ signal: 'TEST', weight: 0.5 });
     if (/\b(word count|how many words)\b/.test(lower)) lexical.push({ signal: 'WORD_COUNT', weight: 0.5 });
-    if (/\b(yes|yeah|confirm|no|cancel|nevermind)\b/.test(lower)) lexical.push({ signal: 'CONFIRMATION', weight: 0.7 });
     if (/\b(find|locate|where is)\b/.test(lower)) lexical.push({ signal: 'FIND', weight: 0.4 });
 
     // --- 2. DYNAMIC CANDIDATE SCORING ---
@@ -69,7 +72,6 @@ function resolve(message) {
             }
         }
 
-        // Skip only if it has absolutely no signals, no triggers, and no entities
         if (matchedTriggers === 0 && score === 0 && entityMatchCount === 0) continue;
 
         // Penalties
@@ -77,14 +79,16 @@ function resolve(message) {
             score -= 0.4;
         }
         if (schema.requiredEntities.length > 1 && entityMatchCount < schema.requiredEntities.length) {
-            score -= 0.5; // Strong penalty for missing required entities
+            score -= 0.5;
         }
 
-        // Extract parameters
         const params = schema.extractParams ? schema.extractParams(message, entities) : {};
         
-        if (params.filename === null || params.query === null || params.expression === null) {
-            score -= 0.5;
+        // Phase 3C.5: Systemic parameter validation.
+        // If a tool returns null for a parameter, heavily penalize it so it falls back to the LLM.
+        const hasNullParam = Array.isArray(params) ? params.includes(null) : Object.values(params).includes(null);
+        if (hasNullParam) {
+            score -= 0.8; 
         }
 
         candidates[schema.name] = {
@@ -94,16 +98,7 @@ function resolve(message) {
         };
     }
 
-    // --- 3. CONFIRMATION SHORT-CIRCUIT ---
-    if (lexical.some(l => l.signal === 'CONFIRMATION')) {
-        candidates['confirmation'] = {
-            name: 'confirmation',
-            score: 0.95,
-            params: { isAffirmative: /\b(yes|yeah|confirm|do it)\b/.test(lower) }
-        };
-    }
-
-    // --- 4. CALCULATE MARGINS & DECISION ---
+    // --- 3. CALCULATE MARGINS & DECISION ---
     const sortedCandidates = Object.values(candidates).sort((a, b) => b.score - a.score);
     
     if (sortedCandidates.length === 0 || sortedCandidates[0].score < 0.5) {

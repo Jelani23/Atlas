@@ -4,69 +4,37 @@ const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 
 const modelAdapter = createModelAdapter();
 
-async function extractMemory(message, history = []) {
-    const recentHistory = history.slice(-5).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+async function extractMemory(message, workingContext = {}) {
+    // Phase 5: Drastically reduced prompt. No raw history.
+    // The LLM only needs to resolve ambiguous memory candidates.
+    const prompt = `You are a memory classifier. Determine if the user's message contains persistent information worth storing. 
+If the message is a question, command, or conversational filler, return empty memories.
 
-    const prompt = `
-        Conversation History:
-        ${recentHistory || 'None'}
+Current Context:
+- Active Project: ${workingContext.current_project || 'None'}
+- Current Topic: ${workingContext.current_topic || 'None'}
 
-        Current User Message: "${message}"
+User message: "${message}"
 
-        Analyze the Current User Message and extract distinct, atomic memories using the Canonical Memory Model.
-        Use the Conversation History for context if the current message is a follow-up.
-        
-        Canonical Memory Classes (use ONLY these):
-        1. "identity": Stable personal facts (name, birthday, timezone).
-        2. "preference": What the user likes/dislikes or how they prefer things done.
-        3. "behavior": Recurring patterns about how the user acts or works.
-        4. "relationship": Facts about the User <-> Alice/ATLAS relationship.
-        5. "state": Ephemeral current situation (current_project, current_task).
-        6. "history": Past durable events or completed milestones.
-        7. "project": Software projects, architectures, technologies.
-        8. "knowledge": Code snippets, reference material.
-        9. "procedure": Operational rules (If X, then Y).
+Return ONLY valid JSON in this exact format:
+{
+  "memories": [
+    {
+      "category": "preference|behavior|identity|relationship|state|history|project|knowledge|procedure",
+      "subject": "user|atlas|bindex",
+      "key": "snake_case_key",
+      "value": "concise_value",
+      "confidence": 0.9
+    }
+  ],
+  "conversation_update": {
+    "current_topic": "Updated topic if changed",
+    "recent_decisions": ["Any decisions made in this message"]
+  }
+}
 
-        STRICT SCHEMA RULES:
-        - "subject": Who/what does this belong to? (e.g., "user", "atlas", "bindex").
-        - "key": The canonical snake_case concept (e.g., "name", "favorite_color", "current_project").
-        - "value": The actual information, phrased concisely.
-
-        CRITICAL INSTRUCTIONS:
-        - DO NOT create duplicates. If a preference is stated, use the "preference" class. Do not also put it in "behavior".
-        - If the user is giving an instruction, a rule, or a guideline, categorize it as "procedure".
-        - For procedures: "key" MUST be a natural language trigger, "value" MUST be a descriptive action.
-        - DO NOT save questions, temporary tasks, or explanations requested by the user.
-        - PROJECT STATE: If the user mentions a phase (e.g., "Phase 11") or a current task (e.g., "Voice UI"), categorize it as "project" memory. The "subject" MUST be the current project name (e.g., "atlas"). The "key" MUST be "current_phase" or "current_task". The "value" is the phase number or task description.
-        - PROJECT SWITCH: If the user changes their current project (e.g., "Switch to Bindex"), output a "state" memory for "current_project". DO NOT output phase or task updates during a switch; let the system resolve them from the new project's memory.
-
-        ALSO extract a rolling "conversation_update" to maintain Alice's working context.
-        - "current_topic": The main subject being discussed right now.
-        - "recent_decisions": Any concrete choices made.
-        - "open_questions": Things still needing answers.
-
-        Return ONLY valid JSON in this exact format:
-        {
-            "memories": [
-                {
-                    "shouldRemember": true,
-                    "category": "preference",
-                    "subject": "user",
-                    "key": "favorite_color",
-                    "value": "blue",
-                    "confidence": 0.9
-                }
-            ],
-            "conversation_update": {
-                "current_topic": "Discussing memory architecture",
-                "recent_decisions": ["Use Canonical Memory Model"],
-                "open_questions": []
-            }
-        }
-
-        If nothing should be remembered, return:
-        { "memories": [], "conversation_update": {} }
-    `;
+If nothing should be remembered, return:
+{ "memories": [], "conversation_update": {} }`;
 
     try {
         const response = await modelAdapter.complete([
@@ -76,7 +44,7 @@ async function extractMemory(message, history = []) {
 
         const parsed = extractJSON(response);
         if (parsed && parsed.memories && Array.isArray(parsed.memories)) {
-            return parsed; // Return the whole object now
+            return parsed;
         }
         console.log("[MemoryExtractor] Failed to parse memories from response:", safePreview(response));
         return { memories: [], conversation_update: {} };

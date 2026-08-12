@@ -226,7 +226,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                         // Skip the LLM, go straight to save
                     } else {
                         console.time("[MemoryExtraction_BG] LLM Extraction");
-                        extracted = await memoryExtractor.extractMemory(userInput, history);
+                        extracted = await memoryExtractor.extractMemory(userInput, workingContext);
                         console.timeEnd("[MemoryExtraction_BG] LLM Extraction");
                     }
                     

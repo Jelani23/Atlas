@@ -27,13 +27,16 @@ module.exports = {
     intentSchema: {
         name: 'appendNote',
         domain: 'NOTES',
-        triggers: ['append note', 'add to note', 'add a line to', 'add a line'],
+        triggers: ['append note', 'add to note', 'add a line to note', 'add a line to the note', 'add another line to note'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const m = message.match(/(?:to|in)\s+(.*?)\s+(?:saying|with|that says)\s+(.*)/i) || message.match(/(?:add a line to|append to)\s+(.*?)\s+(?:saying|with|that says)\s+(.*)/i);
             if (m) return [m[1].replace(/\s+/g, '_').trim(), m[2].trim()];
             const contentMatch = message.match(/(?:saying|with|that says|to add|to include|add another line saying|add a line saying)\s+(.*)/i);
-            return ['USE_LAST', contentMatch ? contentMatch[1].trim() : message];
+            if (contentMatch) return ['USE_LAST', contentMatch[1].trim()];
+            
+            // Phase 3C.5: If we can't safely extract params, return nulls to invalidate the match
+            return [null, null];
         }
     }
 };

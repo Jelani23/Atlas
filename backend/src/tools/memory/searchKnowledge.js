@@ -12,7 +12,7 @@ module.exports = {
     intentSchema: {
         name: 'searchKnowledge',
         domain: 'MEMORY',
-        triggers: ['knowledge library', 'knowledge', 'search knowledge'],
+        triggers: ['knowledge library', 'search knowledge', 'search library', 'query knowledge'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const m = message.match(/(?:knowledge library for|knowledge for|search knowledge for)\s+(.*)/i);

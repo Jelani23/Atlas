@@ -48,6 +48,28 @@ class PermissionManager extends EventEmitter {
      * @param {string} id - The request ID
      * @param {boolean} decision - True if approved, false if denied
      */
+    /**
+     * Checks if there are any pending approval requests.
+     * Used by the intent resolver to decide if a 'yes'/'no' is a confirmation.
+     */
+    handlePermissionResponse(message) {
+        if (this.pendingRequests.size === 0) return false;
+
+        const lower = message.toLowerCase().trim();
+        const isAffirmative = /\b(yes|yeah|yep|sure|do it|can you do so|please do|go ahead|check it|check for that|approve|allow)\b/i.test(lower);
+        const isNegative = /\b(no|nope|cancel|stop|don't|do not|deny|block)\b/i.test(lower);
+
+        if (isAffirmative || isNegative) {
+            // Get the oldest pending request
+            const [id, request] = this.pendingRequests.entries().next().value;
+            console.log(`[Permission] Message "${message}" interpreted as ${isAffirmative ? 'APPROVE' : 'DENY'} for ${request.toolName} (ID: ${id})`);
+            this.resolve(id, isAffirmative);
+            return true;
+        }
+
+        return false;
+    }
+
     resolve(id, decision) {
         if (this.pendingRequests.has(id)) {
             console.log(`[Permission] Request ${id} ${decision ? 'APPROVED' : 'DENIED'}.`);
