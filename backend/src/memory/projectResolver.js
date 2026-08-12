@@ -1,6 +1,5 @@
-// backend/src/memory/projectResolver.js
-
 const projectRegistry = require('./projectRegistry');
+const projectCommandResolver = require('./projectCommandResolver');
 
 async function resolveProject(name) {
     if (!name) {
@@ -15,7 +14,9 @@ async function resolveProject(name) {
     if (project) {
         return {
             type: 'existing_project',
-            project
+            project,
+            projectId: project.id,
+            projectKey: project.project_key
         };
     }
 
@@ -26,6 +27,32 @@ async function resolveProject(name) {
     };
 }
 
+async function resolveProjectByKey(projectKey) {
+    if (!projectKey) {
+        return {
+            type: 'none',
+            project: null
+        };
+    }
+
+    const project = await projectRegistry.findProjectByKey(projectKey);
+
+    if (project) {
+        return {
+            type: 'existing_project',
+            project,
+            projectId: project.id,
+            projectKey: project.project_key
+        };
+    }
+
+    return {
+        type: 'unknown',
+        project: null,
+        requestedKey: projectKey
+    };
+}
+
 async function resolveProjectChange(name) {
     const result = await resolveProject(name);
 
@@ -33,7 +60,9 @@ async function resolveProjectChange(name) {
         return {
             allowed: true,
             action: 'switch',
-            project: result.project
+            project: result.project,
+            projectId: result.project.id,
+            projectKey: result.project.project_key
         };
     }
 
@@ -71,8 +100,55 @@ async function resolveProjectCreation(name) {
     };
 }
 
+async function handleProjectCommand(message) {
+    const command =
+        await projectCommandResolver.resolveProjectCommand(message);
+
+    if (!command.detected) {
+        return {
+            handled: false,
+            action: 'not_detected'
+        };
+    }
+
+    if (command.action === 'already_exists') {
+        return {
+            handled: true,
+            action: 'already_exists',
+            project: command.project
+        };
+    }
+
+    if (command.action === 'create') {
+        const result = await projectRegistry.addProject({
+            name: command.requestedName
+        });
+
+        if (!result.created) {
+            return {
+                handled: true,
+                action: 'already_exists',
+                project: result.project
+            };
+        }
+
+        return {
+            handled: true,
+            action: 'created',
+            project: result.project
+        };
+    }
+
+    return {
+        handled: true,
+        action: 'invalid'
+    };
+}
+
 module.exports = {
     resolveProject,
+    resolveProjectByKey,
     resolveProjectChange,
-    resolveProjectCreation
+    resolveProjectCreation,
+    handleProjectCommand
 };

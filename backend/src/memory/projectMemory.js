@@ -4,6 +4,7 @@ async function update(memoryData) {
     const { error } = await supabase
         .from('project_memory')
         .insert({
+            project_key: memoryData.project_key,
             subject: memoryData.subject || 'general',
             key: memoryData.key,
             value: memoryData.value
@@ -14,24 +15,27 @@ async function update(memoryData) {
     }
 }
 
-async function get(project) {
-    let query = supabase.from('project_memory').select('subject, key, value, created_at');
+async function get(projectKey) {
+    let query = supabase
+        .from('project_memory')
+        .select('project_key, subject, key, value, created_at');
 
-    if (project) {
-        // ilike = case-insensitive match, mirrors the old .toLowerCase() comparison
-        query = query.ilike('subject', project);
+    if (projectKey) {
+        query = query.eq('project_key', projectKey);
     }
 
     const { data, error } = await query;
+
     if (error) {
         console.error('Failed to load project memory:', error.message);
         return [];
     }
-    return data;
+
+    return data || [];
 }
 
-async function getContextString(project) {
-    const memories = await get(project);
+async function getContextString(projectKey) {
+    const memories = await get(projectKey);
 
     if (!memories.length) {
         return "";

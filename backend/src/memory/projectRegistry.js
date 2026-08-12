@@ -1,14 +1,24 @@
-// backend/src/memory/projectRegistry.js
-
 const supabase = require('../database/supabaseClient');
 
 function normalizeProjectName(name) {
     if (!name) return '';
 
     return String(name)
-        .toLowerCase()
         .trim()
-        .replace(/\s+/g, ' ');
+        .replace(/\*\*/g, '')
+        .replace(/__/g, '')
+        .replace(/[.!?]+$/, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+}
+
+function normalizeProjectKey(key) {
+    if (!key) return '';
+
+    return String(key)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-');
 }
 
 async function getAllProjects() {
@@ -35,6 +45,26 @@ async function getProjectById(id) {
 
     if (error) {
         throw new Error(`Failed to find project by ID: ${error.message}`);
+    }
+
+    return data || null;
+}
+
+async function findProjectByKey(projectKey) {
+    const normalizedKey = normalizeProjectKey(projectKey);
+
+    if (!normalizedKey) return null;
+
+    const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('project_key', normalizedKey)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(
+            `Failed to find project by key: ${error.message}`
+        );
     }
 
     return data || null;
@@ -67,7 +97,16 @@ async function addProject(project) {
         throw new Error('Project must have a name.');
     }
 
-    const existing = await findProject(project.name);
+    const displayName = String(project.name)
+        .trim()
+        .replace(/[.!?]+$/, '')
+        .replace(/\s+/g, ' ');
+
+    if (!displayName) {
+        throw new Error('Project name cannot be empty.');
+    }
+
+    const existing = await findProject(displayName);
 
     if (existing) {
         return {
@@ -76,25 +115,33 @@ async function addProject(project) {
         };
     }
 
-    const projectKey =
+    const projectKey = normalizeProjectKey(
         project.project_key ||
-        normalizeProjectName(project.name).replace(/\s+/g, '-');
+        displayName
+    );
 
-    const aliases = project.aliases || [project.name];
+    const aliases = Array.isArray(project.aliases) &&
+        project.aliases.length > 0
+        ? project.aliases.map(normalizeProjectName)
+        : [normalizeProjectName(displayName)];
+
+    const newProject = {
+        project_key: projectKey,
+        name: displayName,
+        aliases,
+        description: project.description || ''
+    };
 
     const { data, error } = await supabase
         .from('projects')
-        .insert({
-            project_key: projectKey,
-            name: project.name.trim(),
-            aliases,
-            description: project.description || ''
-        })
+        .insert(newProject)
         .select()
         .single();
 
     if (error) {
-        throw new Error(`Failed to create project: ${error.message}`);
+        throw new Error(
+            `Failed to create project: ${error.message}`
+        );
     }
 
     return {
@@ -103,52 +150,33 @@ async function addProject(project) {
     };
 }
 
-async function addProject(project) {
-    if (!project || !project.name) {
-        throw new Error('Project must have a name.');
+async function deleteProjectById(id) {
+    if (!id) {
+        throw new Error('Project ID is required.');
     }
 
-    const existing = await findProject(project.name);
-
-    if (existing) {
-        return {
-            created: false,
-            project: existing
-        };
-    }
-
-    const projectKey =
-        project.project_key ||
-        normalizeProjectName(project.name).replace(/\s+/g, '-');
-
-    const aliases = project.aliases || [project.name];
-
-    const { data, error } = await supabase
+    const { error } = await supabase
         .from('projects')
-        .insert({
-            project_key: projectKey,
-            name: project.name,
-            aliases,
-            description: project.description || ''
-        })
-        .select()
-        .single();
+        .delete()
+        .eq('id', id);
 
     if (error) {
-        throw new Error(`Failed to create project: ${error.message}`);
+        throw new Error(
+            `Failed to delete project: ${error.message}`
+        );
     }
 
-    return {
-        created: true,
-        project: data
-    };
+    return true;
 }
 
 module.exports = {
     getAllProjects,
     getProjectById,
     findProject,
+    findProjectByKey,
     projectExists,
     addProject,
-    normalizeProjectName
+    deleteProjectById,
+    normalizeProjectName,
+    normalizeProjectKey
 };

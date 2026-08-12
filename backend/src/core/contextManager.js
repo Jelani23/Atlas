@@ -1,6 +1,7 @@
 // backend/src/core/contextManager.js
 const memoryCache = require('./memoryCache');
 const hotSwapManager = require('./hotSwapManager');
+const projectRegistry = require('../memory/projectRegistry');
 
 // --- 1. TOKEN ESTIMATOR ---
 function estimateTokens(text) {
@@ -91,19 +92,33 @@ async function getRelevantContext(userInput, history, intent) {
         scoreAndBoost('user_profile', item, keywords)
     );
 
-    // Find the current project pointer
+    // Find the current project pointer.
+    // current_project stores the stable project_key.
     const currentStateObj = stateScored.find(
         s => s.key === 'current_project'
     );
 
-    const currentProjectSubject =
+    const currentProjectKey =
         currentStateObj?.value?.toLowerCase() || null;
+
+    // Resolve the project key through the project registry.
+    // This gives us the authoritative project record.
+    const activeProject = currentProjectKey
+        ? await projectRegistry.findProjectByKey(currentProjectKey)
+        : null;
+
+    // The project subject is kept temporarily for compatibility
+    // with the existing project_memory table.
+    const currentProjectKeyResolved =
+        activeProject?.project_key?.toLowerCase() || null;
 
     // Determine the current working context.
     const hotState = memoryCache.getHotState();
 
     const workingContext = {
-        activeProject: currentStateObj?.value || null,
+        activeProject: activeProject?.project_key || null,
+        activeProjectName: activeProject?.name || null,
+        activeProjectType: activeProject?.project_type || null,
         currentTask: hotState.currentTask || null,
         activeFiles: hotState.activeFiles || []
     };
@@ -130,10 +145,20 @@ async function getRelevantContext(userInput, history, intent) {
     // current_project is only a pointer used to select the active project's memories.
     let activeProjectState = [];
 
-    if (currentProjectSubject) {
+    if (currentProjectKeyResolved) {
         activeProjectState = projectsIdx
-            .filter(item => item.data.subject?.toLowerCase() === currentProjectSubject)
-            .map(item => scoreAndBoost('project_memory', item, keywords));
+            .filter(
+                item =>
+                    item.data.project_key?.toLowerCase() ===
+                    currentProjectKeyResolved
+            )
+            .map(item =>
+                scoreAndBoost(
+                    'project_memory',
+                    item,
+                    keywords
+                )
+            );
     }
 
     // 2. Essentials: Score them, force-include up to 300 tokens
@@ -152,8 +177,8 @@ async function getRelevantContext(userInput, history, intent) {
 
     let filteredProjects = projectScored.filter(m => {
         const isActiveProject =
-            currentProjectSubject &&
-            m.subject?.toLowerCase() === currentProjectSubject;
+            currentProjectKeyResolved &&
+            m.project_key?.toLowerCase() === currentProjectKeyResolved;
 
         return (
             isActiveProject ||

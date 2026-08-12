@@ -1,13 +1,19 @@
 const projectResolver = require('./projectResolver');
 
 function normalizeProjectName(name) {
+    if (!name) return '';
+
     return name
         .trim()
         .replace(/[.!?,]+$/, '')
+        .replace(/\s+(now|right now|currently|again|today)$/i, '')
+        .replace(/\s+(project)$/i, '')
         .trim();
 }
 
 async function extract(message) {
+    console.log('[DeterministicExtractor] INPUT:', JSON.stringify(message));
+
     const memories = [];
     const lowerMsg = message.toLowerCase().trim();
 
@@ -48,30 +54,35 @@ async function extract(message) {
                 category: 'state',
                 subject: 'user',
                 key: 'current_project',
-                value: result.project.name,
+                value: result.project.project_key,
                 confidence: 0.95
             });
         }
     }
 
     // 3. Pattern: "I am working on [X]" / "I'm working on [X]"
+    // This represents USER STATE, not project memory.
+    // The project name is resolved through the project registry.
     const workMatch = message.match(
-        /i(?:'| a)m working on\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i
+        /i(?:'m| am)\s+(?:(?:currently|back|still)\s+)?(?:working on|working with)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i
     );
 
     if (workMatch) {
         const requestedName = normalizeProjectName(workMatch[1]);
-        const result = await projectResolver.resolveProject(requestedName);
 
-        if (result.type === 'existing_project') {
-            memories.push({
-                shouldRemember: true,
-                category: 'state',
-                subject: 'user',
-                key: 'current_project',
-                value: result.project.name,
-                confidence: 0.90
-            });
+        if (requestedName) {
+            const result = await projectResolver.resolveProject(requestedName);
+
+            if (result.type === 'existing_project') {
+                memories.push({
+                    shouldRemember: true,
+                    category: 'state',
+                    subject: 'user',
+                    key: 'current_project',
+                    value: result.project.project_key,
+                    confidence: 0.90
+                });
+            }
         }
     }
 

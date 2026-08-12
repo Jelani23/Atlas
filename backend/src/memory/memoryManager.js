@@ -12,12 +12,24 @@ async function findExistingMemory(memory) {
 
     switch (category) {
         case 'project': {
-            const memories = await projectMemory.get(subject);
+            const projectResult = await projectResolver.resolveProject(subject);
 
-            const normalizedKey = String(memory.key || '').trim().toLowerCase();
+            if (projectResult.type !== 'existing_project') {
+                return null;
+            }
+
+            const memories = await projectMemory.get(
+                projectResult.project.project_key
+            );
+
+            const normalizedKey = String(memory.key || '')
+                .trim()
+                .toLowerCase();
 
             return memories.find(existing =>
-                String(existing.key || '').trim().toLowerCase() === normalizedKey
+                String(existing.key || '')
+                    .trim()
+                    .toLowerCase() === normalizedKey
             ) || null;
         }
 
@@ -75,7 +87,7 @@ async function handleMemoryAction(extractedMemories) {
             memory.category === 'state' &&
             memory.key === 'current_project'
         ) {
-            const projectResult = projectResolver.resolveProjectChange(
+            const projectResult = await projectResolver.resolveProjectChange(
                 memory.value
             );
 
@@ -94,7 +106,7 @@ async function handleMemoryAction(extractedMemories) {
 
             // Store the canonical project name rather than whatever casing
             // or alias the extractor happened to produce.
-            memory.value = projectResult.project.name;
+            memory.value = projectResult.project.project_key;
         }
 
         try {
@@ -128,21 +140,37 @@ async function handleMemoryAction(extractedMemories) {
 
             if (decision.action === 'insert' || decision.action === 'update') {
                 if (memory.category === 'project') {
-                    /*
-                     * Project memory intentionally remains append-oriented
-                     * for now. Its state model will be redesigned separately.
-                     *
-                     * An exact duplicate was already filtered above.
-                     * A new entry is therefore safe to insert.
-                     */
+                    const projectResult = await projectResolver.resolveProject(
+                        memory.subject
+                    );
+
+                    if (projectResult.type !== 'existing_project') {
+                        console.log(
+                            `[MemoryManager] 🚫 Rejected project memory for unknown project "${memory.subject}".`
+                        );
+
+                        ignored.push({
+                            memory,
+                            reason: 'Project is not registered in the project registry.'
+                        });
+
+                        continue;
+                    }
+
+                    const projectKey = projectResult.project.project_key;
+
                     await projectMemory.update({
-                        subject: memory.subject || 'general',
+                        project_key: projectKey,
+                        subject: projectResult.project.name,
                         key: memory.key,
                         value: memory.value
                     });
 
                     memoryCache.invalidate('project_memory');
-                    savedMemories.push(memory);
+                    savedMemories.push({
+                        ...memory,
+                        project_key: projectKey
+                    });
                 }
 
                 else if (

@@ -49,7 +49,9 @@ async function getMemory(store) {
             }
             
             warmIndex[store] = data.map(d => ({
-                id: d.id || `${store}_${d.key || d.subject || Math.random()}`,
+                id:
+                    d.id ||
+                    `${store}_${d.project_key || d.subject || 'global'}_${d.key || 'unknown'}`,
                 data: d,
                 score: 0,
                 lastAccessed: now,

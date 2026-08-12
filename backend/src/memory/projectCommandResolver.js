@@ -90,7 +90,20 @@ async function resolveProjectCreation(message) {
     };
 }
 
+async function resolveProjectCommand(message) {
+    const creation = await resolveProjectCreation(message);
+
+    if (creation.detected) {
+        return creation;
+    }
+
+    return {
+        detected: false
+    };
+}
+
 module.exports = {
     detectProjectCreation,
-    resolveProjectCreation
+    resolveProjectCreation,
+    resolveProjectCommand
 };
