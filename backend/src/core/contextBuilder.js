@@ -5,11 +5,20 @@ const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
 
-async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy }) {
+async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy, workingContext }) {
     console.time("buildContext");
     
     const relevantMemory = await contextManager.getRelevantContext(userInput, history, intent);
     const world = await worldModel.getAll();
+
+    // Phase 3C.2: Rolling Conversation Working Context
+    let workingContextStr = "None";
+    if (workingContext && Object.keys(workingContext).length > 0) {
+        workingContextStr = Object.entries(workingContext).map(([k, v]) => {
+            if (Array.isArray(v)) return `- ${k}: ${v.join(', ')}`;
+            return `- ${k}: ${v}`;
+        }).join('\n');
+    }
 
     let hotStateContext = "";
     const hot = relevantMemory.hotState;
@@ -23,12 +32,23 @@ Current Task: ${hot.currentTask || 'None'}
 `;
     }
 
+    // Phase 3C.1: User Profile (Stable facts only)
     let personalMemoryContext = "None";
     if (relevantMemory.personal && relevantMemory.personal.length > 0) {
         personalMemoryContext = relevantMemory.personal.map(item => `- ${item.key}: ${item.value}`).join('\n');
     }
 
-    // Phase 3B.9: Group Project Memory by subject to prevent context conflation
+    // Phase 3C.1: Active User State (Pointers)
+    let userStateContext = "None";
+    if (relevantMemory.state && relevantMemory.state.length > 0) {
+        userStateContext = relevantMemory.state.map(item => `- ${item.key}: ${item.value}`).join('\n');
+    }
+
+    // Determine the active project name for the header
+    const activeProject = relevantMemory.state?.find(s => s.key === 'current_project');
+    const activeProjectName = activeProject ? activeProject.value : 'Unknown';
+
+    // Phase 3C.1: Group Project Memory and label the active project
     let projectMemoryContext = "None";
     if (relevantMemory.projects && relevantMemory.projects.length > 0) {
         const groupedProjects = {};
@@ -39,7 +59,9 @@ Current Task: ${hot.currentTask || 'None'}
         }
         
         projectMemoryContext = Object.entries(groupedProjects).map(([subj, items]) => {
-            return `[${subj.toUpperCase()}]\n${items.join('\n')}`;
+            const isActive = subj.toLowerCase() === activeProjectName.toLowerCase();
+            const header = isActive ? `[ACTIVE PROJECT: ${subj.toUpperCase()}]` : `[PROJECT: ${subj.toUpperCase()}]`;
+            return `${header}\n${items.join('\n')}`;
         }).join('\n\n');
     }
 
@@ -85,7 +107,7 @@ Limitations:
 
     console.timeEnd("buildContext");
 
-    return `${systemPrompt}\n${worldModelContext}\n${hotStateContext}\n--- ALICE MEMORY CONTEXT ---\nPersonal Information:\n${personalMemoryContext}\n\nProject Knowledge:\n${projectMemoryContext}\n\nKnowledge Library Topics:\n${knowledgeContext}\n--- END MEMORY CONTEXT ---\n\n--- ATLAS OS OPERATIONAL HEURISTICS (PROCEDURES) ---\n${proceduralContext}\n--- END HEURISTICS ---\n\n${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.\n- If asked what you remember, use the "ALICE MEMORY CONTEXT". DO NOT say you lack information if it is listed there.\n- Respond naturally as ${atlasState.identity.name}.`;
+    return `${systemPrompt}\n${worldModelContext}\n--- CONVERSATION WORKING CONTEXT ---\n${workingContextStr}\n--- END WORKING CONTEXT ---\n${hotStateContext}\n--- ALICE MEMORY CONTEXT ---\nUser Profile (Stable Facts):\n${personalMemoryContext}\n\nActive User State:\n${userStateContext}\n\nProject Knowledge:\n${projectMemoryContext}\n\nKnowledge Library Topics:\n${knowledgeContext}\n--- END MEMORY CONTEXT ---\n\n--- ATLAS OS OPERATIONAL HEURISTICS (PROCEDURES) ---\n${proceduralContext}\n--- END HEURISTICS ---\n\n${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.\n- "ALICE MEMORY CONTEXT" contains specific facts about the user and your active projects. For general world knowledge (e.g., science, history, pop culture, coding), use your base training data.\n- If asked what you remember about the user or your projects, use the "ALICE MEMORY CONTEXT". DO NOT say you lack personal information if it is listed there.\n- Respond naturally as ${atlasState.identity.name}.`;
 }
 
 module.exports = { buildContext };

@@ -1,3 +1,4 @@
+// backend/src/memory/sessionManager.js
 const supabase = require('../database/supabaseClient');
 
 let currentSessionId = null;
@@ -173,6 +174,35 @@ async function endSession() {
     currentSessionId = null;
 }
 
+// Phase 3C.2: Fetch the rolling conversation working context
+async function getWorkingContext(sessionId) {
+    if (!sessionId) return {};
+    const { data, error } = await supabase
+        .from('sessions')
+        .select('working_context')
+        .eq('id', sessionId)
+        .single();
+    
+    if (error) {
+        console.error('Failed to load working context:', error.message);
+        return {};
+    }
+    return data?.working_context || {};
+}
+
+// Phase 3C.2: Update the rolling conversation working context
+async function updateWorkingContext(sessionId, contextObj) {
+    if (!sessionId) return;
+    const { error } = await supabase
+        .from('sessions')
+        .update({ working_context: contextObj })
+        .eq('id', sessionId);
+    
+    if (error) {
+        console.error('Failed to update working context:', error.message);
+    }
+}
+
 module.exports = {
     startSession,
     getCurrentSession,
@@ -181,5 +211,7 @@ module.exports = {
     getSessionMessages,
     deleteSession,
     renameSession,
-    pruneEmptySessions
+    pruneEmptySessions,
+    getWorkingContext,
+    updateWorkingContext
 };

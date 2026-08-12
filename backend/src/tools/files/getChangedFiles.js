@@ -16,7 +16,7 @@ module.exports = {
     intentSchema: {
         name: 'getChangedFiles',
         domain: 'FILES',
-        triggers: ["changed","modified","what files"],
+        triggers: ["changed files", "modified files", "recently changed", "what files changed", "git status"],
         requiredEntities: [],
         extractParams: (message, entities) => { return []; }
     }

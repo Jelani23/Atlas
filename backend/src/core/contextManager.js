@@ -9,12 +9,12 @@ function estimateTokens(text) {
 
 // --- 2. INTENT-BASED CONTEXT PROFILES (OPTIMIZED) ---
 const CONTEXT_PROFILES = {
-    conversation: { personal: 600, project: 150,  knowledge: 0,  procedures: 150, devState: 0 },
+    conversation: { personal: 600, project: 300,  knowledge: 0,  procedures: 150, devState: 0 },
     action:       { personal: 300, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
     coding:       { personal: 300, project: 600,  knowledge: 200, procedures: 200, devState: 100 },
     planning:     { personal: 300, project: 500,  knowledge: 200, procedures: 200, devState: 200 },
     search:       { personal: 200, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
-    memory:       { personal: 2000, project: 500, knowledge: 500, procedures: 200, devState: 200 } // Used for isAskingAboutSelf
+    memory:       { personal: 2000, project: 500, knowledge: 500, procedures: 200, devState: 200 }
 };
 
 // --- 3. BUDGET ALLOCATOR ---
@@ -75,25 +75,55 @@ async function getRelevantContext(userInput, history, intent) {
     ]);
 
     const lowerInput = userInput.toLowerCase();
-    // Phase 3B.6: Tightened isAskingAboutSelf so "What do you know about X?" doesn't trigger a massive memory dump
     const isAskingAboutSelf = lowerInput.includes('know about me') || lowerInput.includes('what do you remember') || lowerInput.includes('who am i');
     const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas');
 
-    // Phase 3B.6: Split Personal into Essentials (always included) and Dynamic (keyword matched)
-    const essentialsClasses = ['identity', 'state', 'relationship'];
+    // Phase 3C.1: Split State from Profile Essentials
+    const stateClasses = ['state'];
+    const essentialsClasses = ['identity', 'relationship'];
+    
+    const stateItems = personalIdx.filter(item => stateClasses.includes(item.data.category));
     const essentials = personalIdx.filter(item => essentialsClasses.includes(item.data.category));
-    const dynamicPersonal = personalIdx.filter(item => !essentialsClasses.includes(item.data.category));
+    const dynamicPersonal = personalIdx.filter(item => ![...stateClasses, ...essentialsClasses].includes(item.data.category));
 
-    // 1. Essentials: Score them (to boost cache), but we will force-include them up to a hard cap
+    // 1. State: Score and return all state items (they are small and critical)
+    const stateScored = stateItems.map(item => scoreAndBoost('user_profile', item, keywords));
+    
+    // Find the current project pointer
+    const currentStateObj = stateScored.find(s => s.key === 'current_project');
+    const currentProjectSubject = currentStateObj ? currentStateObj.value.toLowerCase() : null;
+
+    // Phase 3C.3: Hot-Swap Project State
+    if (currentProjectSubject) {
+        const activeProjectState = projectsIdx
+            .filter(item => item.data.subject?.toLowerCase() === currentProjectSubject)
+            .map(item => scoreAndBoost('project_memory', item, keywords));
+        
+        // Find phase and task in the active project's memory and inject them into the User State
+        const activePhase = activeProjectState.find(p => p.key === 'current_phase');
+        const activeTask = activeProjectState.find(p => p.key === 'current_task');
+        
+        if (activePhase) stateScored.push(activePhase);
+        if (activeTask) stateScored.push(activeTask);
+    }
+
+    // 2. Essentials: Score them, force-include up to 300 tokens
     const essentialsScored = essentials.map(item => scoreAndBoost('user_profile', item, keywords));
-    const essentialsAlloc = allocateBudget(essentialsScored, 300); // Hard cap at 300 tokens so name/state always fit
+    const essentialsAlloc = allocateBudget(essentialsScored, 300);
 
-    // 2. Dynamic Personal: Only include if relevant OR if asking about self
+    // 3. Dynamic Personal: Only include if relevant OR if asking about self
     let dynamicPersonalScored = dynamicPersonal.map(item => scoreAndBoost('user_profile', item, keywords))
         .filter(m => m._relevanceScore > 0 || isAskingAboutSelf);
         
-    let projectScored = projectsIdx.map(item => scoreAndBoost('project_memory', item, keywords))
-        .filter(m => m._relevanceScore > 0 || projectsIdx.length <= 3 || isAskingAboutSelf);
+    // 4. Projects: Resolve via state pointer, OR keyword match, OR if asking about self
+    let projectScored = projectsIdx.map(item => scoreAndBoost('project_memory', item, keywords));
+    
+    // Filter: Include if it belongs to the ACTIVE project, OR if it matched keywords explicitly, OR if asking about self
+    let filteredProjects = projectScored.filter(m => 
+        (currentProjectSubject && m.subject === currentProjectSubject) || 
+        m._relevanceScore > 0 || 
+        isAskingAboutSelf
+    );
         
     let knowledgeScored = knowledgeIdx.map(item => scoreAndBoost('knowledge_library', item, keywords))
         .filter(k => k._relevanceScore > 0 || knowledgeIdx.length <= 3);
@@ -104,11 +134,9 @@ async function getRelevantContext(userInput, history, intent) {
     const isDevRelevant = intent.action || intent.coding || intent.planning || isAskingAboutAtlas || isAskingAboutSelf || keywords.has('feature') || keywords.has('state');
     let devScored = isDevRelevant ? featuresIdx.map(item => scoreAndBoost('dev_state', item, keywords)).filter(f => f._relevanceScore > 0 || featuresIdx.length <= 5) : [];
 
-    // Ensure intent.intent exists to prevent 'undefined' profile fallback
     const profileName = isAskingAboutSelf ? 'memory' : (intent && intent.intent ? intent.intent : 'conversation');
     const budgetProfile = CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation;
 
-    // Allocate Dynamic Personal using the REMAINING budget after essentials
     const remainingPersonalBudget = Math.max(0, budgetProfile.personal - essentialsAlloc.usedTokens);
     const dynamicPersonalAlloc = allocateBudget(dynamicPersonalScored, remainingPersonalBudget);
 
@@ -117,7 +145,7 @@ async function getRelevantContext(userInput, history, intent) {
         usedTokens: essentialsAlloc.usedTokens + dynamicPersonalAlloc.usedTokens
     };
 
-    const projectAlloc = allocateBudget(projectScored, budgetProfile.project);
+    const projectAlloc = allocateBudget(filteredProjects, budgetProfile.project);
     const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge);
     const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures);
     const devAlloc = allocateBudget(devScored, budgetProfile.devState);
@@ -145,10 +173,11 @@ async function getRelevantContext(userInput, history, intent) {
     };
     
     console.log(`[ContextManager] 📊 Context Manifest (Task: ${manifest.task}) - Used ${totalUsed} tokens`);
-    console.log(`   Essentials: ${essentialsAlloc.selected.length}t | Dynamic: ${dynamicPersonalAlloc.selected.length}t | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items`);
+    console.log(`   State: ${stateScored.length}t | Essentials: ${essentialsAlloc.selected.length}t | Dynamic: ${dynamicPersonalAlloc.selected.length}t | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items`);
 
     return {
         hotState: memoryCache.getHotState(),
+        state: stateScored, // Return state separately
         personal: personalAlloc.selected,
         projects: projectAlloc.selected,
         knowledge: knowledgeAlloc.selected,

@@ -16,6 +16,7 @@ const taskManager = require('../tasks/taskManager');
 const ttsQueue = require('../voice/tts/ttsQueue');
 const ttsManager = require('../voice/tts/ttsManager.js');
 const { prepareForTTS } = require('../voice/tts/speechPreprocessor');
+const sessionManager = require('../memory/sessionManager');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
@@ -44,8 +45,11 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             effectiveMode = personalityEngine.inferMode(intent);
         }
 
-        const history = await memory.workingMemory.getHistory(sessionId);
+        const history = await memory.workingMemory.getHistory(sessionId, 4);
         await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
+
+        // Phase 3C.2: Fetch rolling working context
+        const workingContext = await sessionManager.getWorkingContext(sessionId);
 
         // 2. Planner Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'planner', timestamp: Date.now() });
@@ -105,14 +109,15 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             toolResult,
             userInput,
             history,
-            policy: reasoning.policy
+            policy: reasoning.policy,
+            workingContext
         });
         const contextDuration = Date.now() - contextStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
 
         const messages = [
             { role: 'system', content: context },
-            ...(await memory.workingMemory.getHistory(sessionId))
+            ...(await memory.workingMemory.getHistory(sessionId, 4))
         ];
 
         // 4. Main LLM Complete (Streaming)
@@ -197,16 +202,56 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // manager will queue it but never release it because the release event already happened.
         if (!toolResult.needsTool) {
             taskManager.createTask('memory_extraction', async () => {
+                console.time("[MemoryExtraction_BG] Total Time");
                 console.log("[MemoryExtraction_BG] Task started...");
+                
                 try {
-                    const extractedMemory = await memoryExtractor.extractMemory(userInput, history);
+                    // Phase 3C.4 (Step 2): Memory Eligibility Filter
+                    const { checkEligibility } = require('../memory/memoryEligibility');
+                    const eligibility = checkEligibility(userInput);
+                    
+                    console.log(`[MemoryEligibility] Score: ${eligibility.score} | Decision: ${eligibility.eligible ? 'EXTRACT' : 'SKIP'} | Reason: ${eligibility.reason}`);
+                    
+                    if (!eligibility.eligible) {
+                        console.timeEnd("[MemoryExtraction_BG] Total Time");
+                        return null;
+                    }
+
+                    // Phase 3C.4 (Step 4): Deterministic Fast-Path
+                    const deterministic = require('../memory/deterministicExtractor');
+                    let extracted = deterministic.extract(userInput);
+                    
+                    if (extracted.deterministic) {
+                        console.log(`[MemoryExtraction_BG] Deterministic hit! Skipping LLM.`);
+                        // Skip the LLM, go straight to save
+                    } else {
+                        console.time("[MemoryExtraction_BG] LLM Extraction");
+                        extracted = await memoryExtractor.extractMemory(userInput, history);
+                        console.timeEnd("[MemoryExtraction_BG] LLM Extraction");
+                    }
+                    
+                    const extractedMemory = extracted.memories || [];
+                    const conversationUpdate = extracted.conversation_update || {};
+                    
                     console.log(`[MemoryExtraction_BG] Extracted for "${userInput}":`, JSON.stringify(extractedMemory, null, 2));
                     
+                    console.time("[MemoryExtraction_BG] DB Save");
                     const saveResult = await memoryManager.handleMemoryAction(extractedMemory);
+                    console.timeEnd("[MemoryExtraction_BG] DB Save");
+                    
                     console.log(`[MemoryExtraction_BG] Save Result:`, saveResult.action);
+
+                    // Phase 3C.2: Update rolling working context
+                    if (Object.keys(conversationUpdate).length > 0) {
+                        const newContext = { ...workingContext, ...conversationUpdate };
+                        await sessionManager.updateWorkingContext(sessionId, newContext);
+                        console.log(`[MemoryExtraction_BG] Working Context updated.`);
+                    }
                 } catch (err) {
                     console.error("[MemoryExtraction_BG] Failed:", err.message);
                 }
+                
+                console.timeEnd("[MemoryExtraction_BG] Total Time");
                 return null;
             }, taskId, requestId, 'NORMAL');
         }

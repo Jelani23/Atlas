@@ -18,8 +18,8 @@ async function extractMemory(message, history = []) {
         
         Canonical Memory Classes (use ONLY these):
         1. "identity": Stable personal facts (name, birthday, timezone).
-        2. "preference": What the user likes/dislikes or how they prefer things done (favorite color, dark mode, working alone).
-        3. "behavior": Recurring patterns about how the user acts or works (hyperactivity, time management, social drain).
+        2. "preference": What the user likes/dislikes or how they prefer things done.
+        3. "behavior": Recurring patterns about how the user acts or works.
         4. "relationship": Facts about the User <-> Alice/ATLAS relationship.
         5. "state": Ephemeral current situation (current_project, current_task).
         6. "history": Past durable events or completed milestones.
@@ -37,6 +37,13 @@ async function extractMemory(message, history = []) {
         - If the user is giving an instruction, a rule, or a guideline, categorize it as "procedure".
         - For procedures: "key" MUST be a natural language trigger, "value" MUST be a descriptive action.
         - DO NOT save questions, temporary tasks, or explanations requested by the user.
+        - PROJECT STATE: If the user mentions a phase (e.g., "Phase 11") or a current task (e.g., "Voice UI"), categorize it as "project" memory. The "subject" MUST be the current project name (e.g., "atlas"). The "key" MUST be "current_phase" or "current_task". The "value" is the phase number or task description.
+        - PROJECT SWITCH: If the user changes their current project (e.g., "Switch to Bindex"), output a "state" memory for "current_project". DO NOT output phase or task updates during a switch; let the system resolve them from the new project's memory.
+
+        ALSO extract a rolling "conversation_update" to maintain Alice's working context.
+        - "current_topic": The main subject being discussed right now.
+        - "recent_decisions": Any concrete choices made.
+        - "open_questions": Things still needing answers.
 
         Return ONLY valid JSON in this exact format:
         {
@@ -49,11 +56,16 @@ async function extractMemory(message, history = []) {
                     "value": "blue",
                     "confidence": 0.9
                 }
-            ]
+            ],
+            "conversation_update": {
+                "current_topic": "Discussing memory architecture",
+                "recent_decisions": ["Use Canonical Memory Model"],
+                "open_questions": []
+            }
         }
 
         If nothing should be remembered, return:
-        { "memories": [] }
+        { "memories": [], "conversation_update": {} }
     `;
 
     try {
@@ -64,13 +76,13 @@ async function extractMemory(message, history = []) {
 
         const parsed = extractJSON(response);
         if (parsed && parsed.memories && Array.isArray(parsed.memories)) {
-            return parsed.memories;
+            return parsed; // Return the whole object now
         }
         console.log("[MemoryExtractor] Failed to parse memories from response:", safePreview(response));
-        return [];
+        return { memories: [], conversation_update: {} };
     } catch (error) {
         console.error("[MemoryExtractor] Memory extraction failed:", error.message);
-        return [];
+        return { memories: [], conversation_update: {} };
     }
 }
 
