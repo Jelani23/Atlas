@@ -1,5 +1,6 @@
 // backend/src/core/contextManager.js
 const memoryCache = require('./memoryCache');
+const hotSwapManager = require('./hotSwapManager');
 
 // --- 1. TOKEN ESTIMATOR ---
 function estimateTokens(text) {
@@ -76,7 +77,7 @@ async function getRelevantContext(userInput, history, intent) {
 
     const lowerInput = userInput.toLowerCase();
     const isAskingAboutSelf = lowerInput.includes('know about me') || lowerInput.includes('what do you remember') || lowerInput.includes('who am i');
-    const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas');
+    const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas') ;
 
     // Phase 3C.1: Split State from Profile Essentials
     const stateClasses = ['state'];
@@ -86,12 +87,43 @@ async function getRelevantContext(userInput, history, intent) {
     const essentials = personalIdx.filter(item => essentialsClasses.includes(item.data.category));
     const dynamicPersonal = personalIdx.filter(item => ![...stateClasses, ...essentialsClasses].includes(item.data.category));
 
-    // 1. State: Score and return all state items (they are small and critical)
-    const stateScored = stateItems.map(item => scoreAndBoost('user_profile', item, keywords));
-    
+    const stateScored = stateItems.map(item =>
+        scoreAndBoost('user_profile', item, keywords)
+    );
+
     // Find the current project pointer
-    const currentStateObj = stateScored.find(s => s.key === 'current_project');
-    const currentProjectSubject = currentStateObj ? currentStateObj.value.toLowerCase() : null;
+    const currentStateObj = stateScored.find(
+        s => s.key === 'current_project'
+    );
+
+    const currentProjectSubject =
+        currentStateObj?.value?.toLowerCase() || null;
+
+    // Determine the current working context.
+    const hotState = memoryCache.getHotState();
+
+    const workingContext = {
+        activeProject: currentStateObj?.value || null,
+        currentTask: hotState.currentTask || null,
+        activeFiles: hotState.activeFiles || []
+    };
+
+    const hotContext = hotSwapManager.isContextHot(workingContext);
+
+    console.log(
+        `[ContextManager] 🔥 Hot Context: ${hotContext.valid ? 'VALID' : 'STALE'} | ${hotContext.cacheKey}`
+    );
+
+    // Establish the current context if the hot cache is stale.
+    if (!hotContext.valid) {
+        hotSwapManager.activateContext(workingContext);
+
+        const newHotContext = hotSwapManager.isContextHot(workingContext);
+
+        console.log(
+            `[ContextManager] 🔄 Hot context activated: ${newHotContext.cacheKey}`
+        );
+    }
 
     // Phase 3C.3: Resolve active project memory
     // Project-specific state stays inside project_memory.
@@ -154,6 +186,23 @@ async function getRelevantContext(userInput, history, intent) {
     const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge);
     const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures);
     const devAlloc = allocateBudget(devScored, budgetProfile.devState);
+    
+    // Populate the hot memory cache with the memories that were
+    // actually selected as relevant for the current request.
+    memoryCache.setHotMemory('user_profile', personalAlloc.selected);
+    memoryCache.setHotMemory('project_memory', projectAlloc.selected);
+    memoryCache.setHotMemory('knowledge_library', knowledgeAlloc.selected);
+    memoryCache.setHotMemory('procedural_memory', proceduresAlloc.selected);
+    memoryCache.setHotMemory('dev_state', devAlloc.selected);
+
+    console.log(
+    `[ContextManager] 🔥 Hot Cache Updated | ` +
+    `Personal: ${personalAlloc.selected.length} | ` +
+    `Projects: ${projectAlloc.selected.length} | ` +
+    `Knowledge: ${knowledgeAlloc.selected.length} | ` +
+    `Procedures: ${proceduresAlloc.selected.length} | ` +
+    `DevState: ${devAlloc.selected.length}`
+);
 
     console.timeEnd("[ContextManager] Total Processing");
 

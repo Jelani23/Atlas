@@ -9,7 +9,19 @@ const warmIndex = {};
 const hotState = {
     activeProject: null,
     activeFiles: [],
-    currentTask: null
+    currentTask: null,
+    cacheKey: null,
+
+    // Fast-access memory cache
+    memories: {
+        user_profile: [],
+        project_memory: [],
+        knowledge_library: [],
+        procedural_memory: [],
+        dev_state: []
+    },
+
+    lastUpdated: null
 };
 
 const DECAY_RATE_PER_MS = 5 / (60 * 60 * 1000); 
@@ -90,4 +102,34 @@ function getHotState() {
     return hotState;
 }
 
-module.exports = { getMemory, clearCache, invalidate, setHotState, getHotState, boostItem };
+function setHotMemory(store, items) {
+    if (!hotState.memories[store]) {
+        hotState.memories[store] = [];
+    }
+
+    hotState.memories[store] = Array.isArray(items) ? [...items] : [];
+    hotState.lastUpdated = Date.now();
+}
+
+function getHotMemory(store) {
+    return hotState.memories[store] || [];
+}
+
+function isHotCacheValid(cacheKey) {
+    if (!hotState.cacheKey) return false;
+    if (!hotState.lastUpdated) return false;
+
+    return hotState.cacheKey === cacheKey;
+}
+
+module.exports = {
+    getMemory,
+    clearCache,
+    invalidate,
+    setHotState,
+    getHotState,
+    setHotMemory,
+    getHotMemory,
+    isHotCacheValid,
+    boostItem
+};

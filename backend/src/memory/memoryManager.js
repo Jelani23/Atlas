@@ -4,6 +4,7 @@ const knowledgeLibrary = require('./knowledgeLibrary');
 const proceduralMemory = require('./proceduralMemory');
 const memoryCache = require('../core/memoryCache');
 const memoryDeduplicator = require('./memoryDeduplicator');
+const projectResolver = require('./projectResolver');
 
 async function findExistingMemory(memory) {
     const category = memory.category;
@@ -65,6 +66,35 @@ async function handleMemoryAction(extractedMemories) {
                 reason: 'Memory was not marked for storage.'
             });
             continue;
+        }
+
+        // Project state is controlled by the project registry.
+        // The memory extractor may suggest a project, but it cannot create
+        // or switch projects implicitly.
+        if (
+            memory.category === 'state' &&
+            memory.key === 'current_project'
+        ) {
+            const projectResult = projectResolver.resolveProjectChange(
+                memory.value
+            );
+
+            if (!projectResult.allowed) {
+                console.log(
+                    `[MemoryManager] 🚫 Rejected current_project="${memory.value}" — not a registered project.`
+                );
+
+                ignored.push({
+                    memory,
+                    reason: 'Project is not registered in the project registry.'
+                });
+
+                continue;
+            }
+
+            // Store the canonical project name rather than whatever casing
+            // or alias the extractor happened to produce.
+            memory.value = projectResult.project.name;
         }
 
         try {

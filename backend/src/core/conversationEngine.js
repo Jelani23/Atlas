@@ -221,7 +221,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
                     // Phase 3C.4 (Step 4): Deterministic Fast-Path
                     const deterministic = require('../memory/deterministicExtractor');
-                    let extracted = deterministic.extract(userInput);
+                    let extracted = await deterministic.extract(userInput);
                     
                     if (extracted.deterministic) {
                         console.log(`[MemoryExtraction_BG] Deterministic hit! Skipping LLM.`);
