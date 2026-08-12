@@ -3,7 +3,7 @@ const longTermProfile = require('./longTermProfile');
 const projectMemory = require('./projectMemory');
 const knowledgeLibrary = require('./knowledgeLibrary');
 const proceduralMemory = require('./proceduralMemory');
-const memoryCache = require('../core/memoryCache'); // NEW
+const memoryCache = require('../core/memoryCache');
 
 async function handleMemoryAction(extractedMemories) {
     if (!Array.isArray(extractedMemories)) {
@@ -20,21 +20,30 @@ async function handleMemoryAction(extractedMemories) {
         if (!memory.shouldRemember) continue;
 
         try {
-            if (memory.category === "project") {
-                await projectMemory.update({ subject: memory.subject || "general", key: memory.key, value: memory.value });
-                memoryCache.invalidate('project_memory'); // NEW
+            if (memory.category === 'project') {
+                await projectMemory.update({ subject: memory.subject || 'general', key: memory.key, value: memory.value });
+                memoryCache.invalidate('project_memory');
                 savedMemories.push(memory);
-            } else if (memory.category === "user" || memory.category === "behavior" || memory.category === "relationship") {
-                await longTermProfile.update({ category: memory.category, key: memory.key, value: memory.value, confidence: memory.confidence || 1.0 });
-                memoryCache.invalidate('user_profile'); // NEW
+            } 
+            // Phase 3B.4: Added new canonical classes to route to user_profile
+            else if (['identity', 'preference', 'behavior', 'relationship', 'state', 'history', 'user'].includes(memory.category)) {
+                await longTermProfile.update({ 
+                    category: memory.category, 
+                    key: memory.key, 
+                    value: memory.value, 
+                    confidence: memory.confidence || 1.0 
+                });
+                memoryCache.invalidate('user_profile');
                 savedMemories.push(memory);
-            } else if (memory.category === "knowledge") {
-                await knowledgeLibrary.addKnowledge({ subject: memory.subject || "general", key: memory.key, value: memory.value });
-                memoryCache.invalidate('knowledge_library'); // NEW
+            } 
+            else if (memory.category === 'knowledge') {
+                await knowledgeLibrary.addKnowledge({ subject: memory.subject || 'general', key: memory.key, value: memory.value });
+                memoryCache.invalidate('knowledge_library');
                 savedMemories.push(memory);
-            } else if (memory.category === "procedure") {
-                await proceduralMemory.addProcedure({ trigger: memory.key, action: memory.value, context: memory.subject || "general" });
-                memoryCache.invalidate('procedural_memory'); // NEW
+            } 
+            else if (memory.category === 'procedure') {
+                await proceduralMemory.addProcedure({ trigger: memory.key, action: memory.value, context: memory.subject || 'general' });
+                memoryCache.invalidate('procedural_memory');
                 savedMemories.push(memory);
             }
         } catch (error) {

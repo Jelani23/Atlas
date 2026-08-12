@@ -192,22 +192,28 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
 
-        // 5. Emit Request Completed
-        taskManager.endRequest(taskId);
-        eventBus.emit(EventTypes.REQUEST_COMPLETED, { taskId, requestId, reply, timestamp: Date.now(), duration: Date.now() - requestStart });
-        
         // 6. Background Memory Extraction (Non-blocking, linked to parent)
+        // MUST be registered BEFORE REQUEST_COMPLETED fires, otherwise the task 
+        // manager will queue it but never release it because the release event already happened.
         if (!toolResult.needsTool) {
             taskManager.createTask('memory_extraction', async () => {
+                console.log("[MemoryExtraction_BG] Task started...");
                 try {
                     const extractedMemory = await memoryExtractor.extractMemory(userInput, history);
-                    await memoryManager.handleMemoryAction(extractedMemory);
+                    console.log(`[MemoryExtraction_BG] Extracted for "${userInput}":`, JSON.stringify(extractedMemory, null, 2));
+                    
+                    const saveResult = await memoryManager.handleMemoryAction(extractedMemory);
+                    console.log(`[MemoryExtraction_BG] Save Result:`, saveResult.action);
                 } catch (err) {
                     console.error("[MemoryExtraction_BG] Failed:", err.message);
                 }
                 return null;
             }, taskId, requestId, 'NORMAL');
         }
+
+        // 5. Emit Request Completed (This triggers the task manager to run the background task)
+        taskManager.endRequest(taskId);
+        eventBus.emit(EventTypes.REQUEST_COMPLETED, { taskId, requestId, reply, timestamp: Date.now(), duration: Date.now() - requestStart });
 
         // Phase 10E: Return immediately, audio is streamed via events
         return { reply, audio: null };

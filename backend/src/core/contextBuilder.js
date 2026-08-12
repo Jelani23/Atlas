@@ -1,3 +1,4 @@
+// backend/src/core/contextBuilder.js
 const { getStatePrompt } = require('./atlasState');
 const { atlasState } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
@@ -27,9 +28,19 @@ Current Task: ${hot.currentTask || 'None'}
         personalMemoryContext = relevantMemory.personal.map(item => `- ${item.key}: ${item.value}`).join('\n');
     }
 
+    // Phase 3B.9: Group Project Memory by subject to prevent context conflation
     let projectMemoryContext = "None";
     if (relevantMemory.projects && relevantMemory.projects.length > 0) {
-        projectMemoryContext = relevantMemory.projects.map(m => `- ${m.subject}: ${m.key} = ${m.value}`).join('\n');
+        const groupedProjects = {};
+        for (const m of relevantMemory.projects) {
+            const subj = m.subject || 'general';
+            if (!groupedProjects[subj]) groupedProjects[subj] = [];
+            groupedProjects[subj].push(`- ${m.key} = ${m.value}`);
+        }
+        
+        projectMemoryContext = Object.entries(groupedProjects).map(([subj, items]) => {
+            return `[${subj.toUpperCase()}]\n${items.join('\n')}`;
+        }).join('\n\n');
     }
 
     let knowledgeContext = "None";

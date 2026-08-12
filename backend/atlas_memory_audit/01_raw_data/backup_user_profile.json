@@ -1,0 +1,632 @@
+[
+  {
+    "id": 51,
+    "category": "behavior",
+    "key": "answer_before_introducing_related_ideas",
+    "value": "Finish answering the current question before introducing related ideas",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:58:27+00:00",
+    "updated_at": "2026-08-05T23:58:27+00:00"
+  },
+  {
+    "id": 46,
+    "category": "behavior",
+    "key": "answer_question_before_extra_suggestions",
+    "value": "Answer the question before adding extra suggestions",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:41:28+00:00",
+    "updated_at": "2026-08-05T23:42:09+00:00"
+  },
+  {
+    "id": 47,
+    "category": "behavior",
+    "key": "avoid_repeating_established_info",
+    "value": "Avoid repeating information already established in the current conversation",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:41:28+00:00",
+    "updated_at": "2026-08-05T23:42:09+00:00"
+  },
+  {
+    "id": 29,
+    "category": "behavior",
+    "key": "break_activity",
+    "value": "watching tiktoks or reels",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:32:12+00:00",
+    "updated_at": "2026-08-05T18:32:12+00:00"
+  },
+  {
+    "id": 30,
+    "category": "behavior",
+    "key": "break_consequence",
+    "value": "lose track of time",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:32:12+00:00",
+    "updated_at": "2026-08-05T18:32:12+00:00"
+  },
+  {
+    "id": 27,
+    "category": "behavior",
+    "key": "break_duration",
+    "value": "long breaks when taking them",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:28:52+00:00",
+    "updated_at": "2026-08-05T18:28:52+00:00"
+  },
+  {
+    "id": 28,
+    "category": "behavior",
+    "key": "difficulty_returning_to_work",
+    "value": "hard to pull back into working mood after breaks",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:28:52+00:00",
+    "updated_at": "2026-08-05T18:28:52+00:00"
+  },
+  {
+    "id": 21,
+    "category": "behavior",
+    "key": "distractibility",
+    "value": "easily distracted",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:25:20+00:00",
+    "updated_at": "2026-08-05T18:25:20+00:00"
+  },
+  {
+    "id": 44,
+    "category": "behavior",
+    "key": "fallback_strategy",
+    "value": "look for combinations of existing tools",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:20:57+00:00",
+    "updated_at": "2026-08-05T23:20:57+00:00"
+  },
+  {
+    "id": 48,
+    "category": "behavior",
+    "key": "finish_answer_before_related_ideas",
+    "value": "Finish answering before introducing related ideas",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:41:28+00:00",
+    "updated_at": "2026-08-05T23:42:09+00:00"
+  },
+  {
+    "id": 45,
+    "category": "behavior",
+    "key": "handling_multiple_interpretations",
+    "value": "ask for clarification",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:22:08+00:00",
+    "updated_at": "2026-08-05T23:22:08+00:00"
+  },
+  {
+    "id": 22,
+    "category": "behavior",
+    "key": "hyperfixation",
+    "value": "hyperfixate on enjoyable activities",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:25:20+00:00",
+    "updated_at": "2026-08-05T18:25:20+00:00"
+  },
+  {
+    "id": 40,
+    "category": "behavior",
+    "key": "implementation_status",
+    "value": "not all ideas have been implemented",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T22:22:21+00:00",
+    "updated_at": "2026-08-05T22:22:21+00:00"
+  },
+  {
+    "id": 43,
+    "category": "behavior",
+    "key": "mark_fail_safe_status",
+    "value": "in progress",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T22:32:05+00:00",
+    "updated_at": "2026-08-05T22:32:05+00:00"
+  },
+  {
+    "id": 49,
+    "category": "behavior",
+    "key": "match_explanation_with_user_intent",
+    "value": "Match the amount of explanation with the user's apparent intent",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:41:28+00:00",
+    "updated_at": "2026-08-05T23:42:09+00:00"
+  },
+  {
+    "id": 50,
+    "category": "behavior",
+    "key": "memory_categorization_guideline",
+    "value": "Add to procedural memory, not factual memory",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T23:43:04+00:00",
+    "updated_at": "2026-08-05T23:43:04+00:00"
+  },
+  {
+    "id": 32,
+    "category": "behavior",
+    "key": "note_action",
+    "value": "write a note to file named future_ideas",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T19:17:23+00:00",
+    "updated_at": "2026-08-05T19:48:06+00:00"
+  },
+  {
+    "id": 20,
+    "category": "behavior",
+    "key": "physical_behavior",
+    "value": "hyperactivity (shaking legs or constant body swaying)",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:25:20+00:00",
+    "updated_at": "2026-08-05T18:25:20+00:00"
+  },
+  {
+    "id": 25,
+    "category": "behavior",
+    "key": "post_break_behavior",
+    "value": "return to workflow immediately if able",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:28:52+00:00",
+    "updated_at": "2026-08-05T18:28:52+00:00"
+  },
+  {
+    "id": 16,
+    "category": "behavior",
+    "key": "preference_for_visually_seeing_progress",
+    "value": "yes",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:17:12+00:00",
+    "updated_at": "2026-08-05T18:17:12+00:00"
+  },
+  {
+    "id": 17,
+    "category": "behavior",
+    "key": "preference_for_working_alone",
+    "value": "yes",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:17:12+00:00",
+    "updated_at": "2026-08-05T18:17:12+00:00"
+  },
+  {
+    "id": 19,
+    "category": "behavior",
+    "key": "preference_for_working_alone_over_groups",
+    "value": "yes",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:17:12+00:00",
+    "updated_at": "2026-08-05T18:17:12+00:00"
+  },
+  {
+    "id": 52,
+    "category": "behavior",
+    "key": "prefers_examples_for_complex_explanations",
+    "value": "examples when explaining complicated things",
+    "confidence": 0.9,
+    "created_at": "2026-08-07T01:22:45+00:00",
+    "updated_at": "2026-08-07T01:22:45+00:00"
+  },
+  {
+    "id": 42,
+    "category": "behavior",
+    "key": "progress_observed",
+    "value": "able to see some changes",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T22:22:21+00:00",
+    "updated_at": "2026-08-05T22:22:21+00:00"
+  },
+  {
+    "id": 23,
+    "category": "behavior",
+    "key": "social_drain",
+    "value": "strong social drainage after social interactions",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:25:20+00:00",
+    "updated_at": "2026-08-05T18:25:20+00:00"
+  },
+  {
+    "id": 18,
+    "category": "behavior",
+    "key": "tendency_to_generate_questions",
+    "value": "yes",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:17:12+00:00",
+    "updated_at": "2026-08-05T18:17:12+00:00"
+  },
+  {
+    "id": 26,
+    "category": "behavior",
+    "key": "time_management",
+    "value": "lose track of time and sit at desk for hours, often late into the night",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:28:52+00:00",
+    "updated_at": "2026-08-05T18:28:52+00:00"
+  },
+  {
+    "id": 31,
+    "category": "behavior",
+    "key": "transition_strategy",
+    "value": "motivation or new ideas from videos",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:32:12+00:00",
+    "updated_at": "2026-08-05T18:32:12+00:00"
+  },
+  {
+    "id": 41,
+    "category": "behavior",
+    "key": "ui_status",
+    "value": "no actual UI designed",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T22:22:21+00:00",
+    "updated_at": "2026-08-05T22:22:21+00:00"
+  },
+  {
+    "id": 24,
+    "category": "behavior",
+    "key": "work_style",
+    "value": "work on projects non-stop until forced to take a break",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T18:28:52+00:00",
+    "updated_at": "2026-08-05T18:28:52+00:00"
+  },
+  {
+    "id": 5,
+    "category": "identity",
+    "key": "birthday",
+    "value": "August 23rd, 2003",
+    "confidence": 0.95,
+    "created_at": "2026-08-05T06:22:03+00:00",
+    "updated_at": "2026-08-05T06:22:03+00:00"
+  },
+  {
+    "id": 1,
+    "category": "identity",
+    "key": "name",
+    "value": "Jelani",
+    "confidence": 1,
+    "created_at": "2026-08-05T04:33:08+00:00",
+    "updated_at": "2026-08-05T04:43:40+00:00"
+  },
+  {
+    "id": 6,
+    "category": "preference",
+    "key": "favorite_color",
+    "value": "yellow",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T07:02:03+00:00",
+    "updated_at": "2026-08-05T07:02:03+00:00"
+  },
+  {
+    "id": 4,
+    "category": "preference",
+    "key": "interests",
+    "value": "music, gaming, anime, dinosaurs, and much more",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T05:28:33+00:00",
+    "updated_at": "2026-08-05T05:28:33+00:00"
+  },
+  {
+    "id": 3,
+    "category": "preference",
+    "key": "interface_preference",
+    "value": "dark_mode",
+    "confidence": 0.95,
+    "created_at": "2026-08-05T05:12:34+00:00",
+    "updated_at": "2026-08-05T05:12:34+00:00"
+  },
+  {
+    "id": 9,
+    "category": "Preferences",
+    "key": "explanation_preference",
+    "value": "prefers slightly detailed explanations to learn from them",
+    "confidence": 0.95,
+    "created_at": "2026-08-05T14:52:13+00:00",
+    "updated_at": "2026-08-05T14:52:13+00:00"
+  },
+  {
+    "id": 7,
+    "category": "project",
+    "key": "current_projects",
+    "value": "you, Bindex",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T12:57:36+00:00",
+    "updated_at": "2026-08-05T12:57:36+00:00"
+  },
+  {
+    "id": 8,
+    "category": "project",
+    "key": "project_name",
+    "value": "Bindex",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T14:06:59+00:00",
+    "updated_at": "2026-08-05T14:06:59+00:00"
+  },
+  {
+    "id": 53,
+    "category": "relationship",
+    "key": "currently_working_on_assistant",
+    "value": "true",
+    "confidence": 0.9,
+    "created_at": "2026-08-07T01:54:50+00:00",
+    "updated_at": "2026-08-07T01:54:50+00:00"
+  },
+  {
+    "id": 54,
+    "category": "relationship",
+    "key": "user_interest_in_internal_infrastructure",
+    "value": "The user is currently interested in understanding the internal infrastructure of the AI system.",
+    "confidence": 0.9,
+    "created_at": "2026-08-07T03:32:02+00:00",
+    "updated_at": "2026-08-07T03:32:02+00:00"
+  },
+  {
+    "id": 14,
+    "category": "user",
+    "key": "hobbies",
+    "value": "watching anime, watching youtube, watching tiktok or instagram reels, video editing",
+    "confidence": 0.95,
+    "created_at": "2026-08-05T17:59:32+00:00",
+    "updated_at": "2026-08-05T17:59:32+00:00"
+  },
+  {
+    "id": 13,
+    "category": "user",
+    "key": "music_experience",
+    "value": "self-teaching guitar for 2 years, piano for 10 years through lessons",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T17:57:59+00:00",
+    "updated_at": "2026-08-05T17:57:59+00:00"
+  },
+  {
+    "id": 11,
+    "category": "user",
+    "key": "timezone",
+    "value": "Central Standard Timezone",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T17:57:59+00:00",
+    "updated_at": "2026-08-05T17:57:59+00:00"
+  },
+  {
+    "id": 55,
+    "category": "relationship",
+    "key": "modelAdapter_performance_focus",
+    "value": "performance optimization",
+    "confidence": 0.9,
+    "created_at": "2026-08-07T20:10:10.862519+00:00",
+    "updated_at": "2026-08-07T20:10:10.862519+00:00"
+  },
+  {
+    "id": 56,
+    "category": "relationship",
+    "key": "working_on_normalizer_component",
+    "value": "active",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T14:43:35.891831+00:00",
+    "updated_at": "2026-08-08T14:43:35.891831+00:00"
+  },
+  {
+    "id": 57,
+    "category": "relationship",
+    "key": "working_on_planner_module",
+    "value": "active",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T14:43:36.125522+00:00",
+    "updated_at": "2026-08-08T14:43:36.125522+00:00"
+  },
+  {
+    "id": 58,
+    "category": "relationship",
+    "key": "assistant_identity",
+    "value": "the user considers the assistant to be the Atlas project (their personal AI assistant, not Bindex)",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T15:31:46.197057+00:00",
+    "updated_at": "2026-08-08T15:31:46.197057+00:00"
+  },
+  {
+    "id": 61,
+    "category": "relationship",
+    "key": "interest_in_ai_infrastructure",
+    "value": "understanding internal infrastructure",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:17:06.158402+00:00",
+    "updated_at": "2026-08-08T18:17:06.158402+00:00"
+  },
+  {
+    "id": 62,
+    "category": "behavior",
+    "key": "prefers_examples",
+    "value": "examples",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:17:06.295838+00:00",
+    "updated_at": "2026-08-08T18:17:06.295838+00:00"
+  },
+  {
+    "id": 63,
+    "category": "behavior",
+    "key": "wants_finite_answers",
+    "value": "answers finish before introducing related ideas",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:17:06.406697+00:00",
+    "updated_at": "2026-08-08T18:17:06.406697+00:00"
+  },
+  {
+    "id": 64,
+    "category": "behavior",
+    "key": "prefers_visual_progress",
+    "value": "visual progress tracking",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:17:06.766313+00:00",
+    "updated_at": "2026-08-08T18:17:06.766313+00:00"
+  },
+  {
+    "id": 99,
+    "category": "user",
+    "key": "hobby",
+    "value": "TikTok",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:50:12.473442+00:00",
+    "updated_at": "2026-08-10T01:50:12.720674+00:00"
+  },
+  {
+    "id": 67,
+    "category": "relationship",
+    "key": "current_work_topic",
+    "value": "implementing speech to text",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T20:45:03.750954+00:00",
+    "updated_at": "2026-08-08T20:45:03.750954+00:00"
+  },
+  {
+    "id": 102,
+    "category": "user",
+    "key": "preference",
+    "value": "visual progress tracking",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:50:12.95118+00:00",
+    "updated_at": "2026-08-10T01:50:12.95118+00:00"
+  },
+  {
+    "id": 71,
+    "category": "behavior",
+    "key": "hyperactivity",
+    "value": "leg shaking",
+    "confidence": 0.9,
+    "created_at": "2026-08-09T15:51:37.327002+00:00",
+    "updated_at": "2026-08-09T15:51:37.327002+00:00"
+  },
+  {
+    "id": 72,
+    "category": "relationship",
+    "key": "learning_preference",
+    "value": "visual progress tracking",
+    "confidence": 0.9,
+    "created_at": "2026-08-09T15:51:37.44687+00:00",
+    "updated_at": "2026-08-09T15:51:37.44687+00:00"
+  },
+  {
+    "id": 73,
+    "category": "relationship",
+    "key": "current_project_activity",
+    "value": "AI infrastructure",
+    "confidence": 0.9,
+    "created_at": "2026-08-09T15:51:37.567629+00:00",
+    "updated_at": "2026-08-09T15:51:37.567629+00:00"
+  },
+  {
+    "id": 74,
+    "category": "relationship",
+    "key": "hobbies",
+    "value": "anime, YouTube, TikTok",
+    "confidence": 0.9,
+    "created_at": "2026-08-09T15:51:37.687846+00:00",
+    "updated_at": "2026-08-09T15:51:37.687846+00:00"
+  },
+  {
+    "id": 75,
+    "category": "user",
+    "key": "time_zone",
+    "value": "Central Standard Time",
+    "confidence": 0.9,
+    "created_at": "2026-08-09T15:51:37.805547+00:00",
+    "updated_at": "2026-08-09T15:51:37.805547+00:00"
+  },
+  {
+    "id": 83,
+    "category": "relationship",
+    "key": "interests",
+    "value": "anime, YouTube, TikTok",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:35:25.053274+00:00",
+    "updated_at": "2026-08-10T01:35:25.053274+00:00"
+  },
+  {
+    "id": 10,
+    "category": "user",
+    "key": "birthday",
+    "value": "August 23, 2003",
+    "confidence": 0.9,
+    "created_at": "2026-08-05T17:01:03+00:00",
+    "updated_at": "2026-08-10T01:38:02.021869+00:00"
+  },
+  {
+    "id": 87,
+    "category": "relationship",
+    "key": "hyperactive",
+    "value": "leg-shaking",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:38:02.13282+00:00",
+    "updated_at": "2026-08-10T01:38:02.13282+00:00"
+  },
+  {
+    "id": 89,
+    "category": "relationship",
+    "key": "work_style",
+    "value": "alone",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:38:02.36794+00:00",
+    "updated_at": "2026-08-10T01:38:02.36794+00:00"
+  },
+  {
+    "id": 90,
+    "category": "relationship",
+    "key": "preference",
+    "value": "visual progress tracking",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:38:02.579594+00:00",
+    "updated_at": "2026-08-10T01:38:02.579594+00:00"
+  },
+  {
+    "id": 91,
+    "category": "relationship",
+    "key": "time_management",
+    "value": "loses track of time when deeply engaged",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:38:02.689137+00:00",
+    "updated_at": "2026-08-10T01:38:02.689137+00:00"
+  },
+  {
+    "id": 79,
+    "category": "user",
+    "key": "name",
+    "value": "Jelani",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:35:24.504242+00:00",
+    "updated_at": "2026-08-10T01:50:11.67211+00:00"
+  },
+  {
+    "id": 66,
+    "category": "user",
+    "key": "age",
+    "value": "23",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:24:40.659433+00:00",
+    "updated_at": "2026-08-10T01:50:11.876955+00:00"
+  },
+  {
+    "id": 60,
+    "category": "user",
+    "key": "favorite_color",
+    "value": "yellow",
+    "confidence": 0.9,
+    "created_at": "2026-08-08T18:17:05.98647+00:00",
+    "updated_at": "2026-08-10T01:50:12.036838+00:00"
+  },
+  {
+    "id": 97,
+    "category": "user",
+    "key": "hyperactive",
+    "value": "leg-shaking",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:50:12.255806+00:00",
+    "updated_at": "2026-08-10T01:50:12.255806+00:00"
+  },
+  {
+    "id": 98,
+    "category": "user",
+    "key": "works_alone",
+    "value": "true",
+    "confidence": 0.9,
+    "created_at": "2026-08-10T01:50:12.370479+00:00",
+    "updated_at": "2026-08-10T01:50:12.370479+00:00"
+  }
+]

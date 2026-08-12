@@ -1,0 +1,149 @@
+[
+  {
+    "id": 1,
+    "subject": "Bindex",
+    "key": "architecture",
+    "value": "Bindex uses an SPA with ES Modules running as an electron app, vercel webpage, and a vercel-based PWA. It connects to the pokemonTCG.io API through a Supabase database to store card data and user data across platforms.",
+    "created_at": "2026-08-05T14:54:24.494+00:00"
+  },
+  {
+    "id": 2,
+    "subject": "future_ideas",
+    "key": "feature_suggestion",
+    "value": "implement fail-safe features to prevent full crashes",
+    "created_at": "2026-08-05T19:17:23.212+00:00"
+  },
+  {
+    "id": 3,
+    "subject": "future_ideas_file",
+    "key": "future_ideas_file_update",
+    "value": "Fix searching to be more expansive than just wiki searches",
+    "created_at": "2026-08-05T19:51:24.115+00:00"
+  },
+  {
+    "id": 4,
+    "subject": "future ideas",
+    "key": "fail-safe_system",
+    "value": "implement a fail-safe system to prevent system crashes",
+    "created_at": "2026-08-05T20:36:33.509+00:00"
+  },
+  {
+    "id": 5,
+    "subject": "general",
+    "key": "model_adapter_file_path",
+    "value": "src/models/modelAdapter.js",
+    "created_at": "2026-08-07T03:45:36.201+00:00"
+  },
+  {
+    "id": 6,
+    "subject": "general",
+    "key": "user_working_on_planner_normalizer_file",
+    "value": "src/planner/normalizer.js",
+    "created_at": "2026-08-07T03:46:47.708+00:00"
+  },
+  {
+    "id": 7,
+    "subject": "general",
+    "key": "file_path_added",
+    "value": "src/reasoning/controller.js",
+    "created_at": "2026-08-07T03:47:35.742+00:00"
+  },
+  {
+    "id": 8,
+    "subject": "general",
+    "key": "search_pipeline_file",
+    "value": "searchPipeline.js",
+    "created_at": "2026-08-07T04:27:45.404+00:00"
+  },
+  {
+    "id": 9,
+    "subject": "planner",
+    "key": "planner_file",
+    "value": "planner.js",
+    "created_at": "2026-08-07T20:35:17.666528+00:00"
+  },
+  {
+    "id": 10,
+    "subject": "Bindex",
+    "key": "normalizer_component",
+    "value": "Bindex normalizer component",
+    "created_at": "2026-08-07T20:39:42.779274+00:00"
+  },
+  {
+    "id": 11,
+    "subject": "project",
+    "key": "atlas_bindex_relationship",
+    "value": "separate projects",
+    "created_at": "2026-08-08T15:31:46.009228+00:00"
+  },
+  {
+    "id": 12,
+    "subject": "general",
+    "key": "works_on_assistant_system",
+    "value": "true",
+    "created_at": "2026-08-08T18:17:06.541845+00:00"
+  },
+  {
+    "id": 13,
+    "subject": "general",
+    "key": "works_on_bindex",
+    "value": "true",
+    "created_at": "2026-08-08T18:17:06.664783+00:00"
+  },
+  {
+    "id": 14,
+    "subject": "context_manager_file",
+    "key": "context_manager_expected_core",
+    "value": "core folder",
+    "created_at": "2026-08-08T18:42:59.448789+00:00"
+  },
+  {
+    "id": 15,
+    "subject": "context_manager_file",
+    "key": "core_expected_parent",
+    "value": "backend folder",
+    "created_at": "2026-08-08T18:42:59.648634+00:00"
+  },
+  {
+    "id": 16,
+    "subject": "planner and normalizer modules",
+    "key": "planner_normalizer_modules_project",
+    "value": "Atlas",
+    "created_at": "2026-08-08T20:45:03.544447+00:00"
+  },
+  {
+    "id": 17,
+    "subject": "conversation_engine",
+    "key": "confirmed_path",
+    "value": "src/core/conversationEngine.js",
+    "created_at": "2026-08-09T16:47:02.689617+00:00"
+  },
+  {
+    "id": 18,
+    "subject": "general",
+    "key": "current_project",
+    "value": "speech-to-text implementation",
+    "created_at": "2026-08-10T01:34:01.529006+00:00"
+  },
+  {
+    "id": 19,
+    "subject": "speech-to-text implementation",
+    "key": "current_project",
+    "value": "visual progress tracker",
+    "created_at": "2026-08-10T01:35:25.163012+00:00"
+  },
+  {
+    "id": 20,
+    "subject": "speech-to-text",
+    "key": "speech_to_text",
+    "value": "implementation",
+    "created_at": "2026-08-10T01:38:02.483209+00:00"
+  },
+  {
+    "id": 21,
+    "subject": "general",
+    "key": "current_project",
+    "value": "speech-to-text infrastructure",
+    "created_at": "2026-08-10T01:50:12.833811+00:00"
+  }
+]
