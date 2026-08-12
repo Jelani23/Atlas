@@ -161,7 +161,9 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                         // Check for sentence boundaries (. ! ? or newline)
                         if (/[.!?](\s|$)|\n/.test(sentenceBuffer)) {
                             const cleanText = prepareForTTS(sentenceBuffer.trim());
-                            ttsManager.enqueue(sentenceBuffer.trim(), { requestId });
+                            if (cleanText) {
+                                ttsManager.enqueue(cleanText, { requestId });
+                            }
                             sentenceBuffer = ''; // Clear buffer
                         }
                     }

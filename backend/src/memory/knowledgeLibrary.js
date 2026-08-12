@@ -13,6 +13,7 @@ async function addKnowledge({ subject, key, value }) {
     if (error) {
         throw new Error(`Failed to save knowledge: ${error.message}`);
     }
+
     return true;
 }
 
@@ -25,13 +26,13 @@ async function getAll() {
         console.error('Failed to load knowledge library:', error.message);
         return [];
     }
+
     return data;
 }
 
 async function search(query) {
-    // Postgres or() with ilike gives the same "match subject OR key OR value"
-    // behavior the old Array.filter() had.
     const pattern = `%${query}%`;
+
     const { data, error } = await supabase
         .from('knowledge_library')
         .select('subject, key, value, updated_at')
@@ -41,7 +42,31 @@ async function search(query) {
         console.error('Failed to search knowledge library:', error.message);
         return [];
     }
+
     return data;
 }
 
-module.exports = { addKnowledge, getAll, search };
+/**
+ * Find the canonical knowledge entry for a subject/key pair.
+ */
+async function find(subject, key) {
+    const { data, error } = await supabase
+        .from('knowledge_library')
+        .select('id, subject, key, value, updated_at')
+        .eq('subject', subject || 'general')
+        .eq('key', key)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to find knowledge memory: ${error.message}`);
+    }
+
+    return data || null;
+}
+
+module.exports = {
+    addKnowledge,
+    getAll,
+    search,
+    find
+};

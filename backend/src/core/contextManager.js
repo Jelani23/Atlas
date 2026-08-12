@@ -93,18 +93,15 @@ async function getRelevantContext(userInput, history, intent) {
     const currentStateObj = stateScored.find(s => s.key === 'current_project');
     const currentProjectSubject = currentStateObj ? currentStateObj.value.toLowerCase() : null;
 
-    // Phase 3C.3: Hot-Swap Project State
+    // Phase 3C.3: Resolve active project memory
+    // Project-specific state stays inside project_memory.
+    // current_project is only a pointer used to select the active project's memories.
+    let activeProjectState = [];
+
     if (currentProjectSubject) {
-        const activeProjectState = projectsIdx
+        activeProjectState = projectsIdx
             .filter(item => item.data.subject?.toLowerCase() === currentProjectSubject)
             .map(item => scoreAndBoost('project_memory', item, keywords));
-        
-        // Find phase and task in the active project's memory and inject them into the User State
-        const activePhase = activeProjectState.find(p => p.key === 'current_phase');
-        const activeTask = activeProjectState.find(p => p.key === 'current_task');
-        
-        if (activePhase) stateScored.push(activePhase);
-        if (activeTask) stateScored.push(activeTask);
     }
 
     // 2. Essentials: Score them, force-include up to 300 tokens
@@ -115,15 +112,23 @@ async function getRelevantContext(userInput, history, intent) {
     let dynamicPersonalScored = dynamicPersonal.map(item => scoreAndBoost('user_profile', item, keywords))
         .filter(m => m._relevanceScore > 0 || isAskingAboutSelf);
         
-    // 4. Projects: Resolve via state pointer, OR keyword match, OR if asking about self
-    let projectScored = projectsIdx.map(item => scoreAndBoost('project_memory', item, keywords));
-    
-    // Filter: Include if it belongs to the ACTIVE project, OR if it matched keywords explicitly, OR if asking about self
-    let filteredProjects = projectScored.filter(m => 
-        (currentProjectSubject && m.subject === currentProjectSubject) || 
-        m._relevanceScore > 0 || 
-        isAskingAboutSelf
+    // 4. Projects: Resolve via active project pointer, keyword relevance,
+    // or explicit memory/self questions.
+    let projectScored = projectsIdx.map(item =>
+        scoreAndBoost('project_memory', item, keywords)
     );
+
+    let filteredProjects = projectScored.filter(m => {
+        const isActiveProject =
+            currentProjectSubject &&
+            m.subject?.toLowerCase() === currentProjectSubject;
+
+        return (
+            isActiveProject ||
+            m._relevanceScore > 0 ||
+            isAskingAboutSelf
+        );
+    });
         
     let knowledgeScored = knowledgeIdx.map(item => scoreAndBoost('knowledge_library', item, keywords))
         .filter(k => k._relevanceScore > 0 || knowledgeIdx.length <= 3);
@@ -177,7 +182,7 @@ async function getRelevantContext(userInput, history, intent) {
 
     return {
         hotState: memoryCache.getHotState(),
-        state: stateScored, // Return state separately
+        state: stateScored,
         personal: personalAlloc.selected,
         projects: projectAlloc.selected,
         knowledge: knowledgeAlloc.selected,

@@ -3,7 +3,7 @@ const supabase = require('../database/supabaseClient');
 async function get(category = null) {
     let query = supabase
         .from('user_profile')
-        .select('category, key, value, confidence')
+        .select('id, category, key, value, confidence, created_at, updated_at')
         .order('updated_at', { ascending: false });
 
     if (category) {
@@ -11,10 +11,12 @@ async function get(category = null) {
     }
 
     const { data, error } = await query;
+
     if (error) {
         console.error('Failed to load long-term profile:', error.message);
         return [];
     }
+
     return data;
 }
 
@@ -30,9 +32,25 @@ async function getContextString(category = null) {
         .join('\n');
 }
 
+/**
+ * Find the canonical profile memory for a category/key pair.
+ */
+async function find(category, key) {
+    const { data, error } = await supabase
+        .from('user_profile')
+        .select('id, category, key, value, confidence, created_at, updated_at')
+        .eq('category', category)
+        .eq('key', key)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to find long-term profile memory: ${error.message}`);
+    }
+
+    return data || null;
+}
+
 async function update(observation) {
-    // Same upsert-by-(category, key) semantics as before, now enforced by the
-    // unique(category, key) constraint in the Supabase schema.
     const { error } = await supabase
         .from('user_profile')
         .upsert({
@@ -52,5 +70,6 @@ async function update(observation) {
 module.exports = {
     get,
     getContextString,
+    find,
     update
 };
