@@ -10,9 +10,10 @@ import { HomeView } from "./home-view"
 import { TitleBarControls } from "./title-bar-controls"
 import { type AtlasState } from "./atlas-state"
 import type { AtlasEvent } from "@/lib/atlas-events"
-import { attachAudioElement, setPlaying as setSpeechPlaying } from "@/lib/audio-level"
+import { attachAudioElement, setPlaying as setSpeechPlaying, setVisemeSource } from "@/lib/audio-level"
 import { setEmotion } from "@/lib/emotion"
 import { emotionState } from "@/lib/emotion"
+import type { PhonemeTimestamp } from "@/lib/visemes"
 
 if (typeof window !== "undefined") {
   ;(window as unknown as { aliceEmotion?: typeof setEmotion }).aliceEmotion = setEmotion
@@ -86,6 +87,13 @@ export function AtlasApp() {
   
   // Used now ONLY as a fallback for text-only responses (when no audio arrives)
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Grace period before dropping to "idle" once the audio queue empties.
+  // TTS synthesis lags behind text generation, so the queue legitimately
+  // goes empty for short stretches *between* chunks of the same reply —
+  // without this, the cloud flips to idle mid-speech the first time that
+  // happens and nothing ever sets it back to "speaking" (only token
+  // streaming did that, and by then text streaming is long finished).
+  const audioIdleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const activeRequestIdRef = useRef<string | null>(null) // Phase 11.6: Track active request
   const isGeneratingRef = useRef(false) // Phase 11.7: Track if backend is still generating response
 
@@ -138,12 +146,19 @@ export function AtlasApp() {
       if ((event.type as string) === "atlas.audio_chunk") {
         const audioBase64 = typeof event.payload?.audio === "string" ? event.payload.audio : ""
         const reqId = typeof event.payload?.requestId === "string" ? event.payload.requestId : null
-        
+        // Optional per-chunk phoneme timestamps for lip-sync (see
+        // hooks/useAudioViseme.ts). No current TTS provider sends this yet
+        // — see "Required Backend Changes" — so this is undefined today and
+        // AliceCloud's viseme-shape blending stays a no-op until it isn't.
+        const phonemes = Array.isArray(event.payload?.phonemes)
+          ? (event.payload.phonemes as PhonemeTimestamp[])
+          : undefined
+
         // Phase 11.6: Ignore audio from old interrupted requests
         if (audioBase64 && reqId === activeRequestIdRef.current) {
           // Audio arrived! Cancel the text-only fallback timer.
           clearTimeout(settleTimer.current)
-          queueAudio(audioBase64)
+          queueAudio(audioBase64, phonemes)
         }
       }
       
@@ -202,34 +217,67 @@ export function AtlasApp() {
     }
   }, [])
 
-  useEffect(() => () => clearTimeout(settleTimer.current), [])
+  useEffect(() => () => {
+    clearTimeout(settleTimer.current)
+    clearTimeout(audioIdleTimer.current)
+  }, [])
 
   // 10G: Audio Queue & Playback Manager (Now drives the UI State!)
-  const audioQueueRef = useRef<string[]>([])
+  interface QueuedAudioChunk {
+    audio: string
+    /** Optional lip-sync timestamps for this chunk — see setVisemeSource(). */
+    phonemes?: PhonemeTimestamp[]
+  }
+  const audioQueueRef = useRef<QueuedAudioChunk[]>([])
   const isPlayingRef = useRef(false)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // How long we tolerate an empty queue before actually calling it "idle".
+  // TTS synthesis for the next sentence chunk can easily take longer than
+  // this to arrive even mid-reply, so this is a real gap, not a hair
+  // trigger — just enough to smooth over the normal chunk-to-chunk lag.
+  const AUDIO_IDLE_GRACE_MS = 600
 
   const playNextAudio = useCallback(() => {
     if (audioQueueRef.current.length === 0) {
       isPlayingRef.current = false
       currentAudioRef.current = null
       setSpeechPlaying(false)
+      setVisemeSource(null)
       
       // Phase 11.7: Only transition to IDLE if the backend is finished generating 
       // AND the audio queue is truly empty. Prevents UI flicker between streamed TTS chunks.
+      //
+      // But "queue is empty right now" isn't the same as "speech is over" —
+      // the backend can still be synthesizing the next chunk. Wait out a
+      // short grace window (cancelled the instant another chunk starts
+      // playing, below) before actually dropping to idle, so a normal
+      // synthesis gap mid-reply doesn't strand the cloud in idle's slow
+      // ambient motion for the remainder of the speech.
       if (!isGeneratingRef.current) {
-        setState("idle")
+        clearTimeout(audioIdleTimer.current)
+        audioIdleTimer.current = setTimeout(() => {
+          if (!isPlayingRef.current) setState("idle")
+        }, AUDIO_IDLE_GRACE_MS)
       }
       return
     }
 
+    clearTimeout(audioIdleTimer.current)
+    // Audio actually starting is what "speaking" means, full stop — not a
+    // proxy inferred from token-streaming having happened at some earlier
+    // point. This is what lets the cloud recover into "speaking" (with its
+    // punch-transition bounce) even if it briefly dropped to idle above.
+    setState("speaking")
+
     isPlayingRef.current = true
-    const audioBase64 = audioQueueRef.current.shift()
+    const chunk = audioQueueRef.current.shift()!
     
-    const audio = new Audio(audioBase64)
+    const audio = new Audio(chunk.audio)
     currentAudioRef.current = audio
     
     attachAudioElement(audio)
+    setVisemeSource(audio, chunk.phonemes)
     setSpeechPlaying(true)
     
     audio.onended = () => {
@@ -250,8 +298,8 @@ export function AtlasApp() {
     })
   }, [])
 
-  const queueAudio = useCallback((audioBase64: string) => {
-    audioQueueRef.current.push(audioBase64)
+  const queueAudio = useCallback((audioBase64: string, phonemes?: PhonemeTimestamp[]) => {
+    audioQueueRef.current.push({ audio: audioBase64, phonemes })
     // If we weren't already playing, kick off the queue. 
     // The state transition to "speaking" happens inside playNextAudio when audio actually starts.
     if (!isPlayingRef.current) {
@@ -262,6 +310,7 @@ export function AtlasApp() {
   // Phase 10.1: Systemic audio cancellation
   const stopAudioPlayback = useCallback(() => {
     audioQueueRef.current = [] // Clear pending chunks
+    clearTimeout(audioIdleTimer.current)
     if (currentAudioRef.current) {
       currentAudioRef.current.onended = null
       currentAudioRef.current.onerror = null
@@ -271,6 +320,7 @@ export function AtlasApp() {
     }
     isPlayingRef.current = false
     setSpeechPlaying(false)
+    setVisemeSource(null)
   }, [])
 
   const runFlow = useCallback(async (userText: string) => {

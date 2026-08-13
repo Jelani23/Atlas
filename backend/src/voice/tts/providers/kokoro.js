@@ -2,6 +2,8 @@
 const fs = require('fs');
 const config = require('../ttsConfig');
 const kokoroProcess = require('./kokoroProcess');
+const { getWavDurationSeconds } = require('../wavUtils');
+const { estimateTimeline } = require('../phonemeEstimator');
 
 async function synthesize(text, options = {}) {
     const voice = options.voice || config.voice;
@@ -63,9 +65,25 @@ async function synthesize(text, options = {}) {
     if (!fs.existsSync(audioPath)) throw new Error(`Kokoro audio file not found at: ${audioPath}`);
     
     const audioBuffer = fs.readFileSync(audioPath);
+
+    // Lip-sync (Option A): estimate a phoneme timeline for this chunk,
+    // scaled to its real measured duration. Kokoro doesn't return phoneme
+    // timing itself, so this is a heuristic approximation — see
+    // phonemeEstimator.js for the full rationale. Never let a failure here
+    // break audio playback: no timeline just means the frontend falls back
+    // to amplitude-only lip-sync (Option B), which already works today.
+    let phonemes = [];
+    try {
+        const durationSeconds = getWavDurationSeconds(audioBuffer);
+        phonemes = estimateTimeline(text, durationSeconds);
+    } catch (e) {
+        console.warn('[Kokoro] Phoneme timeline estimation failed, continuing without it:', e.message);
+    }
+
     return {
         buffer: audioBuffer,
-        format: 'wav'
+        format: 'wav',
+        phonemes,
     };
 }
 

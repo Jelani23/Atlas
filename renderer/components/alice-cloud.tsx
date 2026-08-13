@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react"
 import { type AtlasState, STATE_PROFILE, type StateProfile } from "./atlas-state"
 import { speechLevel } from "@/lib/audio-level"
 import { EMOTION_PROFILE, emotionState, updateEmotion } from "@/lib/emotion"
+import { useAudioViseme } from "@/hooks/useAudioViseme"
+import { NEUTRAL_SHAPE } from "@/lib/visemes"
 
 interface Lobe {
   x: number
@@ -68,6 +70,14 @@ export function AliceCloud({ state }: { state: AtlasState }) {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Live viseme shape (openness/width/roundness) driven by phoneme
+  // timestamps when available, plus the amplitude signal already used
+  // below for `liveLevel`. See lib/visemes.ts and lib/audio-level.ts for
+  // how these are produced, and hooks/useAudioViseme.ts for why this is a
+  // ref-returning hook rather than React state (read every animation
+  // frame inside the canvas loop below, not rendered as text).
+  const { shape: visemeShapeRef } = useAudioViseme()
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -251,6 +261,23 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       const easeRate = followingAudio ? 0.35 : speechTarget > speechEnv ? 0.16 : 0.06
       speechEnv = lerp(speechEnv, speechTarget, easeRate)
 
+      // --- hybrid lip-sync: viseme SHAPE x live AMPLITUDE ---
+      // `visemeShapeRef.current` is which sound Alice is "making" right now
+      // (openness/width/roundness, from phoneme timestamps — see
+      // lib/visemes.ts); `liveLevel` is how loud she's making it right now
+      // (Web Audio analyser amplitude, same signal driving speechEnv above).
+      // Shape picks the direction of the bias, amplitude scales how much of
+      // it shows — a quiet "aa" barely moves, a loud one opens up.
+      // NEUTRAL_SHAPE (the fallback when no phoneme timestamps exist for
+      // the current chunk — true for every TTS provider wired up today)
+      // sits exactly at these bias midpoints, so all three biases resolve
+      // to 0 and this whole block is a no-op until phoneme data shows up.
+      const vShape = visemeShapeRef.current
+      const visemeStrength = followingAudio ? liveLevel : 0
+      const openBias = (vShape.openness - NEUTRAL_SHAPE.openness) * visemeStrength * 0.5
+      const widthBias = (vShape.width - NEUTRAL_SHAPE.width) * visemeStrength * 0.35
+      const roundBias = (vShape.roundness - NEUTRAL_SHAPE.roundness) * visemeStrength * 0.22
+
       // whole-cloud breathing — fast/big enough to read as an actively
       // "alive" character rather than a slow ambient drift.
       const breathe = 1 + Math.sin(t * 1.8) * cur.breath * breathMult * 1.6
@@ -259,12 +286,13 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       // Speech is deliberately the biggest single contributor here — this
       // is what makes Alice's body pulse with her actual voice rather than
       // just doing one bounce when speaking starts and coasting after.
-      const stretch = speechEnv * 0.32 + emo.squash * emoRaw + punchVal * 0.11
+      const stretch = speechEnv * 1 + emo.squash * emoRaw + punchVal * 0.11 + openBias
       // a quick secondary pulse layered on top, phase-locked to speechEnv
       // rather than a fixed clock, so it only ever moves when there's
-      // actually something to react to
+      // actually something to react to. Rounder visemes (o/u) get a touch
+      // more pulse — reads as the pursed-lip "pop" those sounds have.
       const talkPulse = isSpeaking
-        ? Math.sin(elapsed * 13) * speechEnv * speechEnv * 0.05
+        ? Math.sin(elapsed * 13) * speechEnv * speechEnv * (0.05 + roundBias * 0.3)
         : 0
 
       // --- jello wobble: squash/stretch that keeps Alice bouncing and
@@ -279,7 +307,10 @@ export function AliceCloud({ state }: { state: AtlasState }) {
 
       const R = baseR * breathe * (1 + talkPulse)
       const Ry = R * (1 + stretch + wobbleY)
-      const Rx = R * (1 - stretch * 0.35 + wobbleX)
+      // width bias widens/narrows independent of the openness-driven
+      // squash above; roundness pulls the opposite way (rounded visemes
+      // like "O"/"U" read as narrower + taller, not wider)
+      const Rx = R * (1 - stretch * 0.35 + wobbleX + widthBias - roundBias * 0.4)
       // sinks Alice's center of mass for sad/angry-hunch, lifts it for
       // happy/surprise — applied once here so the halo, rays and body all
       // move together instead of drifting apart

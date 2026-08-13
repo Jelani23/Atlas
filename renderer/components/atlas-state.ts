@@ -96,7 +96,7 @@ export const STATE_PROFILE: Record<AtlasState, StateProfile> = {
     speed: 0.85,
     drift: 1.1,
     breath: 0.08,
-    speech: 1,
+    speech: 3,
     wisp: 0.55,
     particles: 0.52,
     glow: 0.85,

@@ -51,7 +51,12 @@ class TtsQueue {
                     const audioBase64 = `data:audio/${result.format};base64,${result.buffer.toString('base64')}`;
                     eventBus.emit(EventTypes.TTS_AUDIO_CHUNK, { 
                         requestId: item.requestId, 
-                        audio: audioBase64 
+                        audio: audioBase64,
+                        // Lip-sync timeline for this chunk, if the provider
+                        // produced one (see providers/kokoro.js). Always an
+                        // array — empty when unavailable, so downstream
+                        // consumers never need an extra undefined check.
+                        phonemes: Array.isArray(result.phonemes) ? result.phonemes : [],
                     });
                 } else {
                     console.log(`[TTSQueue] Synthesis completed for stale request ${item.requestId}, discarding.`);
