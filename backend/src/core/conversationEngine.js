@@ -210,7 +210,13 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 try {
                     // Phase 3C.4 (Step 2): Memory Eligibility Filter
                     const { checkEligibility } = require('../memory/memoryEligibility');
-                    const eligibility = checkEligibility(userInput);
+                    const eligibility = await checkEligibility(userInput);
+                    console.log('[MemoryEligibility DEBUG] Result:', eligibility);
+                    console.log('[MemoryEligibility DEBUG] Type:', typeof eligibility);
+                    console.log(
+                        '[MemoryEligibility DEBUG] Module:',
+                        require.resolve('../memory/memoryEligibility')
+                    );
                     
                     console.log(`[MemoryEligibility] Score: ${eligibility.score} | Decision: ${eligibility.eligible ? 'EXTRACT' : 'SKIP'} | Reason: ${eligibility.reason}`);
                     

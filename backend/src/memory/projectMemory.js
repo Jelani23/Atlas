@@ -3,11 +3,13 @@ const supabase = require('../database/supabaseClient');
 async function update(memoryData) {
     const { error } = await supabase
         .from('project_memory')
-        .insert({
+        .upsert({
             project_key: memoryData.project_key,
             subject: memoryData.subject || 'general',
             key: memoryData.key,
             value: memoryData.value
+        }, {
+            onConflict: 'project_key,key'
         });
 
     if (error) {

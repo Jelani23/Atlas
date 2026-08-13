@@ -11,6 +11,22 @@ function normalizeProjectName(name) {
         .trim();
 }
 
+function normalizeMemoryValue(value) {
+    return value
+        .replace(/[.!?]+$/, '')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function normalizeMemoryKey(value) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s_-]/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/-+/g, '_');
+}
+
 async function extract(message) {
     console.log('[DeterministicExtractor] INPUT:', JSON.stringify(message));
 
@@ -62,7 +78,6 @@ async function extract(message) {
 
     // 3. Pattern: "I am working on [X]" / "I'm working on [X]"
     // This represents USER STATE, not project memory.
-    // The project name is resolved through the project registry.
     const workMatch = message.match(
         /i(?:'m| am)\s+(?:(?:currently|back|still)\s+)?(?:working on|working with)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i
     );
@@ -82,6 +97,58 @@ async function extract(message) {
                     value: result.project.project_key,
                     confidence: 0.90
                 });
+            }
+        }
+    }
+
+    // 4. Project Fact Fast Path
+    //
+    // Examples:
+    // "Bindex uses email verification"
+    // "Bindex requires email verification"
+    // "Bindex supports shared binders"
+    // "Bindex includes a wishlist"
+    // "Bindex has a Stripe integration"
+    // "Bindex connects to Supabase"
+    // "Bindex is built with Electron"
+    // "Bindex depends on the TCG API"
+    // "Bindex runs on Vercel"
+    // "Bindex works with Scrydex"
+    //
+    // IMPORTANT:
+    // We only treat the first phrase as the project name if it resolves
+    // to a registered project. This prevents arbitrary sentences from
+    // becoming project memories.
+
+    const projectFactMatch = message.match(
+        /^(?:the\s+)?(.+?)\s+(uses|requires|supports|includes|has|connects to|connects with|is built with|is built using|depends on|runs on|works with)\s+(.+?)(?:[.!?]|$)/i
+    );
+
+    if (projectFactMatch) {
+        const requestedName = normalizeProjectName(projectFactMatch[1]);
+        const factVerb = projectFactMatch[2].toLowerCase().trim();
+        const rawValue = normalizeMemoryValue(projectFactMatch[3]);
+
+        if (requestedName && rawValue) {
+            const result = await projectResolver.resolveProject(requestedName);
+
+            if (result.type === 'existing_project') {
+                const project = result.project;
+
+                const factKey = `${factVerb.replace(/\s+/g, '_')}_${normalizeMemoryKey(rawValue)}`;
+
+                memories.push({
+                    shouldRemember: true,
+                    category: 'project',
+                    subject: project.project_key,
+                    key: factKey,
+                    value: rawValue,
+                    confidence: 0.95
+                });
+
+                console.log(
+                    `[DeterministicExtractor] Project fact detected: ${project.project_key} | ${factKey} | ${rawValue}`
+                );
             }
         }
     }

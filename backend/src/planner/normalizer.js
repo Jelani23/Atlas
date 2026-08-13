@@ -167,7 +167,15 @@ function fastRegexNormalizer(message) {
     }
 
 
-    if (lowerMessage.includes('write') || lowerMessage.includes('save') || lowerMessage.includes('create') || lowerMessage.includes('take note') || lowerMessage.includes('jot down')) {
+        if (
+            lowerMessage.includes('take a note') ||
+            lowerMessage.includes('take note') ||
+            lowerMessage.includes('jot down') ||
+            lowerMessage.includes('write down') ||
+            lowerMessage.includes('save a note') ||
+            lowerMessage.includes('save note') ||
+            lowerMessage.includes('create a note')
+        ) {
         const fileMatch = message.match(/(?:named|called|note|file)\s+(.+?)(?:\s+saying|\s+with|\s+that\s\says|\?|$)/i);
         const contentMatch = message.match(/(?:saying|with|that says|to say|to add|to include|add in|include|add another line saying|add a line saying)\s+(.*)/i);
         return { intent: 'create_note', filename: fileMatch ? fileMatch[1].trim() : null, content: contentMatch ? contentMatch[1].trim() : message };
