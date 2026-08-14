@@ -12,25 +12,15 @@ async function findExistingMemory(memory) {
 
     switch (category) {
         case 'project': {
-            const projectResult = await projectResolver.resolveProject(subject);
-
-            if (projectResult.type !== 'existing_project') {
+            if (!memory.project_key || !memory.subject || !memory.key) {
                 return null;
             }
 
-            const memories = await projectMemory.get(
-                projectResult.project.project_key
+            return await projectMemory.getByIdentity(
+                memory.project_key,
+                memory.subject,
+                memory.key
             );
-
-            const normalizedKey = String(memory.key || '')
-                .trim()
-                .toLowerCase();
-
-            return memories.find(existing =>
-                String(existing.key || '')
-                    .trim()
-                    .toLowerCase() === normalizedKey
-            ) || null;
         }
 
         case 'knowledge':
@@ -110,8 +100,29 @@ async function handleMemoryAction(extractedMemories) {
         }
 
         try {
-            const existingMemory = await findExistingMemory(memory);
+            if (memory.category === 'project') {
+                const projectResult = await projectResolver.resolveProject(
+                    memory.project_key ||
+                    memory.subject
+                );
 
+                if (projectResult.type !== 'existing_project') {
+                    console.log(
+                        `[MemoryManager] 🚫 Rejected project memory for unknown project "${memory.project_key || memory.subject}".`
+                    );
+
+                    ignored.push({
+                        memory,
+                        reason: 'Project is not registered in the project registry.'
+                    });
+
+                    continue;
+                }
+
+                memory.project_key = projectResult.project.project_key;
+            }
+
+            const existingMemory = await findExistingMemory(memory);
             const decision = memoryDeduplicator.determineAction(
                 memory,
                 existingMemory
@@ -140,33 +151,34 @@ async function handleMemoryAction(extractedMemories) {
 
             if (decision.action === 'insert' || decision.action === 'update') {
                 if (memory.category === 'project') {
-                    const projectResult = await projectResolver.resolveProject(
-                        memory.subject
-                    );
+                    const projectKey = memory.project_key;
 
-                    if (projectResult.type !== 'existing_project') {
+                    if (!projectKey) {
                         console.log(
-                            `[MemoryManager] 🚫 Rejected project memory for unknown project "${memory.subject}".`
+                            `[MemoryManager] 🚫 Rejected project memory without project_key.`
                         );
 
                         ignored.push({
                             memory,
-                            reason: 'Project is not registered in the project registry.'
+                            reason: 'Project memory is missing project_key.'
                         });
 
                         continue;
                     }
 
-                    const projectKey = projectResult.project.project_key;
-
                     await projectMemory.update({
                         project_key: projectKey,
-                        subject: projectResult.project.name,
+                        subject: memory.subject || 'general',
+                        topics: Array.isArray(memory.topics)
+                            ? memory.topics
+                            : [],
                         key: memory.key,
-                        value: memory.value
+                        value: memory.value,
+                        confidence: memory.confidence || 1.0
                     });
 
                     memoryCache.invalidate('project_memory');
+
                     savedMemories.push({
                         ...memory,
                         project_key: projectKey

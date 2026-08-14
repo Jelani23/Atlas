@@ -3,6 +3,7 @@ const { createModelAdapter } = require('../models/modelAdapter');
 const modelRouter = require('../models/modelRouter');
 const planner = require('../planner/planner');
 const memoryExtractor = require('../memory/memoryExtractor');
+const semanticEnricher = require('../memory/semanticEnricher');
 const reasoningController = require('../reasoning/controller');
 const { resolve } = require('../intent/intentResolver');
 const responseController = require('../response/controller');
@@ -199,10 +200,14 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
 
-        // 6. Background Memory Extraction (Non-blocking, linked to parent)
-        // MUST be registered BEFORE REQUEST_COMPLETED fires, otherwise the task 
-        // manager will queue it but never release it because the release event already happened.
-        if (!toolResult.needsTool) {
+            // 6. Background Memory Extraction (Non-blocking, linked to parent)
+            //
+            // Memory extraction is intentionally independent of tool routing.
+            // A request may require clarification, a tool, or another action
+            // while still containing information worth remembering.
+            //
+            // The eligibility filter is responsible for deciding whether the
+            // message should actually be extracted.
             taskManager.createTask('memory_extraction', async () => {
                 console.time("[MemoryExtraction_BG] Total Time");
                 console.log("[MemoryExtraction_BG] Task started...");
@@ -227,28 +232,69 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
                     // Phase 3C.4 (Step 4): Deterministic Fast-Path
                     const deterministic = require('../memory/deterministicExtractor');
+
                     let extracted = await deterministic.extract(userInput);
-                    
+
                     if (extracted.deterministic) {
-                        console.log(`[MemoryExtraction_BG] Deterministic hit! Skipping LLM.`);
-                        // Skip the LLM, go straight to save
+                        console.log(
+                            `[MemoryExtraction_BG] Deterministic hit!`
+                        );
+
+                        if (extracted.deterministic) {
+                            console.log(
+                                `[MemoryExtraction_BG] Deterministic hit!`
+                            );
+
+                            console.time(
+                                "[MemoryExtraction_BG] Semantic Enrichment"
+                            );
+
+                            extracted.memories =
+                                await semanticEnricher.enrichMemories(
+                                    extracted.memories
+                                );
+
+                            console.timeEnd(
+                                "[MemoryExtraction_BG] Semantic Enrichment"
+                            );
+                        }
+
                     } else {
                         console.time("[MemoryExtraction_BG] LLM Extraction");
-                        extracted = await memoryExtractor.extractMemory(userInput, workingContext);
+
+                        extracted =
+                            await memoryExtractor.extractMemory(
+                                userInput,
+                                workingContext
+                            );
+
                         console.timeEnd("[MemoryExtraction_BG] LLM Extraction");
                     }
                     
                     const extractedMemory = extracted.memories || [];
                     const conversationUpdate = extracted.conversation_update || {};
-                    
-                    console.log(`[MemoryExtraction_BG] Extracted for "${userInput}":`, JSON.stringify(extractedMemory, null, 2));
-                    
-                    console.time("[MemoryExtraction_BG] DB Save");
-                    const saveResult = await memoryManager.handleMemoryAction(extractedMemory);
-                    console.timeEnd("[MemoryExtraction_BG] DB Save");
-                    
-                    console.log(`[MemoryExtraction_BG] Save Result:`, saveResult.action);
 
+                    console.log(
+                        `[MemoryExtraction_BG] Extracted for "${userInput}":`,
+                        JSON.stringify(extractedMemory, null, 2)
+                    );
+
+                    let memoriesToSave = extractedMemory;
+
+                    console.time("[MemoryExtraction_BG] DB Save");
+
+                    const saveResult =
+                        await memoryManager.handleMemoryAction(
+                            memoriesToSave
+                        );
+
+                    console.timeEnd("[MemoryExtraction_BG] DB Save");
+
+                    console.log(
+                        `[MemoryExtraction_BG] Save Result:`,
+                        saveResult.action
+                    );
+                    
                     // Phase 3C.2: Update rolling working context
                     if (Object.keys(conversationUpdate).length > 0) {
                         const newContext = { ...workingContext, ...conversationUpdate };
@@ -261,8 +307,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 
                 console.timeEnd("[MemoryExtraction_BG] Total Time");
                 return null;
-            }, taskId, requestId, 'NORMAL');
-        }
+        }, taskId, requestId, 'NORMAL');
 
         // 5. Emit Request Completed (This triggers the task manager to run the background task)
         taskManager.endRequest(taskId);

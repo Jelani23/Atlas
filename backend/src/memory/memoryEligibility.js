@@ -149,6 +149,25 @@ const SIGNALS = {
             'handles',
             'processes',
             'communicates with',
+
+            // Structural / ownership / location relationships
+            'manages',
+            'controls',
+            'performs',
+            'runs',
+            'builds',
+            'creates',
+            'updates',
+            'retrieves',
+            'loads',
+            'saves',
+            'lives',
+            'is located',
+            'is found',
+            'can be found',
+            'is responsible for',
+            'consists of',
+            'is made up of',
             'integrates with',
             'integrates into',
             'relies on',
@@ -165,7 +184,33 @@ const SIGNALS = {
             'only allows',
             'is required',
             'is necessary',
-            'is needed'
+            'is needed',
+
+            // Observation / report structures
+            'shows',
+            'show',
+            'confirms',
+            'confirm',
+            'indicates',
+            'indicate',
+            'reveals',
+            'reveal',
+            'reports',
+            'report',
+            'demonstrates',
+            'demonstrate',
+
+            // Project observation subjects
+            'logs',
+            'tests',
+            'test results',
+            'test output',
+            'console output',
+            'results',
+            'performance report',
+            'benchmark',
+            'benchmarks',
+            'metrics'
         ]
     }
 };
@@ -261,7 +306,32 @@ async function checkEligibility(message) {
         phrase => lowerMsg.includes(phrase)
     );
 
-    if (matchedProject && hasProjectFact) {
+    const hasStrongProjectFact =
+        matchedProject &&
+        [
+            'uses',
+            'requires',
+            'supports',
+            'includes',
+            'has',
+            'depends on',
+            'runs on',
+            'works with',
+            'relies on',
+            'is configured with',
+            'is configured to',
+            'is built with',
+            'is built using',
+            'is implemented with',
+            'is implemented using',
+            'is responsible for',
+            'consists of',
+            'is made up of',
+            'can be found',
+            'is located'
+        ].some(phrase => lowerMsg.includes(phrase));
+
+    if (matchedProject && hasStrongProjectFact) {
         score += 2;
         matchedSignals.push('project_fact_combination');
     }

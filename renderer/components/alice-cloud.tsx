@@ -197,9 +197,16 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       cur.tint[1] = lerp(cur.tint[1], target.tint[1], e)
       cur.tint[2] = lerp(cur.tint[2], target.tint[2], e)
 
-      // kick the transition-punch spring whenever activity changes
+      // kick the transition-punch spring whenever activity changes — except
+      // into "speaking": the audio-reactive pulsing rig below is now
+      // responsible for all of Alice's speaking motion, so the one-off
+      // punch bounce on "TTS just started" would just be a redundant extra
+      // hit on top of it. Every other transition (into/out of thinking,
+      // working, error, etc., and even OUT of speaking) still punches.
       if (stateRef.current !== prevActivity) {
-        punchVel -= 0.9
+        if (stateRef.current !== "speaking") {
+          punchVel -= 0.9
+        }
         prevActivity = stateRef.current
       }
       const punchDt = Math.min(0.05, Math.max(0, (now - lastPunchTick) / 1000)) || 1 / 60
@@ -239,7 +246,9 @@ export function AliceCloud({ state }: { state: AtlasState }) {
 
       const cx = width / 2
       let cy = height / 2
-      const baseR = Math.min(width, height) * 0.32
+      // Overall avatar size. Bump this multiplier (of the shorter viewport
+      // dimension) up/down to make Alice bigger/smaller across the board.
+      const baseR = Math.min(width, height) * 0.38
       const t = prefersReduced ? 0 : elapsed * cur.speed * speedMult
 
       // --- speaking envelope: follows Alice's actual voice ---
@@ -281,18 +290,27 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       // whole-cloud breathing — fast/big enough to read as an actively
       // "alive" character rather than a slow ambient drift.
       const breathe = 1 + Math.sin(t * 1.8) * cur.breath * breathMult * 1.6
-      // speech stretch + the emotion's own squash/stretch + the transition
-      // punch bounce, all layered additively so none of them fight.
-      // Speech is deliberately the biggest single contributor here — this
-      // is what makes Alice's body pulse with her actual voice rather than
-      // just doing one bounce when speaking starts and coasting after.
-      const stretch = speechEnv * 1 + emo.squash * emoRaw + punchVal * 0.11 + openBias
+      // speech STRETCH: the asymmetric part (Ry grows while Rx shrinks,
+      // below) — this is what actually changes Alice's silhouette/aspect
+      // ratio. Kept deliberately modest so she reads as "pulsing" rather
+      // than "morphing" while talking; the emotion system's own squash and
+      // the transition punch still ride on this same term.
+      const stretch = speechEnv * 0.16 + emo.squash * emoRaw + punchVal * 0.11 + openBias * 0.6
+      // speech PULSE: a uniform scale applied equally to both axes (folded
+      // into R below, same as breathe/talkPulse), so this is where most of
+      // "how strong the speaking motion feels" should live — it makes her
+      // visibly expand/contract with her voice without warping her shape.
+      // This is the first knob to reach for if speaking still feels weak;
+      // it's independent of the stretch term above.
+      const speechPulse = 1 + speechEnv * 0.55
       // a quick secondary pulse layered on top, phase-locked to speechEnv
       // rather than a fixed clock, so it only ever moves when there's
-      // actually something to react to. Rounder visemes (o/u) get a touch
-      // more pulse — reads as the pursed-lip "pop" those sounds have.
+      // actually something to react to. Also uniform/symmetric (folded
+      // into R), and boosted a bit for extra punch on top of speechPulse.
+      // Rounder visemes (o/u) get a touch more — reads as the pursed-lip
+      // "pop" those sounds have.
       const talkPulse = isSpeaking
-        ? Math.sin(elapsed * 13) * speechEnv * speechEnv * (0.05 + roundBias * 0.3)
+        ? Math.sin(elapsed * 13) * speechEnv * speechEnv * (0.09 + roundBias * 0.3)
         : 0
 
       // --- jello wobble: squash/stretch that keeps Alice bouncing and
@@ -305,12 +323,16 @@ export function AliceCloud({ state }: { state: AtlasState }) {
       const wobbleX =
         Math.sin(wobblePhase * 0.7 + 1.4) * 0.19 * cur.wobble * wobbleMult * wobbleQuiet
 
-      const R = baseR * breathe * (1 + talkPulse)
+      const R = baseR * breathe * (1 + talkPulse) * speechPulse
       const Ry = R * (1 + stretch + wobbleY)
       // width bias widens/narrows independent of the openness-driven
       // squash above; roundness pulls the opposite way (rounded visemes
-      // like "O"/"U" read as narrower + taller, not wider)
-      const Rx = R * (1 - stretch * 0.35 + wobbleX + widthBias - roundBias * 0.4)
+      // like "O"/"U" read as narrower + taller, not wider). The 0.35 here
+      // used to be the main driver of how "stretchy" speaking looked —
+      // it's now paired with a much smaller `stretch` (above) so this
+      // mostly just keeps Rx from growing in lockstep with Ry rather than
+      // actively pinching her narrow.
+      const Rx = R * (1 - stretch * 0.2 + wobbleX + widthBias - roundBias * 0.4)
       // sinks Alice's center of mass for sad/angry-hunch, lifts it for
       // happy/surprise — applied once here so the halo, rays and body all
       // move together instead of drifting apart

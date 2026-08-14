@@ -106,9 +106,8 @@ function validateMemory(memory) {
  *   duplicate Matching memory exists with the same value.
  *   update    Matching memory exists with a different value and
  *             this memory type supports replacement semantics.
- *   conflict  Matching project memory exists with a different value.
- *             Project conflicts are intentionally preserved until the
- *             project-memory model is redesigned.
+ *   conflict  Reserved for future memory types that require conflict
+ *             preservation rather than replacement.
  *   ignored   Invalid memory.
  */
 function determineAction(memory, existingMemory = null) {
@@ -143,18 +142,6 @@ function determineAction(memory, existingMemory = null) {
             existing: existingMemory,
             identity,
             reason: 'An equivalent memory already exists.'
-        };
-    }
-
-    if (identity.type === 'project') {
-        return {
-            action: 'conflict',
-            memory,
-            existing: existingMemory,
-            identity,
-            reason:
-                'A project memory with the same subject and key already exists with a different value. ' +
-                'Project memory conflicts are preserved until the project-memory model is redesigned.'
         };
     }
 
