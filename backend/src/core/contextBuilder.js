@@ -1,5 +1,4 @@
 // backend/src/core/contextBuilder.js
-const { getStatePrompt } = require('./atlasState');
 const { atlasState } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
@@ -98,7 +97,7 @@ Limitations:
 `;
     }
 
-    const systemPrompt = personalityEngine.getSystemPrompt(mode, policy);
+    const systemPrompt = personalityEngine.getSystemPrompt(mode, policy, responseStyle);
 
     let toolContext = "No tools used.";
     if (toolResult && toolResult.needsTool) {
