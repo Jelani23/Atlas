@@ -190,17 +190,54 @@ async function getWorkingContext(sessionId) {
     return data?.working_context || {};
 }
 
-// Phase 3C.2: Update the rolling conversation working context
-async function updateWorkingContext(sessionId, contextObj) {
-    if (!sessionId) return;
-    const { error } = await supabase
-        .from('sessions')
-        .update({ working_context: contextObj })
-        .eq('id', sessionId);
-    
-    if (error) {
-        console.error('Failed to update working context:', error.message);
+// Phase 3C.2: Atomically merge a rolling conversation working-context delta.
+//
+// IMPORTANT:
+// Callers must provide only the changes they want to make.
+// They must NOT read working_context, merge locally, and write the
+// resulting snapshot back.
+//
+// The database owns the canonical merge so concurrent background
+// tasks cannot overwrite each other's context updates.
+async function mergeWorkingContext(sessionId, contextDelta) {
+    if (!sessionId) {
+        return {};
     }
+
+    if (
+        !contextDelta ||
+        typeof contextDelta !== 'object' ||
+        Array.isArray(contextDelta)
+    ) {
+        console.warn(
+            '[SessionManager] Ignoring invalid working-context delta.'
+        );
+
+        return {};
+    }
+
+    if (Object.keys(contextDelta).length === 0) {
+        return await getWorkingContext(sessionId);
+    }
+
+    const { data, error } = await supabase.rpc(
+        'merge_session_working_context',
+        {
+            p_session_id: sessionId,
+            p_delta: contextDelta
+        }
+    );
+
+    if (error) {
+        console.error(
+            '[SessionManager] Failed to merge working context:',
+            error.message
+        );
+
+        return {};
+    }
+
+    return data || {};
 }
 
 module.exports = {
@@ -213,5 +250,5 @@ module.exports = {
     renameSession,
     pruneEmptySessions,
     getWorkingContext,
-    updateWorkingContext
+    mergeWorkingContext
 };

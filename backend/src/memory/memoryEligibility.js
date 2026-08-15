@@ -24,8 +24,6 @@ const SIGNALS = {
             'my name',
             'i live',
             'my birthday',
-            'i am',
-            "i'm",
             'my favorite',
             'i usually',
             'i always',
@@ -47,7 +45,6 @@ const SIGNALS = {
             'i love',
             'i enjoy',
             'i dislike',
-            'i want',
             "i don't like",
             "i don't want",
             'i would rather',
@@ -145,7 +142,6 @@ const SIGNALS = {
             'provides',
             'contains',
             'stores',
-            'uses',
             'handles',
             'processes',
             'communicates with',
@@ -217,6 +213,15 @@ const SIGNALS = {
 
 const THRESHOLD = 4;
 
+function containsPhrase(message, phrase) {
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    return new RegExp(
+        `\\b${escaped.replace(/\s+/g, '\\s+')}\\b`,
+        'i'
+    ).test(message);
+}
+
 /**
  * Get registered project names and aliases dynamically.
  * This prevents the eligibility system from needing hard-coded
@@ -273,7 +278,7 @@ async function checkEligibility(message) {
 
     for (const [signalName, config] of Object.entries(SIGNALS)) {
         for (const phrase of config.phrases) {
-            if (lowerMsg.includes(phrase)) {
+            if (containsPhrase(message, phrase)) {
                 score += config.weight;
                 matchedSignals.push(signalName);
                 break;
@@ -303,7 +308,7 @@ async function checkEligibility(message) {
     // Project facts become much stronger when they reference an actual
     // registered project.
     const hasProjectFact = SIGNALS.project_fact.phrases.some(
-        phrase => lowerMsg.includes(phrase)
+        phrase => containsPhrase(message, phrase)
     );
 
     const hasStrongProjectFact =
@@ -329,7 +334,7 @@ async function checkEligibility(message) {
             'is made up of',
             'can be found',
             'is located'
-        ].some(phrase => lowerMsg.includes(phrase));
+        ].some(phrase => containsPhrase(message, phrase));
 
     if (matchedProject && hasStrongProjectFact) {
         score += 2;

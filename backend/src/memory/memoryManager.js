@@ -27,7 +27,11 @@ async function findExistingMemory(memory) {
             return await knowledgeLibrary.find(subject, memory.key);
 
         case 'procedure':
-            return await proceduralMemory.find(memory.key);
+            return await proceduralMemory.find(
+                memory.category,
+                memory.subject,
+                memory.key
+            );
 
         case 'identity':
         case 'preference':
@@ -62,10 +66,10 @@ async function handleMemoryAction(extractedMemories) {
     const ignored = [];
 
     for (const memory of extractedMemories) {
-        if (!memory || !memory.shouldRemember) {
+        if (!memory) {
             ignored.push({
                 memory,
-                reason: 'Memory was not marked for storage.'
+                reason: 'Memory is missing.'
             });
             continue;
         }
@@ -219,11 +223,27 @@ async function handleMemoryAction(extractedMemories) {
                 }
 
                 else if (memory.category === 'procedure') {
-                    await proceduralMemory.addProcedure({
-                        trigger: memory.key,
-                        action: memory.value,
-                        context: memory.subject || 'general'
-                    });
+                    const procedureData = {
+                        category: memory.category,
+                        subject: memory.subject || 'general',
+                        topics: Array.isArray(memory.topics)
+                            ? memory.topics
+                            : [],
+                        key: memory.key,
+                        value: memory.value,
+                        trigger: memory.trigger,
+                        action: memory.action,
+                        context: memory.context || 'general',
+                        confidence: memory.confidence ?? 1.0
+                    };
+
+                    if (decision.action === 'insert') {
+                        await proceduralMemory.addProcedure(procedureData);
+                    }
+
+                    else if (decision.action === 'update') {
+                        await proceduralMemory.updateProcedure(procedureData);
+                    }
 
                     memoryCache.invalidate('procedural_memory');
                     savedMemories.push(memory);

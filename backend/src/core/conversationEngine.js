@@ -295,11 +295,21 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                         saveResult.action
                     );
                     
-                    // Phase 3C.2: Update rolling working context
+                    // Phase 3C.2: Atomically merge rolling working-context changes.
+                    //
+                    // conversationUpdate is intentionally treated as a DELTA.
+                    // Do not merge it against the request's workingContext snapshot here.
+                    // That snapshot may already be stale because background memory extraction
+                    // can run concurrently with other requests.
                     if (Object.keys(conversationUpdate).length > 0) {
-                        const newContext = { ...workingContext, ...conversationUpdate };
-                        await sessionManager.updateWorkingContext(sessionId, newContext);
-                        console.log(`[MemoryExtraction_BG] Working Context updated.`);
+                        await sessionManager.mergeWorkingContext(
+                            sessionId,
+                            conversationUpdate
+                        );
+
+                        console.log(
+                            `[MemoryExtraction_BG] Working Context delta merged.`
+                        );
                     }
                 } catch (err) {
                     console.error("[MemoryExtraction_BG] Failed:", err.message);
