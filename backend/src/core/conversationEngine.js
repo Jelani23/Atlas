@@ -18,6 +18,7 @@ const ttsQueue = require('../voice/tts/ttsQueue');
 const ttsManager = require('../voice/tts/ttsManager.js');
 const { prepareForTTS } = require('../voice/tts/speechPreprocessor');
 const sessionManager = require('../memory/sessionManager');
+const memoryCache = require('./memoryCache');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
@@ -38,14 +39,6 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         const intentDuration = Date.now() - intentStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'intent', duration: intentDuration, timestamp: Date.now() });
 
-        const reasoningDepth = reasoningController.getReasoningOptions(intent);
-        const responseStyle = responseController.getResponseStyle(intent);
-
-        let effectiveMode = mode;
-        if (mode === 'auto' || !mode) {
-            effectiveMode = personalityEngine.inferMode(intent);
-        }
-
         const history = await memory.workingMemory.getHistory(sessionId, 4);
         await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
 
@@ -58,6 +51,36 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         const toolResult = await planner.route(intent, userInput, history, taskId, requestId);
         const plannerDuration = Date.now() - plannerStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'planner', duration: plannerDuration, timestamp: Date.now() });
+
+        // Phase: getResponseStyle/getReasoningOptions/inferMode (and
+        // contextBuilder's own "is this memory/search-relevant" checks)
+        // all branch on `intent.intent` being a coarse category string
+        // ('search'/'coding'/'planning'/'memory'/'action'/'conversation').
+        // intentResolver.resolve() never sets that field though - it
+        // returns {state, winner, params, ...}, not {intent: '...'} - so
+        // every one of those switches has silently been falling through
+        // to its default case on every message, including the "search"
+        // response style (the 1-2 sentence cap) that was supposed to
+        // shape search replies. This tags it for the one case this pass's
+        // search-pipeline work actually depends on: once we know the web
+        // search tool genuinely ran, so the "search" branches downstream
+        // engage for real instead of silently defaulting. (The broader
+        // gap - coding/planning/action/memory never getting tagged either
+        // - is real too, but rewiring all of that is a larger change than
+        // this pass covers, and isn't something this pass was asked for.)
+        const ranWebSearch = toolResult.needsTool &&
+            (toolResult.toolName === 'search_web' || toolResult.toolName === 'webSearch');
+        if (ranWebSearch && !intent.intent) {
+            intent.intent = 'search';
+        }
+
+        const reasoningDepth = reasoningController.getReasoningOptions(intent);
+        const responseStyle = responseController.getResponseStyle(intent);
+
+        let effectiveMode = mode;
+        if (mode === 'auto' || !mode) {
+            effectiveMode = personalityEngine.inferMode(intent);
+        }
 
         if (toolResult.needsTool) {
             const failed = typeof toolResult.toolResult === 'string' &&
@@ -318,6 +341,50 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 console.timeEnd("[MemoryExtraction_BG] Total Time");
                 return null;
         }, taskId, requestId, 'NORMAL');
+
+        // 6b. Background Knowledge Extraction from Web Search
+        // (Non-blocking, linked to parent)
+        //
+        // Previously nothing from a search ever made it into
+        // knowledge_library - Alice would have to re-search the same
+        // thing later. This runs only when a real web search executed
+        // this turn (see the `ranWebSearch` tag above), and feeds the
+        // extractor BOTH the synthesized reply just given to the user
+        // and the raw aggregated search material, letting it pull
+        // whichever actually supports a durable fact - see
+        // searchKnowledgeExtractor.js for the full reasoning.
+        if (ranWebSearch) {
+            taskManager.createTask('search_knowledge_extraction', async () => {
+                console.time("[SearchKnowledgeExtraction_BG] Total Time");
+                console.log("[SearchKnowledgeExtraction_BG] Task started...");
+
+                try {
+                    const searchKnowledgeExtractor = require('../memory/searchKnowledgeExtractor');
+
+                    const extractionResult = await searchKnowledgeExtractor.extractAndSaveFromSearch({
+                        query: userInput,
+                        summary: reply,
+                        rawResults: toolResult.toolResult
+                    });
+
+                    console.log(
+                        `[SearchKnowledgeExtraction_BG] Result:`,
+                        extractionResult.saved > 0
+                            ? `Saved ${extractionResult.saved} knowledge memories.`
+                            : `Nothing saved (${extractionResult.reason || extractionResult.error || 'no extractable facts'}).`
+                    );
+
+                    if (extractionResult.saved > 0) {
+                        memoryCache.invalidate('knowledge_library');
+                    }
+                } catch (err) {
+                    console.error("[SearchKnowledgeExtraction_BG] Failed:", err.message);
+                }
+
+                console.timeEnd("[SearchKnowledgeExtraction_BG] Total Time");
+                return null;
+            }, taskId, requestId, 'NORMAL');
+        }
 
         // 5. Emit Request Completed (This triggers the task manager to run the background task)
         taskManager.endRequest(taskId);

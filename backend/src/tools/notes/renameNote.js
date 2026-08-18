@@ -27,7 +27,10 @@ module.exports = {
     intentSchema: {
         name: 'renameNote',
         domain: 'NOTES',
-        triggers: ['rename note', 'rename the'],
+        // Phase: 'rename the' alone was too generic (e.g. "rename the
+        // variable foo to bar" has nothing to do with notes); require
+        // "note" to actually be in the trigger phrase.
+        triggers: ['rename note', 'rename the note'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             const m = message.match(/(?:rename)\s+(?:the\s+)?(?:note\s+)?(.+?)\s+(?:to|as)\s+(?:be\s+)?(.+?)(?:\s+instead|\?|$)/i);

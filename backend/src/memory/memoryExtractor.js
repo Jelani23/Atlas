@@ -1,8 +1,82 @@
 const { createModelAdapter } = require('../models/modelAdapter');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const projectRegistry = require('./projectRegistry');
+const llmQueue = require('./llmQueue');
 
 const modelAdapter = createModelAdapter();
+
+// Ollama's `format` option constrains decoding to a JSON Schema at
+// the token level - the model cannot emit a token that would violate
+// the schema, from the very first token of the response onward. This
+// is the systemic fix for this call reliably returning JSON instead
+// of reasoning-in-prose: `think: false` and the `/no_think` prompt
+// hint below are both just requests the model can (and, on some
+// builds, does) ignore, but schema-constrained decoding can't
+// produce "We are given: ... Steps: 1. " - that string can't be the
+// start of anything matching this schema, so it's structurally
+// blocked rather than merely discouraged. This is deliberately loose
+// (no `required` beyond category/key/value, no `additionalProperties:
+// false`) because which fields are meaningful depends on category -
+// a project memory has no trigger/action, a procedure has no
+// project_key - and that business rule is enforced separately in the
+// parsing code below and in memoryManager's validation. The schema's
+// job is only to guarantee valid, well-typed JSON comes back at all.
+const EXTRACTION_SCHEMA = {
+    type: 'object',
+    properties: {
+        memories: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    category: { type: 'string' },
+                    subject: { type: 'string' },
+                    // Phase: minItems added - same root cause as
+                    // searchKnowledgeExtractor.js's identical schema. Left
+                    // out of `required` deliberately (see the comment above
+                    // this schema on why it's loose) since not every category
+                    // stored via longTermProfile actually persists topics -
+                    // but the model was observed reliably emitting the field
+                    // anyway, just empty, so minItems alone is enough to stop
+                    // that without over-constraining categories that don't
+                    // use it.
+                    topics: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 },
+                    key: { type: 'string' },
+                    value: { type: 'string' },
+                    trigger: { type: 'string' },
+                    action: { type: 'string' },
+                    context: { type: 'string' },
+                    confidence: { type: 'number' },
+                    knowledge_category: { type: 'string' },
+                    type: { type: 'string' },
+                    source: { type: 'string' },
+                    source_type: { type: 'string' }
+                },
+                required: ['category', 'key', 'value']
+            }
+        },
+        conversation_update: {
+            type: 'object',
+            properties: {
+                current_topic: { type: 'string' },
+                recent_decisions: { type: 'array', items: { type: 'string' } }
+            }
+        }
+    },
+    required: ['memories']
+};
+
+// Same deterministic-defaulting rationale as the `type`/`source_type`
+// defaulting below - a code-level fallback in case a model still
+// returns empty topics despite the schema's minItems, so a knowledge
+// memory never actually reaches storage with topics: [].
+function deriveFallbackTopics(memory) {
+    const candidates = [memory.knowledge_category, memory.subject, memory.key]
+        .filter(Boolean)
+        .map(t => String(t).trim().toLowerCase().replace(/\s+/g, '_'))
+        .filter(Boolean);
+    return [...new Set(candidates)];
+}
 
 async function extractMemory(
     message,
@@ -77,25 +151,15 @@ the project as registered.
 `;
 
     const prompt = `
-You are the fallback memory classifier.
+You are Alice's fallback memory classifier. A deterministic
+extractor already ran and found nothing, so look specifically for
+persistent information phrased in a way it wouldn't recognize.
 
-A deterministic memory extractor runs BEFORE you.
-
-If deterministic extraction already recognizes a memory,
-this classifier will not normally be used.
-
-Your job is to detect persistent information that the
-deterministic extractor did NOT recognize.
-
-Determine whether the user's message contains persistent
-information worth storing.
-
-If the message is a question, command, request, conversational
-filler, speculation, or ordinary response with no persistent
-information, return an empty memories array.
+If the message is a question, command, request, filler, speculation,
+or ordinary response with no persistent information, return an
+empty memories array.
 
 CURRENT CONTEXT:
-
 - Active Project: ${workingContext.current_project || 'None'}
 - Current Topic: ${workingContext.current_topic || 'None'}
 
@@ -107,487 +171,183 @@ ${projectContextInstruction}
 USER MESSAGE:
 "${message}"
 
-
 MEMORY CATEGORIES:
-
-project:
-Persistent facts about a specific registered project.
-
-Examples include:
-- architecture
-- implementation details
-- components
-- files
-- dependencies
-- integrations
-- configuration
-- requirements
-- limitations
-- authentication behavior
-- data storage
-- APIs
-- frameworks
-- technologies
-- tests
-- logs
-- performance
-- capabilities
-- project structure
-
-procedure:
-Rules or learned instructions about HOW Alice should perform tasks,
-reason, process information, format responses, or interact with the user.
-
-preference:
-The user's preferred way of receiving information or having something done.
-
-identity:
-Stable information about the user or Alice.
-
-relationship:
-Persistent information about relationships between people,
-Alice, projects, or other entities.
-
-state:
-Current or temporary information that may change over time.
-
-history:
-Important past events, completed work, or previous decisions
-that remain relevant.
-
-knowledge:
-General factual information not specifically about a registered project.
-
-behavior:
-Recurring patterns in the user's behavior that are useful to remember.
-
-
-IMPORTANT PROJECT VS PROCEDURE DISTINCTION:
-
-If the message describes HOW A PROJECT WORKS, use "project".
-
-If the message describes HOW ALICE SHOULD BEHAVE OR PERFORM A TASK,
-use "procedure".
-
-Do not classify a project fact as a procedure simply because the
-fact describes a process.
-
-Examples:
-
-"Bindex uses email verification to create an account"
-→ project
-
-"Bindex requires users to verify their email"
-→ project
-
-"Bindex uses Supabase for authentication"
-→ project
-
-"When helping me create an account, remind me to verify my email"
-→ procedure
-
-"Whenever you give me information, use bullet points"
-→ procedure
-
-"Always summarize long search results before showing them to me"
-→ procedure
-
-"I prefer bullet points"
-→ preference
-
-"The current project is Bindex"
-→ state
-
-
-PROJECT MEMORY STRUCTURE:
-
-Project memories use four semantic layers.
-
-1. subject
-
-A broad semantic domain describing what area of the project
-the memory belongs to.
-
-Examples:
-- memory
-- database
-- authentication
-- frontend
-- backend
-- architecture
-- files
-- features
-- integrations
-- deployment
-- configuration
-- testing
-- logging
-- performance
-- models
-- reasoning
-- voice
-
-Do not use the project name.
-
-Do not invent a highly specific subject for every individual fact.
-
-
-2. topics
-
-2-5 conceptual retrieval terms.
-
-Topics may describe:
-- technologies
-- components
-- files
-- systems
-- behaviors
-- concepts
-- domains
-
-Topics are NOT grammatical relationship words.
-
-Do not use:
-- uses
-- requires
-- supports
-- contains
-- depends_on
-- connects_to
-- because
-- because_of
-
-
-3. key
-
-The canonical identity of the individual fact.
-
-Use concise snake_case.
-
-Good:
-- supabase
-- context_manager
-- email_verification
-- stripe
-- project_database
-- memory_cache
-
-Bad:
-- uses_supabase
-- project_uses_supabase
-- uses_email_verification
-
-The key identifies WHAT the memory is about.
-
-The canonical project-memory identity is:
-
-project_key + subject + key
-
-Topics are retrieval metadata and are NOT part of canonical identity.
-
-
-4. value
-
-The actual information being remembered.
-
-Keep it concise while preserving important meaning.
-
-PROCEDURAL MEMORY STRUCTURE:
-
-Procedural memories represent learned rules about HOW Alice should
-behave, reason, perform tasks, format information, or interact with
-the user.
-
-Procedural memory uses four semantic layers.
-
-1. subject
-
-The broad semantic domain in which the procedure applies.
-
-Examples:
-- response_formatting
-- communication
-- coding
-- explanations
-- research
-- memory
-- reasoning
-- planning
-- interaction
-- workflow
-- preferences
-
-The subject should describe the DOMAIN of the procedure.
-
-Do not use the user's exact sentence as the subject.
-Do not use a project name as the subject unless the procedure is
-explicitly project-specific and the project is part of the intended
-semantic domain.
-
-2. topics
-
-2-5 conceptual retrieval terms that help determine when this
-procedure may be relevant.
-
-Examples:
-- step_by_step
-- technical_explanations
-- beginner_friendly
-- code_examples
-- troubleshooting
-
-Topics are retrieval metadata.
-
-Topics are NOT grammatical relationship words.
-
-Do not use:
-- uses
-- requires
-- supports
-- because
-- should
-- always
-- when
-- whenever
-
-3. key
-
-The canonical identity of the individual procedural rule.
-
-Use concise snake_case.
-
-Good:
-- step_by_step_explanations
-- concise_code_examples
-- explain_reasoning
-- summarize_search_results
-
-Bad:
-- when_explaining_technical_concepts
-- user_wants_step_by_step
-- should_provide_step_by_step_explanations
-
-The key identifies WHAT procedural rule is being remembered.
-
-The canonical procedural-memory identity is:
-
-category + subject + key
-
-Topics are retrieval metadata and are NOT part of canonical identity.
-
-4. value
-
-The canonical procedural rule itself.
-
-Keep it concise, explicit, reusable, and semantically complete.
-
-The value must preserve the important meaning of the user's
-instruction. Canonicalization may normalize wording, but MUST NOT
-remove meaningful behavioral or situational information.
-
-The value should clearly communicate:
-
-- WHAT Alice should do.
-- WHEN or in what situation the behavior applies, when that
-  condition is important to the rule.
-- Any important interaction constraint expressed by the user.
-
-Do not reduce a procedural rule to a vague label or summary.
-
-Bad:
-
-"Step-by-step problem walkthrough"
-
-Good:
-
-"When troubleshooting problems, walk through the issue step by step
-instead of only giving the solution."
-
-Bad:
-
-"Technical explanation formatting"
-
-Good:
-
-"When explaining technical concepts, break them down step by step."
-
-Bad:
-
-"Bullet point formatting"
-
-Good:
-
-"Use bullet points when giving long explanations."
-
-Canonicalization should normalize equivalent wording, but it should
-preserve the actual behavioral rule.
-
-5. trigger
-
-A concise description of the condition under which the procedure
-applies.
-
-Example:
-
-"when explaining technical concepts"
-
-The trigger is transitional storage metadata and should NOT be used
-as the canonical identity.
-
-6. action
-
-The concrete behavior Alice should perform when the trigger applies.
-
-Example:
-
-"provide step-by-step explanations"
-
-The action is transitional storage metadata and should NOT be used
-as the canonical identity.
-
-7. context
-
-The narrower execution context in which the procedure applies.
-
-Example:
-
-"technical_explanations"
-
-Context is transitional metadata and should NOT determine identity.
-
-PROCEDURAL MEMORY EXTRACTION RULES:
-
-When category is "procedure":
-
-- subject must identify the semantic domain.
-- topics must contain 2-5 useful retrieval concepts.
-- key must be a concise canonical snake_case identifier.
-- value must describe the reusable behavior Alice should perform.
-- trigger MUST be included for every procedure.
-- trigger describes the condition under which the procedure applies.
-- action MUST be included for every procedure.
-- action describes the concrete behavior Alice should perform.
-- context MUST be included for every procedure.
-- context describes the narrower domain or execution context.
-- confidence should reflect how clearly the user established the rule.
-
-Prefer canonical identifiers over literal wording.
-
-Example:
-
-User:
-"Whenever you're explaining something technical to me, break it
-down step by step."
-
-OUTPUT REQUIREMENTS:
-
-Every memory object MUST contain a category field.
-
-The category field is mandatory and must be one of:
-
-- preference
-- behavior
-- identity
-- relationship
-- state
-- history
-- project
-- knowledge
-- procedure
-
-Never omit category.
-
-For procedural memories specifically:
-
-category MUST be "procedure".
-
-Even when all other procedural fields are present, the memory is
-invalid if category is missing.
-
-Return:
-
+- project: persistent fact about a REGISTERED project (architecture,
+  components, files, dependencies, integrations, config, tests,
+  logs, performance, capabilities, limitations, structure, etc.)
+- procedure: a rule for HOW Alice should behave, reason, format
+  responses, or interact with the user
+- preference: the user's preferred way of receiving info / having
+  something done
+- identity: stable fact about the user or Alice
+- relationship: persistent link between people, Alice, projects, or
+  other entities
+- state: current/temporary info that may change over time
+- history: past events/decisions still relevant
+- knowledge: general fact not tied to a registered project
+- behavior: recurring pattern in the user's own behavior
+
+PROJECT vs PROCEDURE: if the message describes how a PROJECT WORKS,
+use "project", even if it describes a process. If it describes how
+ALICE SHOULD BEHAVE OR PERFORM A TASK, use "procedure".
+
+"Bindex uses email verification to create an account" → project
+"Bindex uses Supabase for authentication" → project
+"When helping me create an account, remind me to verify my email" → procedure
+"Whenever you give me information, use bullet points" → procedure
+"I prefer bullet points" → preference
+"The current project is Bindex" → state
+
+PROJECT MEMORY FIELDS
+- subject: broad project area the fact belongs to (memory, database,
+  authentication, frontend, backend, architecture, files, features,
+  integrations, deployment, configuration, testing, logging,
+  performance, models, reasoning, voice). Never the project name.
+  Don't invent an overly specific subject for every fact.
+- topics: 2-5 retrieval terms. NOT relationship words (uses,
+  requires, supports, contains, depends_on, connects_to, because,
+  because_of).
+- key: concise snake_case identity for WHAT the fact is about
+  (supabase, context_manager, email_verification) - not prefixed
+  with a verb (bad: uses_supabase, project_uses_supabase).
+  Canonical identity = project_key + subject + key; topics are just
+  retrieval metadata, not identity.
+- value: the fact itself, concise but preserving important meaning.
+
+PROCEDURAL MEMORY FIELDS (trigger/action/context are ALL mandatory)
+- subject: broad behavioral domain (response_formatting,
+  communication, coding, explanations, research, memory, reasoning,
+  planning, interaction, workflow, preferences). Never the user's
+  literal sentence, and never a project name unless the procedure is
+  explicitly project-specific.
+- topics: 2-5 retrieval terms describing when this procedure is
+  relevant (e.g. step_by_step, technical_explanations,
+  beginner_friendly, code_examples, troubleshooting).
+
+Topics are retrieval metadata, not grammatical relationship words -
+do not use: uses, requires, supports, because, should, always, when,
+whenever.
+- key: concise canonical snake_case identity for WHAT rule this is
+  (good: step_by_step_explanations, concise_code_examples; bad:
+  when_explaining_technical_concepts, should_provide_step_by_step).
+  Canonical identity = category + subject + key. Do NOT use the
+  literal trigger as the key - different wording for the same rule
+  should resolve to the same key, e.g. "When explaining technical
+  things, go step by step", "Break technical explanations down step
+  by step", and "Explain technical concepts one step at a time" all
+  canonicalize to key: step_by_step_explanations.
+- value: the full rule, concise but complete - WHAT Alice should do,
+  and WHEN/in what situation, if that condition matters. Never a
+  vague label (bad: "Bullet point formatting"; good: "Use bullet
+  points when giving long explanations.").
+- trigger: the condition under which the procedure applies (e.g.
+  "when explaining technical concepts").
+- action: the concrete behavior Alice should perform (e.g. "provide
+  step-by-step explanations").
+- context: narrower execution context (e.g. "technical_explanations"),
+  or "general" if there isn't one.
+
+trigger, action, and context are ALL mandatory whenever category is
+"procedure" - the memory is invalid without them, even if every
+other field is present.
+
+KNOWLEDGE MEMORY FIELDS
+Knowledge is a fact/definition/concept/relationship/observation/
+claim/assumption/hypothesis about the world, a technology, or an
+entity - NOT a fact about a registered project (that's "project")
+and NOT a rule about how Alice should behave (that's "procedure").
+"Python was created by Guido van Rossum" → knowledge. "Bindex uses
+Python for its backend" → project. "Always write Python with type
+hints" → procedure.
+- subject: the specific entity/concept the knowledge is about
+  (earth, python, http, mars, photosynthesis) - not the broad field,
+  and never a registered project name.
+- knowledge_category: ONE broad knowledge domain (science,
+  technology, history, geography, culture, programming, mathematics,
+  biology, physics, general). This is knowledge's own domain
+  classification - unrelated to the outer "category" field above
+  (which is always "knowledge" for these memories).
+- topics: 2-5 retrieval terms (e.g. astronomy, solar_system for an
+  earth/moon fact). Retrieval metadata only, not identity.
+- key: concise snake_case identity for the specific property/fact
+  (release_year, creator, orbital_period, natural_satellite,
+  definition, programming_language). Canonical identity =
+  knowledge_category + subject + key.
+- value: the actual knowledge, concise (e.g. "Moon" for
+  earth/natural_satellite, or "Guido van Rossum" for
+  python/creator).
+- type: the semantic nature of the knowledge - fact, definition,
+  concept, relationship, observation, claim, assumption, or
+  hypothesis. Use "assumption" or "claim" (not "fact") for anything
+  hedged or uncertain (e.g. "I suspect this API uses OAuth" is an
+  assumption, not an established fact).
+- source_type: how this was learned - "user_statement" if the user
+  directly told you, "conversation" for anything else inferred from
+  the conversation. (Other source types like web_search/document/
+  tool/model_knowledge/reasoning apply to acquisition paths this
+  classifier doesn't handle yet.)
+
+EXAMPLE
+
+User: "Whenever you're explaining something technical to me, break it down step by step."
 {
     "memories": [
         {
             "category": "procedure",
-            "subject": "response_formatting",
-            "topics": [
-                "long_explanations",
-                "bullet_points"
-            ],
-            "key": "bullet_points_for_long_explanations",
-            "value": "Use bullet points for long explanations.",
-            "trigger": "when giving long explanations",
-            "action": "use bullet points",
-            "context": "response_formatting",
+            "subject": "explanations",
+            "topics": ["step_by_step", "technical_explanations"],
+            "key": "step_by_step_explanations",
+            "value": "When explaining technical concepts, break them down step by step.",
+            "trigger": "when explaining technical concepts",
+            "action": "break it down step by step",
+            "context": "general",
             "confidence": 0.9
         }
     ],
     "conversation_update": {}
 }
 
-Do NOT use the literal trigger as the key.
+User: "The Pacific Ocean is the largest ocean on Earth."
+{
+    "memories": [
+        {
+            "category": "knowledge",
+            "subject": "pacific_ocean",
+            "knowledge_category": "geography",
+            "topics": ["oceans", "earth"],
+            "key": "size_rank",
+            "value": "The Pacific Ocean is the largest ocean on Earth.",
+            "type": "fact",
+            "source_type": "conversation",
+            "confidence": 0.95
+        }
+    ],
+    "conversation_update": {}
+}
 
-The following should all resolve to the same canonical procedure:
+OUTPUT REQUIREMENTS
 
-"When explaining technical things, go step by step."
+Every memory object MUST have a category, one of: preference,
+behavior, identity, relationship, state, history, project,
+knowledge, procedure. Never omit it - for procedures it must be
+exactly "procedure".
 
-"Break technical explanations down step by step."
-
-"Explain technical concepts one step at a time."
-
-These may have different wording, but they represent the same
-underlying procedural rule.
-
-The canonical key should therefore remain:
-
-step_by_step_explanations
-
-
-MEMORY QUALITY RULES:
-
-- Only extract information actually stated or strongly implied.
-- Never invent facts.
-- Never turn Alice's own suggestions into user memories.
-- Prefer specific keys over vague keys.
-- Use snake_case.
-- Do not create duplicates.
-- Confidence should reflect the evidence.
-- Only create project memories for registered projects.
-- Do not use the project name as subject.
-- Do not turn semantic interpretation into arbitrary vocabulary.
+QUALITY RULES
+- Only extract what's actually stated or strongly implied. Never
+  invent facts. Never turn Alice's own suggestions into user
+  memories.
+- Prefer specific keys over vague keys. Use snake_case. Don't create
+  duplicates.
+- Only create project memories for registered projects. Never use
+  the project name as subject.
 - If uncertain whether something is persistent information, prefer
-  returning no memory rather than inventing one.
-
-
-IMPORTANT:
-
-The deterministic extractor is responsible for recognizing known
-sentence structures.
-
-You are the fallback.
-
-Therefore, focus especially on project facts expressed in unusual
-or less predictable language structures that the deterministic
-extractor may not recognize.
-
-Examples include statements about:
-
-- project components
-- files
-- logs
-- test results
-- architecture
-- implementation
-- configuration
-- capabilities
-- limitations
-- causes
-- dependencies
-- observed behavior
-
-Do not require a specific verb such as "uses" or "has".
-
+  returning no memory over inventing one.
+- You are the fallback for whatever the deterministic extractor
+  didn't recognize - focus on facts phrased in unusual or less
+  predictable structures (project components, files, logs, test
+  results, architecture, config, capabilities, limitations, causes,
+  dependencies, observed behavior), not just sentences with an
+  obvious verb like "uses" or "has".
 
 Return ONLY valid JSON:
 
@@ -623,23 +383,45 @@ If nothing should be remembered:
 
     try {
 
+        // Routed through the shared background-memory queue so this
+        // never fires concurrently against the same local Ollama
+        // instance as a semantic-enrichment call or another
+        // extraction pass - see llmQueue.js. Deliberately NOT passing
+        // a `context` (num_ctx) override here - Ollama loads a model
+        // at a fixed context size, and requesting a different num_ctx
+        // on this call than whatever the model is already loaded with
+        // forces a full unload/reload, which was silently causing
+        // this call to fail under load and fall back to nothing
+        // saved instead of actually speeding anything up.
+        //
+        // `format: EXTRACTION_SCHEMA` (defined above) is what
+        // actually guarantees a parseable response - see the comment
+        // on that schema for why prompt-only instructions and
+        // `think: false` alone weren't enough. maxTokens is sized for
+        // a handful of memory objects' worth of JSON, not for
+        // reasoning padding - schema-constrained decoding means there
+        // is no reasoning padding to pad for anymore.
         const response =
-            await modelAdapter.complete(
-                [
+            await llmQueue.enqueue(() =>
+                modelAdapter.complete(
+                    [
+                        {
+                            role: 'system',
+                            content:
+                                'You are a JSON API. Output ONLY a single valid JSON object - no explanation, no reasoning, no step-by-step work, nothing before or after it.'
+                        },
+                        {
+                            role: 'user',
+                            content: `${prompt}\n\n/no_think`
+                        }
+                    ],
                     {
-                        role: 'system',
-                        content:
-                            'You are a JSON API. Output only valid JSON. Do not reason unnecessarily.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
+                        think: false,
+                        temperature: 0.1,
+                        maxTokens: 600,
+                        format: EXTRACTION_SCHEMA
                     }
-                ],
-                {
-                    think: false,
-                    temperature: 0.1
-                }
+                )
             );
 
         const parsed =
@@ -668,6 +450,34 @@ If nothing should be remembered:
                         )
                     ) {
                         memory.confidence = 0.9;
+                    }
+
+                    // Deterministic defaulting, not another model
+                    // call - knowledgeLibrary.js's buildRow() would
+                    // apply the same defaults on write anyway, but
+                    // filling them in here keeps the memory object
+                    // itself accurate for any code (deduplication
+                    // logging, tests) that inspects it before it
+                    // reaches storage.
+                    if (memory && memory.category === 'knowledge') {
+                        if (!memory.type) {
+                            memory.type = 'fact';
+                        }
+
+                        if (!Array.isArray(memory.topics) || memory.topics.length === 0) {
+                            memory.topics = deriveFallbackTopics(memory);
+                        }
+
+                        if (!memory.source_type) {
+                            memory.source_type = 'conversation';
+                        }
+
+                        if (
+                            memory.confidence === undefined ||
+                            memory.confidence === null
+                        ) {
+                            memory.confidence = 0.85;
+                        }
                     }
 
                     return memory;
@@ -702,5 +512,6 @@ If nothing should be remembered:
 }
 
 module.exports = {
-    extractMemory
+    extractMemory,
+    EXTRACTION_SCHEMA
 };

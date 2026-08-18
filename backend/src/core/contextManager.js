@@ -11,7 +11,18 @@ function estimateTokens(text) {
 
 // --- 2. INTENT-BASED CONTEXT PROFILES (OPTIMIZED) ---
 const CONTEXT_PROFILES = {
-    conversation: { personal: 600, project: 300,  knowledge: 0,  procedures: 150, devState: 0 },
+    // Phase: `conversation` (what nearly every normal chat message
+    // resolves to as intent.intent) had a knowledge budget of 0. That
+    // meant knowledgeScored was computed, relevance-scored, and then
+    // allocateBudget(knowledgeScored, 0) discarded all of it before it
+    // ever reached the prompt - so Alice's actual stored knowledge
+    // (including everything from search extraction) was invisible for
+    // the overwhelming majority of turns, regardless of how relevant a
+    // memory was to the current message. That's both why she couldn't
+    // pull from it, and part of why she'd fall back to
+    // possibly-wrong base-model knowledge instead of what she actually
+    // has on file.
+    conversation: { personal: 600, project: 300,  knowledge: 400,  procedures: 150, devState: 0 },
     action:       { personal: 300, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
     coding:       { personal: 300, project: 600,  knowledge: 200, procedures: 200, devState: 100 },
     planning:     { personal: 300, project: 500,  knowledge: 200, procedures: 200, devState: 200 },
@@ -27,7 +38,8 @@ function allocateBudget(items, budget) {
     const sorted = items.sort((a, b) => b._finalScore - a._finalScore);
     
     for (const item of sorted) {
-        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''}`;
+        const topicsText = Array.isArray(item.topics) ? item.topics.join(' ') : '';
+        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''} ${topicsText} ${item.category || ''} ${item.type || ''}`;
         const tokens = estimateTokens(text);
         
         if (used + tokens <= budget) {
@@ -48,7 +60,14 @@ function extractKeywords(text) {
 function scoreAndBoost(store, item, keywords) {
     let relevanceScore = 0;
     const d = item.data;
-    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''}`.toLowerCase();
+    const topicsText = Array.isArray(d.topics) ? d.topics.join(' ') : '';
+    // topics/category/type added so knowledge (and, incidentally,
+    // procedure/project, which already had unused topics data) can
+    // actually be matched by their retrieval metadata instead of
+    // only their literal key/value text - see plan §13: knowledge
+    // must be findable by category/subject/topics/key, not just
+    // whatever words happen to appear in `value`.
+    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''} ${topicsText} ${d.category || ''} ${d.type || ''}`.toLowerCase();
     
     keywords.forEach(kw => {
         if (itemText.includes(kw)) relevanceScore += 25;
@@ -101,16 +120,57 @@ async function getRelevantContext(userInput, history, intent) {
     const currentProjectKey =
         currentStateObj?.value?.toLowerCase() || null;
 
+    // Resolve the full project registry once. This replaces the old
+    // findProjectByKey-only lookup and is also used below to detect
+    // when the user names a registered project by name/alias even
+    // when it isn't the active one - e.g. "what does Bindex use for
+    // auth?" while Atlas is the active project should still be able
+    // to answer about Bindex specifically, without pulling in every
+    // OTHER project's memories too.
+    const allProjects = await projectRegistry.getAllProjects();
+
+    const projectNames = {};
+    for (const p of allProjects) {
+        if (p.project_key) {
+            projectNames[p.project_key.toLowerCase()] = p.name || p.project_key;
+        }
+    }
+
     // Resolve the project key through the project registry.
     // This gives us the authoritative project record.
     const activeProject = currentProjectKey
-        ? await projectRegistry.findProjectByKey(currentProjectKey)
+        ? allProjects.find(p => p.project_key?.toLowerCase() === currentProjectKey) || null
         : null;
 
     // The project subject is kept temporarily for compatibility
     // with the existing project_memory table.
     const currentProjectKeyResolved =
         activeProject?.project_key?.toLowerCase() || null;
+
+    // Detect any OTHER registered project explicitly named in this
+    // message (by name or alias), so a project doesn't have to be
+    // "active" for Alice to answer about it when directly asked -
+    // e.g. "what do you know about SubSynq?" while Atlas is active.
+    // This is name matching only (word-boundary, case-insensitive) -
+    // it does NOT fall back to keyword/topic overlap, which is what
+    // let memories from an unrelated project leak in before.
+    const lowerUserInput = userInput.toLowerCase();
+    const mentionedProjectKeys = new Set();
+
+    for (const p of allProjects) {
+        const candidateNames = [p.name, p.project_key, ...(p.aliases || [])]
+            .filter(Boolean)
+            .map(n => String(n).toLowerCase());
+
+        const isMentioned = candidateNames.some(name => {
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`\\b${escaped}\\b`, 'i').test(lowerUserInput);
+        });
+
+        if (isMentioned && p.project_key) {
+            mentionedProjectKeys.add(p.project_key.toLowerCase());
+        }
+    }
 
     // Determine the current working context.
     const hotState = memoryCache.getHotState();
@@ -169,23 +229,25 @@ async function getRelevantContext(userInput, history, intent) {
     let dynamicPersonalScored = dynamicPersonal.map(item => scoreAndBoost('user_profile', item, keywords))
         .filter(m => m._relevanceScore > 0 || isAskingAboutSelf);
         
-    // 4. Projects: Resolve via active project pointer, keyword relevance,
-    // or explicit memory/self questions.
+    // 4. Projects: scope STRICTLY to the active project and/or any
+    // project explicitly named in this message. Relevance score is
+    // still computed (used below for ordering/budget allocation
+    // within that scoped set), but it must never be the reason a
+    // DIFFERENT project's memory is included - that was the source
+    // of cross-project leakage (a keyword shared with, say, Bindex's
+    // memories would previously let Bindex facts appear while Atlas
+    // was the active project).
     let projectScored = projectsIdx.map(item =>
         scoreAndBoost('project_memory', item, keywords)
     );
 
-    let filteredProjects = projectScored.filter(m => {
-        const isActiveProject =
-            currentProjectKeyResolved &&
-            m.project_key?.toLowerCase() === currentProjectKeyResolved;
+    const allowedProjectKeys = new Set(
+        [currentProjectKeyResolved, ...mentionedProjectKeys].filter(Boolean)
+    );
 
-        return (
-            isActiveProject ||
-            m._relevanceScore > 0 ||
-            isAskingAboutSelf
-        );
-    });
+    let filteredProjects = projectScored.filter(m =>
+        allowedProjectKeys.has(m.project_key?.toLowerCase())
+    );
         
     let knowledgeScored = knowledgeIdx.map(item => scoreAndBoost('knowledge_library', item, keywords))
         .filter(k => k._relevanceScore > 0 || knowledgeIdx.length <= 3);
@@ -259,6 +321,8 @@ async function getRelevantContext(userInput, history, intent) {
         state: stateScored,
         personal: personalAlloc.selected,
         projects: projectAlloc.selected,
+        projectNames,
+        activeProjectKey: currentProjectKeyResolved,
         knowledge: knowledgeAlloc.selected,
         procedures: proceduresAlloc.selected,
         features: devAlloc.selected,

@@ -80,16 +80,43 @@ create index if not exists idx_project_memory_subject on project_memory(subject)
 
 -- ─────────────────────────────────────────────────────────────
 -- Knowledge library (previously: src/memory/knowledgeLibrary.json)
+--
+-- Structured internal knowledge base: durable facts, definitions,
+-- concepts, relationships, observations, claims, assumptions, and
+-- hypotheses Alice has acquired from conversation, search,
+-- documents, tools, model knowledge, or her own reasoning.
+--
+-- Canonical identity is (category, subject, key) - topics are
+-- retrieval metadata only, not identity. See
+-- migrations/001_knowledge_library_upgrade.sql for the upgrade path
+-- from the original (subject, key) shape on an existing database;
+-- this CREATE is for a fresh install only.
 -- ─────────────────────────────────────────────────────────────
 
 create table if not exists knowledge_library (
     id bigint generated always as identity primary key,
+    category text not null default 'general',
     subject text not null default 'general',
+    topics text[] not null default '{}',
+    type text not null default 'fact',
     key text not null,
     value text not null,
+    confidence double precision not null default 1.0,
+    source text,
+    source_type text not null default 'conversation',
+    created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    unique (subject, key)
+    unique (category, subject, key)
 );
+
+create index if not exists idx_knowledge_category on knowledge_library(category);
+create index if not exists idx_knowledge_subject on knowledge_library(subject);
+create index if not exists idx_knowledge_topics on knowledge_library using gin(topics);
+
+drop trigger if exists trg_knowledge_library_updated_at on knowledge_library;
+create trigger trg_knowledge_library_updated_at
+    before update on knowledge_library
+    for each row execute function set_updated_at();
 
 -- ─────────────────────────────────────────────────────────────
 -- Procedural memory (previously: src/memory/proceduralMemory.json)

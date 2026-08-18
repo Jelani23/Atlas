@@ -40,8 +40,20 @@ function getMemoryIdentity(memory) {
     }
 
     if (category === 'knowledge') {
+        // Knowledge's canonical identity is category + subject + key,
+        // where "category" here is knowledge's OWN domain field
+        // (science/technology/history/...), carried on the object as
+        // `knowledge_category` to avoid colliding with this
+        // function's `memory.category` (the memory-BANK
+        // discriminator, always the literal string "knowledge" for
+        // anything reaching this branch - see knowledgeLibrary.js's
+        // header comment for the full explanation). Defaulting to
+        // 'general' matches knowledgeLibrary.js's own default, so an
+        // extraction that omits it still resolves to the same
+        // identity buildRow() would have stored it under.
         return {
             type: 'knowledge',
+            category: normalize(memory.knowledge_category) || 'general',
             subject,
             key
         };

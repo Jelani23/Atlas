@@ -43,17 +43,31 @@ async function generateQueries(message) {
 // Executes searches sequentially with rate limiting and per-query error handling (Atlas's suggestion!)
 async function executeSearch(queries) {
     console.log('[SearchPipeline] Queries:', queries);
-    let aggregatedResult = "Aggregated Web Search Results:\n\n";
-    
+    // Phase: framing this as raw research material to be read in full and
+    // synthesized into ONE answer (see response/controller.js's "search"
+    // style), rather than as 3 independent "Result Sets" to summarize
+    // one-by-one - that framing was part of why replies came out reading
+    // like three shortened summaries stitched together instead of one
+    // comprehended answer.
+    let aggregatedResult = "Raw research material gathered from multiple related searches below. Read all of it, cross-reference overlapping/conflicting details, and write ONE complete synthesized answer in your own words - do not summarize each block separately.\n\n";
+
     for (let i = 0; i < queries.length; i++) {
         const q = queries[i];
         try {
             console.log(`[SearchPipeline] Executing query ${i+1}: "${q}"`);
-            const res = await tools.webSearch(q);
-            aggregatedResult += `--- Result Set ${i+1} (Query: "${q}") ---\n${res}\n\n`;
+            // Phase: this was `tools.webSearch(q)` - but tools.webSearch is
+            // the module's full export shape ({ execute, intentSchema }),
+            // not a bare function, so this threw "tools.webSearch is not a
+            // function" on every single call. The per-query try/catch below
+            // silently swallowed that into "Error: Search failed for this
+            // query." for EVERY query, every time - meaning this 3-query
+            // pipeline has never actually returned a real result. Calling
+            // .execute() is the fix.
+            const res = await tools.webSearch.execute(q);
+            aggregatedResult += `--- Source material ${i+1} (from query: "${q}") ---\n${res}\n\n`;
         } catch (e) {
             console.error(`[SearchPipeline] Failed to execute query ${i+1}: "${q}"`, e.message);
-            aggregatedResult += `--- Result Set ${i+1} (Query: "${q}") ---\nError: Search failed for this query.\n\n`;
+            aggregatedResult += `--- Source material ${i+1} (from query: "${q}") ---\nError: Search failed for this query.\n\n`;
         }
         
         // Add configurable delay between searches

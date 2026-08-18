@@ -1,0 +1,288 @@
+// backend/src/memory/searchKnowledgeExtractor.js
+//
+// ============================================================
+// SEARCH -> KNOWLEDGE EXTRACTION
+// ============================================================
+//
+// Previously, information Alice found via web search only ever lived
+// in the reply she gave back in the moment - nothing from a search
+// was ever written into knowledge_library, so she'd have to search
+// again for the same thing later, and couldn't build durable
+// knowledge from her own research the way she can from things the
+// user tells her directly (see memoryExtractor.js /
+// deterministicExtractor.js for that conversational path).
+//
+// This module closes that gap for search specifically. It runs as a
+// background task (see core/conversationEngine.js) after a web search
+// resolves, and:
+//
+//   1. Reads BOTH the final synthesized summary Alice gave the user
+//      (already comprehended, deduplicated, coherent prose) and the
+//      raw aggregated source material the search pipeline gathered
+//      (noisier, but has specific figures/details that can get
+//      smoothed over in a short summary) - and lets the model pull
+//      from whichever actually has the durable, well-supported fact,
+//      rather than assuming one is always better than the other.
+//   2. Extracts only durable, generally-true facts worth remembering
+//      later - not the user's question, not conversational filler,
+//      not anything that's really a claim/rumor rather than a fact
+//      (those still get saved, but tagged with a hedging `type`
+//      instead of "fact" - see KNOWN_KNOWLEDGE_TYPES in
+//      knowledgeLibrary.js).
+//   3. Saves through memoryManager.handleMemoryAction, the same
+//      single write path conversational knowledge extraction uses -
+//      so identity resolution, deduplication, and conflict handling
+//      all behave identically regardless of where the knowledge came
+//      from.
+//
+// Every record this produces always carries a `type` (defaulted to
+// 'fact' if the model omits it - the field is mandatory going into
+// storage, never silently dropped) and source_type='web_search' with
+// source set to the query that surfaced it, so Alice can later answer
+// "where did I learn this" honestly.
+// ============================================================
+
+const { createModelAdapter } = require('../models/modelAdapter');
+const { extractJSON, safePreview } = require('../utils/jsonExtractor');
+const llmQueue = require('./llmQueue');
+const memoryManager = require('./memoryManager');
+const { KNOWN_KNOWLEDGE_TYPES } = require('./knowledgeLibrary');
+
+const modelAdapter = createModelAdapter();
+
+const EXTRACTION_SCHEMA = {
+    type: 'object',
+    properties: {
+        memories: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    subject: { type: 'string' },
+                    // Phase: 'topics' was in `properties` but not `required`.
+                    // Ollama's structured-output mode enforces the schema at
+                    // the decoding grammar level, and an optional array field
+                    // is the path of least resistance for a small model at
+                    // low temperature - it satisfies the schema with `[]`
+                    // and moves on, rather than actually doing the work the
+                    // prompt asked for (2-5 retrieval terms). That's why
+                    // topics always came back blank. Making it `required`
+                    // with minItems forces the grammar itself to demand at
+                    // least 2 entries - it's no longer optional to skip.
+                    topics: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 },
+                    knowledge_category: { type: 'string' },
+                    type: { type: 'string' },
+                    key: { type: 'string' },
+                    value: { type: 'string' },
+                    confidence: { type: 'number' }
+                },
+                required: ['subject', 'topics', 'key', 'value']
+            }
+        }
+    },
+    required: ['memories']
+};
+
+// Cheap pre-filter so a failed/empty search doesn't even bother
+// queuing an LLM call - there's nothing to extract from "no results".
+function hasExtractableContent(summary, rawResults) {
+    const s = (summary || '').trim();
+    const r = (rawResults || '').trim();
+
+    if (!s && !r) return false;
+
+    const looksEmpty = (text) =>
+        !text ||
+        text.length < 20 ||
+        /^error:/i.test(text) ||
+        /no direct results found/i.test(text);
+
+    return !looksEmpty(s) || !looksEmpty(r);
+}
+
+function buildPrompt(query, summary, rawResults) {
+    // Raw material can be long (see webSearch.js) - cap what goes into
+    // this prompt so extraction stays fast and focused on the clearest
+    // signal, not padding out context with redundant scraped HTML text.
+    const trimmedRaw = (rawResults || '').slice(0, 6000);
+
+    return `
+You are Alice's knowledge extractor for web search results. A search
+was just run and answered. Your job is to pull out any DURABLE,
+generally-true facts worth remembering permanently - not the
+conversation, not the user's question, not anything tied only to this
+moment.
+
+SEARCH QUERY: "${query}"
+
+SYNTHESIZED ANSWER ALICE GAVE (already comprehended and coherent):
+"""
+${summary || '(none)'}
+"""
+
+RAW SOURCE MATERIAL THE SEARCH GATHERED (noisier, but may contain
+specific figures/details worth pulling that the summary smoothed
+over):
+"""
+${trimmedRaw || '(none)'}
+"""
+
+Use whichever of the two actually supports a specific, well-formed
+fact - the synthesized answer for general understanding, the raw
+material when it has a concrete detail (a number, a date, a named
+entity's specific property) the summary didn't spell out. Don't
+extract the same fact twice just because it appears in both.
+
+WHAT COUNTS AS KNOWLEDGE
+- Durable facts, definitions, concepts, or relationships that would
+  still be true/relevant if asked about again later.
+- NOT: the user's question itself, search-engine mechanics, anything
+  purely about "what was searched for" rather than what was found.
+- If the result was inconclusive, contradictory, or clearly a rumor/
+  opinion rather than an established fact, you may still record it -
+  but set "type" to "claim", "assumption", or "hypothesis" (never
+  "fact") so Alice hedges it appropriately later.
+- If truly nothing durable was found (e.g. the search failed, or the
+  answer was purely conversational/time-sensitive with no lasting
+  fact), return an empty memories array. Do not invent a fact to fill
+  the array.
+
+FIELDS (all required except topics/confidence)
+- subject: the specific entity/concept this fact is about, snake_case
+  (e.g. "mariana_trench", "python_3_13"). Never the search query
+  itself.
+- knowledge_category: ONE broad domain - science, technology,
+  history, geography, programming, business, health, general, etc.
+- type: one of ${KNOWN_KNOWLEDGE_TYPES.join(', ')} - "fact" for
+  something well-established, otherwise the hedged type that actually
+  fits (see above). This field is mandatory - never omit it.
+- key: concise snake_case identity for WHAT property/fact this is
+  (e.g. "max_depth", "release_date") - not prefixed with a verb.
+- value: the fact itself, concrete and self-contained (should make
+  sense read on its own, without the surrounding conversation).
+- topics: 2-5 retrieval terms.
+- confidence: 0-1, how well-supported this fact is by the source
+  material (a single vague snippet should score lower than a fact
+  stated plainly and consistently across sources).
+
+Return ONLY valid JSON:
+
+{
+    "memories": [
+        {
+            "subject": "snake_case_subject",
+            "knowledge_category": "domain",
+            "type": "fact",
+            "key": "snake_case_key",
+            "value": "the concrete fact",
+            "topics": ["topic_1", "topic_2"],
+            "confidence": 0.9
+        }
+    ]
+}
+
+If nothing durable was found:
+
+{ "memories": [] }
+`;
+}
+
+// Phase: defense-in-depth alongside the schema fix above - if a model
+// still returns an empty/missing topics array despite the schema now
+// requiring it, derive a minimal-but-real set from fields we already
+// have rather than silently persisting []. This only kicks in as a
+// fallback; a model that complies with the schema never hits this.
+function deriveFallbackTopics(m) {
+    const candidates = [m.knowledge_category, m.subject, m.key]
+        .filter(Boolean)
+        .map(t => String(t).trim().toLowerCase().replace(/\s+/g, '_'))
+        .filter(Boolean);
+    return [...new Set(candidates)];
+}
+
+async function extractAndSaveFromSearch({ query, summary, rawResults }) {
+    if (!hasExtractableContent(summary, rawResults)) {
+        return { saved: 0, reason: 'nothing_extractable' };
+    }
+
+    try {
+        const prompt = buildPrompt(query, summary, rawResults);
+
+        const response = await llmQueue.enqueue(() =>
+            modelAdapter.complete(
+                [
+                    {
+                        role: 'system',
+                        content:
+                            'You are a JSON API. Output ONLY a single valid JSON object - no explanation, no reasoning, no step-by-step work, nothing before or after it.'
+                    },
+                    {
+                        role: 'user',
+                        content: `${prompt}\n\n/no_think`
+                    }
+                ],
+                {
+                    think: false,
+                    temperature: 0.1,
+                    maxTokens: 900,
+                    format: EXTRACTION_SCHEMA
+                }
+            )
+        );
+
+        const parsed = extractJSON(response);
+
+        if (!parsed || !Array.isArray(parsed.memories) || parsed.memories.length === 0) {
+            console.log(
+                '[SearchKnowledgeExtractor] Nothing extractable from response:',
+                safePreview(response)
+            );
+            return { saved: 0, reason: 'no_memories_returned' };
+        }
+
+        const memories = parsed.memories
+            .filter(m => m && m.key && m.value && m.subject)
+            .map(m => ({
+                category: 'knowledge',
+                subject: m.subject,
+                topics: Array.isArray(m.topics) && m.topics.length > 0
+                    ? m.topics
+                    : deriveFallbackTopics(m),
+                // Same deterministic defaulting memoryExtractor.js applies
+                // for conversational knowledge - never leave `type` unset,
+                // knowledgeLibrary.js's buildRow() would default it anyway
+                // on write, but filling it in here keeps the object itself
+                // accurate for logging/dedup inspection before it gets there.
+                knowledge_category: m.knowledge_category || 'general',
+                type: m.type || 'fact',
+                key: m.key,
+                value: m.value,
+                confidence: typeof m.confidence === 'number' ? m.confidence : 0.8,
+                source: `web_search: ${query}`,
+                source_type: 'web_search'
+            }));
+
+        if (memories.length === 0) {
+            return { saved: 0, reason: 'no_valid_memories' };
+        }
+
+        const saveResult = await memoryManager.handleMemoryAction(memories);
+
+        console.log(
+            `[SearchKnowledgeExtractor] Query "${query}" -> ${saveResult.action} ` +
+            `(${(saveResult.memories || []).length} saved, ${(saveResult.duplicates || []).length} duplicates, ` +
+            `${(saveResult.ignored || []).length} ignored)`
+        );
+
+        return { saved: (saveResult.memories || []).length, result: saveResult };
+
+    } catch (error) {
+        console.error('[SearchKnowledgeExtractor] Extraction failed:', error.message);
+        return { saved: 0, error: error.message };
+    }
+}
+
+module.exports = {
+    extractAndSaveFromSearch,
+    EXTRACTION_SCHEMA
+};

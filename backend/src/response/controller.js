@@ -26,11 +26,20 @@ function getResponseStyle(intent) {
       };
     case "search":
       return {
-        length: "1-2 sentences. Concise summary.",
-        formatting: "natural conversational response",
+        // Phase: this used to be hard-capped at "1-2 sentences. Concise
+        // summary." - which meant even once this style actually engages
+        // (see conversationEngine.js's intent.intent fix), the model was
+        // being told to compress everything it found into one or two
+        // sentences no matter how much substance was there. The goal now
+        // is genuine comprehension: read everything the search pipeline
+        // gathered and produce ONE complete, coherent answer - as long as
+        // it needs to be to actually convey what was found, not padded,
+        // not artificially trimmed.
+        length: "as long as the information actually requires - a couple sentences for a simple factual answer, a full paragraph or more for anything with real substance. Never compress genuinely useful detail just to sound brief.",
+        formatting: "one single, coherent, synthesized answer written in your own words after actually reading and comprehending everything the search turned up - not a per-source or per-query recap, not a stitched-together list of snippets, and not a bare copy of any one result",
         allowMarkdown: false,
         allowLists: false,
-        tone: "informative and direct"
+        tone: "informative, direct, and well-organized"
       };
     case "memory":
       return {

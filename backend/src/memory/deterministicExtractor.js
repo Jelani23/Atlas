@@ -614,6 +614,312 @@ const PROJECT_FACT_PATTERNS = [
 
 /**
  * ============================================================
+ * PROCEDURAL FACT PATTERN FAMILIES
+ * ============================================================
+ *
+ * These recognize common ways people teach Alice a standing
+ * behavioral rule ("procedural memory"): a trigger condition and
+ * an action Alice should take when that condition applies.
+ *
+ * Like the project patterns above, these match LANGUAGE STRUCTURE
+ * only - they are not trying to fully canonicalize the key the way
+ * the LLM fallback does (e.g. mapping "explain step by step" and
+ * "break explanations into steps" onto the same canonical key).
+ * Catching the clear, common phrasings here just means the large
+ * LLM classifier prompt no longer has to run - and wait 45-60s on
+ * local hardware - for the cases that don't need it. Anything
+ * phrased unusually still falls through to the LLM fallback.
+ *
+ * Each pattern should return:
+ *
+ *   { trigger, action, key }
+ *
+ * or null when the pattern does not match.
+ * ============================================================
+ */
+
+const PROCEDURE_LEAD_WORDS =
+    /^(?:please|always|never|just|kindly|make sure to|try to|remember to)\s+/i;
+
+function normalizeProcedureClause(text) {
+    if (!text) return '';
+
+    return text
+        .replace(/[.!?]+$/, '')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function buildProcedureKey(action, trigger) {
+    const source =
+        normalizeProcedureClause(action).replace(PROCEDURE_LEAD_WORDS, '') ||
+        normalizeProcedureClause(trigger);
+
+    const words = source
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 6);
+
+    return words.join('_');
+}
+
+function buildProcedureValue(trigger, action) {
+    const normalizedAction = normalizeProcedureClause(action);
+
+    if (!trigger || trigger === 'in general') {
+        const capitalized =
+            normalizedAction.charAt(0).toUpperCase() +
+            normalizedAction.slice(1);
+
+        return `${capitalized}.`;
+    }
+
+    // trigger clauses already start with "when ..." (see the pattern
+    // matchers above), so avoid producing "When when you explain...".
+    const triggerClause = /^when\s+/i.test(trigger)
+        ? trigger.replace(/^when\s+/i, '')
+        : trigger;
+
+    return `When ${triggerClause}, ${normalizedAction}.`;
+}
+
+const PROCEDURAL_FACT_PATTERNS = [
+
+    /**
+     * --------------------------------------------------------
+     * CONDITIONAL (WHENEVER / ANY TIME / EVERY TIME)
+     *
+     * Whenever I ask about code, walk me through it step by step
+     * Any time you explain something technical, use an analogy
+     * Every time I ask you to summarize something, use bullet points
+     * --------------------------------------------------------
+     */
+    {
+        name: 'conditional_trigger',
+        match(message) {
+            const match = message.match(
+                /^(?:whenever|any time|every time)\s+(i|you)(?:'re|'m|\s+are|\s+am)?\s+(.+?),\s*(.+?)(?:[.!?]|$)/i
+            );
+
+            if (!match) return null;
+
+            const person = match[1].toLowerCase();
+            const triggerClause = normalizeProcedureClause(match[2]);
+            const action = normalizeProcedureClause(match[3]);
+
+            if (!triggerClause || !action) return null;
+
+            const trigger = `when ${person} ${triggerClause}`;
+
+            return {
+                trigger,
+                action,
+                key: buildProcedureKey(action, trigger)
+            };
+        }
+    },
+
+    /**
+     * --------------------------------------------------------
+     * WHEN-CLAUSE
+     *
+     * When you explain code, use comments
+     * When I ask for a summary, keep it under five sentences
+     * --------------------------------------------------------
+     */
+    {
+        name: 'when_directed',
+        match(message) {
+            const match = message.match(
+                /^when\s+(i|you)(?:'re|'m|\s+are|\s+am)?\s+(.+?),\s*(.+?)(?:[.!?]|$)/i
+            );
+
+            if (!match) return null;
+
+            const person = match[1].toLowerCase();
+            const triggerClause = normalizeProcedureClause(match[2]);
+            const action = normalizeProcedureClause(match[3]);
+
+            if (!triggerClause || !action) return null;
+
+            const trigger = `when ${person} ${triggerClause}`;
+
+            return {
+                trigger,
+                action,
+                key: buildProcedureKey(action, trigger)
+            };
+        }
+    },
+
+    /**
+     * --------------------------------------------------------
+     * STANDING RULE (NO EXPLICIT TRIGGER)
+     *
+     * From now on, use bullet points for long explanations
+     * Going forward, always double check file paths before editing
+     * From here on out, keep your answers shorter
+     * --------------------------------------------------------
+     */
+    {
+        name: 'standing_rule',
+        match(message) {
+            const match = message.match(
+                /^(?:from now on|from here on out|from here on|going forward)\s*,?\s*(.+?)(?:[.!?]|$)/i
+            );
+
+            if (!match) return null;
+
+            const action = normalizeProcedureClause(match[1]);
+
+            if (!action) return null;
+
+            return {
+                trigger: 'in general',
+                action,
+                key: buildProcedureKey(action, 'in general')
+            };
+        }
+    },
+
+    /**
+     * --------------------------------------------------------
+     * ALWAYS ... WHEN ...
+     *
+     * Always use bullet points when giving long explanations
+     * Always ask before deleting a file
+     * --------------------------------------------------------
+     */
+    {
+        name: 'always_when',
+        match(message) {
+            let match = message.match(
+                /^always\s+(.+?)\s+when\s+(.+?)(?:[.!?]|$)/i
+            );
+
+            if (match) {
+                const action = normalizeProcedureClause(match[1]);
+                const triggerClause = normalizeProcedureClause(match[2]);
+
+                if (!action || !triggerClause) return null;
+
+                const trigger = `when ${triggerClause}`;
+
+                return {
+                    trigger,
+                    action,
+                    key: buildProcedureKey(action, trigger)
+                };
+            }
+
+            match = message.match(/^always\s+(.+?)(?:[.!?]|$)/i);
+
+            if (match) {
+                const action = normalizeProcedureClause(match[1]);
+
+                if (!action) return null;
+
+                return {
+                    trigger: 'in general',
+                    action,
+                    key: buildProcedureKey(action, 'in general')
+                };
+            }
+
+            return null;
+        }
+    },
+
+    /**
+     * --------------------------------------------------------
+     * IMPERATIVE OBLIGATION
+     *
+     * You should always explain your reasoning before giving an answer
+     * You should never make up file paths that don't exist
+     * Please always confirm before deleting anything
+     * Please never use semicolons in code comments
+     * Make sure to always ask before running destructive commands
+     * --------------------------------------------------------
+     */
+    {
+        name: 'imperative_obligation',
+        match(message) {
+            let match = message.match(
+                /^(?:you should never|please never)\s+(.+?)(?:[.!?]|$)/i
+            );
+
+            if (match) {
+                const clause = normalizeProcedureClause(match[1]);
+
+                if (!clause) return null;
+
+                const action = `never ${clause}`;
+
+                return {
+                    trigger: 'in general',
+                    action,
+                    key: buildProcedureKey(action, 'in general')
+                };
+            }
+
+            match = message.match(
+                /^(?:you should always|please always|make sure to always|make sure you always)\s+(.+?)(?:[.!?]|$)/i
+            );
+
+            if (match) {
+                const clause = normalizeProcedureClause(match[1]);
+
+                if (!clause) return null;
+
+                const action = `always ${clause}`;
+
+                return {
+                    trigger: 'in general',
+                    action,
+                    key: buildProcedureKey(action, 'in general')
+                };
+            }
+
+            return null;
+        }
+    },
+
+    /**
+     * --------------------------------------------------------
+     * PROHIBITION
+     *
+     * Don't ever suggest deleting files without asking first
+     * Never format code without asking which language I want
+     * --------------------------------------------------------
+     */
+    {
+        name: 'prohibition',
+        match(message) {
+            const match = message.match(
+                /^(?:don't ever|do not ever|never)\s+(.+?)(?:[.!?]|$)/i
+            );
+
+            if (!match) return null;
+
+            const clause = normalizeProcedureClause(match[1]);
+
+            if (!clause) return null;
+
+            const action = `never ${clause}`;
+
+            return {
+                trigger: 'in general',
+                action,
+                key: buildProcedureKey(action, 'in general')
+            };
+        }
+    }
+];
+
+/**
+ * ============================================================
  * RELATIONSHIP IDENTITY
  * ============================================================
  *
@@ -871,6 +1177,74 @@ async function extract(message) {
 
     /**
      * --------------------------------------------------------
+     * PROCEDURAL FACT PATTERN PIPELINE
+     * --------------------------------------------------------
+     *
+     * Tried before the project patterns: procedural phrasing
+     * ("whenever you...", "from now on...") doesn't share the
+     * project patterns' relationship verbs, and even in the rare
+     * case of an accidental shape collision, a project pattern
+     * match that doesn't resolve to a registered project is
+     * discarded harmlessly by resolveProjectFact.
+     * --------------------------------------------------------
+     */
+
+    if (memories.length === 0) {
+
+        for (const pattern of PROCEDURAL_FACT_PATTERNS) {
+
+            try {
+                const result = pattern.match(message);
+
+                if (!result) {
+                    continue;
+                }
+
+                if (!result.key || !result.trigger || !result.action) {
+                    continue;
+                }
+
+                const memory = {
+                    shouldRemember: true,
+                    category: 'procedure',
+
+                    subject: null,
+                    topics: [],
+
+                    key: result.key,
+                    value: buildProcedureValue(
+                        result.trigger,
+                        result.action
+                    ),
+
+                    trigger: result.trigger,
+                    action: result.action,
+                    context: null,
+
+                    needs_semantic_enrichment: true,
+
+                    confidence: 0.85
+                };
+
+                memories.push(memory);
+
+                console.log(
+                    `[DeterministicExtractor] Procedural fact detected via ${pattern.name}: ${result.key} | trigger="${result.trigger}" | action="${result.action}"`
+                );
+
+                break;
+
+            } catch (error) {
+                console.error(
+                    `[DeterministicExtractor] Procedural pattern "${pattern.name}" failed:`,
+                    error.message
+                );
+            }
+        }
+    }
+
+    /**
+     * --------------------------------------------------------
      * PROJECT FACT PATTERN PIPELINE
      * --------------------------------------------------------
      */
@@ -982,5 +1356,6 @@ async function extract(message) {
 
 module.exports = {
     extract,
-    PROJECT_FACT_PATTERNS
+    PROJECT_FACT_PATTERNS,
+    PROCEDURAL_FACT_PATTERNS
 };

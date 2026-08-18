@@ -4,7 +4,15 @@ const knowledgeLibrary = require('../../memory/knowledgeLibrary');
 async function searchKnowledge(query) {
     const results = await knowledgeLibrary.search(query);
     if (results.length === 0) return "No knowledge found for that query.";
-    return results.map(r => `Subject: ${r.subject}\nKey: ${r.key}\nValue:\n${r.value}`).join('\n---\n');
+    // Phase: topics were being fetched from the DB just fine but silently
+    // dropped from the formatted output - the field never made it in front
+    // of Alice even though it was stored correctly.
+    return results.map(r => {
+        const topicsLine = Array.isArray(r.topics) && r.topics.length > 0
+            ? `\nTopics: ${r.topics.join(', ')}`
+            : '';
+        return `Subject: ${r.subject}\nKey: ${r.key}${topicsLine}\nValue:\n${r.value}`;
+    }).join('\n---\n');
 }
 
 module.exports = {

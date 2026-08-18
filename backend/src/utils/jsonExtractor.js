@@ -18,15 +18,33 @@ function extractJSON(text) {
     // Belt-and-suspenders: strip any remaining stray tags either direction.
     cleanText = cleanText.replace(/<\/?think>/gi, '');
 
-    const firstBrace = cleanText.indexOf('{');
     const lastBrace = cleanText.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    if (lastBrace === -1) return null;
+
+    // Try every '{' at or before lastBrace, starting from the one
+    // closest to the end and working backward. Some local models
+    // (observed with qwen3 even when asked not to reason) emit plain
+    // reasoning prose with no <think> tags at all before the actual
+    // JSON - naively pairing the FIRST '{' in the whole response with
+    // the last '}' grabs a corrupted, unbalanced span if that prose
+    // happens to mention a brace character anywhere. Preferring the
+    // opening brace closest to the end first makes this robust to
+    // that without needing a full JSON tokenizer.
+    let searchFrom = lastBrace;
+    while (true) {
+        const openBrace = cleanText.lastIndexOf('{', searchFrom);
+        if (openBrace === -1) break;
+
         try {
-            return JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
+            return JSON.parse(cleanText.substring(openBrace, lastBrace + 1));
         } catch (e) {
-            // fall through to null
+            // Try the next '{' further back in the text.
         }
+
+        searchFrom = openBrace - 1;
+        if (searchFrom < 0) break;
     }
+
     return null;
 }
 

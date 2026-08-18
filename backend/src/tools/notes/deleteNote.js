@@ -24,13 +24,30 @@ module.exports = {
     intentSchema: {
         name: 'deleteNote',
         domain: 'NOTES',
-        triggers: ['delete note', 'remove note', 'delete the', 'remove the'],
+        // Phase: 'delete the' / 'remove the' were dangerously generic
+        // triggers - "delete the last line of that paragraph" or "remove
+        // the formatting" has nothing to do with notes, but would still
+        // score a trigger match here. Require the word "note" to actually
+        // be present in the trigger phrase itself.
+        triggers: ['delete note', 'remove note', 'delete the note', 'remove the note'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             // Match "delete the note called X" or "delete note X"
             const m = message.match(/(?:delete the note|delete note|remove the note|remove note)\s+(?:called\s+|named\s+)?(.+?)(?:\?|$)/i);
-            let filename = m ? m[1].trim() : 'USE_LAST';
-            return [filename.replace(/\s+/g, '_')];
+            if (m && m[1].trim()) {
+                return [m[1].trim().replace(/\s+/g, '_')];
+            }
+            // Phase: previously fell back to the literal string 'USE_LAST'
+            // here, which is NOT null, so it slipped past the resolver's
+            // null-param safety net even when nothing about a note was
+            // actually identified. Only fall back to USE_LAST when the
+            // message explicitly says "note" without naming one (e.g. "delete
+            // the note") - otherwise return null so this can't win on an
+            // unrelated message.
+            if (/\bnote\b/i.test(message)) {
+                return ['USE_LAST'];
+            }
+            return [null];
         }
     }
 };

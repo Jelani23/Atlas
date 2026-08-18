@@ -3,6 +3,48 @@ const { extractEntities } = require('./entityExtractor');
 const { getSchemas } = require('../tools/toolRegistry');
 const permissionManager = require('../permissions/permissionManager'); // <-- IMPORT
 
+// Cache compiled trigger regexes so repeated resolve() calls (every
+// message) don't recompile the same pattern over and over.
+const triggerRegexCache = new Map();
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Phase: Tightened trigger matching. This used to be a plain
+// `lower.includes(trigger)`, which meant a short trigger like "est"
+// (for the EST timezone) or "note" would match as a substring of ANY
+// word containing those letters - "deepest" contains "est", "denote"
+// contains "note", "euros" contains "eur", etc. That's what let
+// convertTime fire on totally unrelated messages like a sentence
+// ending in "...on Earth." (which contains "est" inside "deepest").
+//
+// Word-boundary matching fixes that, but can't be applied blindly:
+// a trigger like "%" (percentage.js) is pure punctuation, and `\b%\b`
+// can never match "15% of 200" - `%` sits between a digit and a
+// space, and neither side is a word/non-word transition on both ends
+// at once, so wrapping punctuation-only triggers in \b silently
+// breaks them instead of fixing anything. Only add a boundary on
+// whichever end of the trigger actually starts/ends with a word
+// character - "eur" (word chars both ends) gets full \b...\b and
+// correctly stops matching inside "euros", while "%" (no word chars
+// at either end) falls back to a plain substring check, same as
+// before.
+function hasTrigger(lower, trigger) {
+    let regex = triggerRegexCache.get(trigger);
+    if (!regex) {
+        const startsWithWordChar = /^\w/.test(trigger);
+        const endsWithWordChar = /\w$/.test(trigger);
+        const pattern =
+            (startsWithWordChar ? '\\b' : '') +
+            escapeRegex(trigger) +
+            (endsWithWordChar ? '\\b' : '');
+        regex = new RegExp(pattern, 'i');
+        triggerRegexCache.set(trigger, regex);
+    }
+    return regex.test(lower);
+}
+
 function resolve(message) {
     const lower = message.toLowerCase().trim();
     const entities = extractEntities(message);
@@ -47,9 +89,10 @@ function resolve(message) {
         let score = 0;
         let matchedTriggers = 0;
 
-        // Check triggers using simple includes (fixes % bug)
+        // Check triggers with word-boundary matching (fixes % bug AND
+        // fixes short triggers matching inside unrelated words)
         for (const trigger of schema.triggers) {
-            if (lower.includes(trigger)) {
+            if (hasTrigger(lower, trigger)) {
                 score += 0.6;
                 matchedTriggers++;
             }

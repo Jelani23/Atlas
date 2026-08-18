@@ -45,7 +45,29 @@ async function route(intent, message, history = [], taskId, requestId) {
     // 1. Deterministic Fast-Path
     if (intent.state === 'DETERMINISTIC' && intent.winner) {
         console.log(`[Planner] Executing Deterministic Tool from Resolver: ${intent.winner}`);
-        
+
+        // Phase: webSearch winning here used to fall straight into the
+        // generic execute()+shortCircuit branch below - a single raw tool
+        // call with the LLM-stripped query, returned verbatim as the reply.
+        // That skipped the entire search pipeline (3-query generation,
+        // synthesis into one answer) AND, because shortCircuit=true makes
+        // conversationEngine.js return before it ever reaches the
+        // background-task section, skipped memory extraction and
+        // search-knowledge extraction too. The intent resolver is still the
+        // one deciding "yes, this message is a search" - fast and
+        // deterministic, no LLM call needed for that part - it just now
+        // hands off to the real pipeline instead of bypassing it, and does
+        // NOT short-circuit, so the normal LLM-synthesis and background
+        // extraction stages still run exactly as they do for any other
+        // search.
+        if (intent.winner === 'webSearch') {
+            const searchPipeline = require('./searchPipeline');
+            const queries = await searchPipeline.generateQueries(message);
+            const toolResult = await searchPipeline.executeSearch(queries);
+            state.lastSearchQuery = queries[0];
+            return { needsTool: true, toolName: 'search_web', toolResult };
+        }
+
         if (intent.winner !== 'confirmation') {
             const permCheck = permissionManager.check(intent.winner);
             if (permCheck.requiresApproval) {

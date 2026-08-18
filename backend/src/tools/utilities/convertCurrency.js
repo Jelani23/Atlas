@@ -32,7 +32,14 @@ module.exports = {
         extractParams: (message, entities) => {
         const num = entities.find(e => e.type === 'NUMBER');
         const curr = entities.find(e => e.type === 'CURRENCY');
-        const targetMatch = message.match(/to\s+(usd|eur|jpy|gbp|dollars|yen|pounds)/i);
+        // Phase: was `to\s+(...)` only, which missed the very common
+        // "50 dollars in euros" phrasing (only "50 dollars to euros"
+        // matched) - that gap used to get masked by an unrelated bug in
+        // the trigger matcher (a substring match on "eur" inside "euros"
+        // was propping the confidence score up independently of whether
+        // params actually resolved), so fixing that matcher exposed this.
+        // Accepting "to" or "in" covers both phrasings for real.
+        const targetMatch = message.match(/(?:to|in)\s+(usd|eur|jpy|gbp|dollars|yen|pounds)/i);
         return [
             num ? num.value : null,
             curr ? curr.value : null,

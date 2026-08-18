@@ -51,7 +51,28 @@ async function webSearch(query) {
             if (response.ok) {
                 const data = await response.json();
                 if (data.organic && data.organic.length > 0) {
-                    const snippets = data.organic.slice(0, 3).map(r => r.snippet || r.title).filter(Boolean);
+                    // Phase: was bumped to slice(0, 5) - reverted back to 3
+                    // per explicit request. To be clear for future reference:
+                    // this doesn't change how many Serper API calls happen
+                    // (still exactly 1 request per query either way) - it
+                    // only changes how many results are read out of that
+                    // single response. The real fix for "search is using too
+                    // much Serper" was the routing bug above: the old direct
+                    // short-circuit path could run its own single query
+                    // outside the 3-query pipeline, so a search could end up
+                    // costing more requests than intended depending on which
+                    // path fired. That's fixed now - every search is exactly
+                    // 3 Serper requests (one per generated query), no more.
+                    const snippets = data.organic.slice(0, 3)
+                        .map(r => {
+                            const body = r.snippet || '';
+                            if (!body) return null;
+                            return r.title ? `${r.title}: ${body}` : body;
+                        })
+                        .filter(Boolean);
+                    if (data.answerBox && (data.answerBox.answer || data.answerBox.snippet)) {
+                        snippets.unshift(data.answerBox.answer || data.answerBox.snippet);
+                    }
                     if (snippets.length > 0) return snippets.join('\n\n');
                 }
             }
@@ -67,7 +88,12 @@ async function webSearch(query) {
                 await new Promise(r => setTimeout(r, 1000));
                 const pageHtml = await fetchUrl(firstLink);
                 const text = cleanHtmlForLLM(pageHtml);
-                if (text.length > 100) return resolve(text.substring(0, 2500));
+                // Phase: was substring(0, 2500) - often cut a real article off
+                // mid-paragraph, which meant there wasn't enough context left
+                // for genuine comprehension, only enough for a shortened
+                // rehash of whatever happened to survive the cutoff. Raised to
+                // give the synthesis step full articles to actually read.
+                if (text.length > 100) return resolve(text.substring(0, 8000));
             }
             resolve(null);
         } catch (e) { resolve(null); }

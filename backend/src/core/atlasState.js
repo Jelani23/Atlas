@@ -56,7 +56,8 @@ const atlasState = {
       "philosophy", "learning new things", "creative problem solving",
       "strategy: chess, checkers, Monopoly, Risk, Catan",
       "games: Celeste, Spelunky, Hollow Knight, Undertale",
-      "music: Ado, Hololive, Amatsuka Uto, Nijisanji, QWER, TWICE"
+      "idols: Ado, Hololive, Amatsuka Uto, Nijisanji, QWER, TWICE",
+      "music: RNB, lofi"
     ],
     dislikes: [
       "sloppy reasoning", "unnecessary complexity", "avoidable bugs",

@@ -4,21 +4,43 @@ const { eventBus } = require('../../events/eventBus');
 const EventTypes = require('../../events/eventTypes');
 
 async function complete(messages, options = {}) {
+  const body = {
+    model: options.model || process.env.OLLAMA_MODEL || 'qwen3:4b',
+    messages,
+    stream: false,
+    think: options.think ?? false,
+    keep_alive: options.keepAlive || Number(process.env.OLLAMA_KEEP_ALIVE) || 1800,
+    options: {
+      temperature: options.temperature ?? 0.7,
+      num_ctx: options.context ?? (Number(process.env.OLLAMA_NUM_CTX) || 8192),
+      ...(options.maxTokens !== undefined ? { num_predict: options.maxTokens } : {})
+    }
+  };
+
+  // When the caller passes `format`, forward it as Ollama's native
+  // structured-output constraint (either the string "json" or a full
+  // JSON Schema object). This makes Ollama's decoder itself refuse to
+  // emit anything but conforming JSON, token by token - it is not a
+  // prompt instruction the model can choose to ignore.
+  //
+  // This matters because `think: false` only disables the model's
+  // dedicated <think> reasoning channel - it does NOT stop a model
+  // from writing reasoning-as-prose directly into the regular content
+  // field for a task that "feels like" it needs working-out, which is
+  // exactly what was happening here: qwen3:4b would spend its entire
+  // token budget on prose like "We are given: ... Steps: 1. ..." and
+  // get cut off by maxTokens before ever producing JSON, no matter
+  // how the prompt was worded. `format` fixes that at the decoding
+  // level instead of the prompt level, so no future prompt wording
+  // change can silently reopen the same failure mode.
+  if (options.format) {
+    body.format = options.format;
+  }
+
   const response = await fetch('http://localhost:11434/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: options.model || process.env.OLLAMA_MODEL || 'qwen3:4b',
-      messages,
-      stream: false,
-      think: options.think ?? false,
-      keep_alive: options.keepAlive || Number(process.env.OLLAMA_KEEP_ALIVE) || 1800,
-      options: {
-        temperature: options.temperature ?? 0.7,
-        num_ctx: options.context ?? (Number(process.env.OLLAMA_NUM_CTX) || 8192),
-        ...(options.maxTokens !== undefined ? { num_predict: options.maxTokens } : {})
-      }
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

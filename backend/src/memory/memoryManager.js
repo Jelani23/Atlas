@@ -24,7 +24,19 @@ async function findExistingMemory(memory) {
         }
 
         case 'knowledge':
-            return await knowledgeLibrary.find(subject, memory.key);
+            // Canonical identity is category + subject + key, where
+            // "category" is knowledge's own domain field (science,
+            // technology, ...), carried as `knowledge_category` to
+            // avoid colliding with this function's own `category`
+            // variable (the memory-bank discriminator). Defaulting
+            // to 'general' matches knowledgeLibrary.js's own default
+            // so a memory that omits it still resolves to the same
+            // identity it will be stored under.
+            return await knowledgeLibrary.find(
+                memory.knowledge_category || 'general',
+                subject,
+                memory.key
+            );
 
         case 'procedure':
             return await proceduralMemory.find(
@@ -144,6 +156,35 @@ async function handleMemoryAction(extractedMemories) {
             }
 
             if (decision.action === 'duplicate') {
+                // Knowledge is the one memory type where a
+                // "duplicate" (same canonical identity, same value)
+                // still needs a write - the plan's §6 DUPLICATE /
+                // REFRESH case explicitly calls for confidence,
+                // source, and updated_at to be refreshed even when
+                // the value itself hasn't materially changed, so a
+                // second/third corroborating mention of the same
+                // fact isn't silently a no-op. upsertKnowledge is the
+                // same deterministic DB write used for insert/update
+                // below - see its header comment for why one
+                // operation covers all three cases here. Procedure
+                // and project memories intentionally do NOT get this
+                // treatment - their duplicate semantics are unchanged.
+                if (memory.category === 'knowledge') {
+                    await knowledgeLibrary.upsertKnowledge({
+                        category: memory.knowledge_category || 'general',
+                        subject: memory.subject || 'general',
+                        topics: Array.isArray(memory.topics) ? memory.topics : [],
+                        type: memory.type,
+                        key: memory.key,
+                        value: memory.value,
+                        confidence: memory.confidence ?? 1.0,
+                        source: memory.source,
+                        source_type: memory.source_type
+                    });
+
+                    memoryCache.invalidate('knowledge_library');
+                }
+
                 duplicates.push(decision);
                 continue;
             }
@@ -212,10 +253,21 @@ async function handleMemoryAction(extractedMemories) {
                 }
 
                 else if (memory.category === 'knowledge') {
-                    await knowledgeLibrary.addKnowledge({
+                    // insert and update both resolve to the same
+                    // deterministic upsert - see upsertKnowledge's
+                    // header comment in knowledgeLibrary.js.
+                    await knowledgeLibrary.upsertKnowledge({
+                        category: memory.knowledge_category || 'general',
                         subject: memory.subject || 'general',
+                        topics: Array.isArray(memory.topics)
+                            ? memory.topics
+                            : [],
+                        type: memory.type,
                         key: memory.key,
-                        value: memory.value
+                        value: memory.value,
+                        confidence: memory.confidence ?? 1.0,
+                        source: memory.source,
+                        source_type: memory.source_type
                     });
 
                     memoryCache.invalidate('knowledge_library');
