@@ -21,50 +21,81 @@ const modelAdapter = createModelAdapter();
 // project_key - and that business rule is enforced separately in the
 // parsing code below and in memoryManager's validation. The schema's
 // job is only to guarantee valid, well-typed JSON comes back at all.
-const EXTRACTION_SCHEMA = {
-    type: 'object',
-    properties: {
-        memories: {
-            type: 'array',
-            items: {
+//
+// Phase: `project_key` used to be entirely absent from this schema, so
+// the model had no schema-enforced way to return one - memoryManager.js
+// then fell back to `memory.subject` to resolve the project, but the
+// prompt below explicitly instructs the model that `subject` is a
+// domain area ("memory", "database", ...) and is "Never the project
+// name". That fallback was therefore looking up a generic domain word
+// (or, worse, a plural like "projects"/"memories" when the model
+// hedged) in the project registry, failing to match, and silently
+// rejecting an otherwise-correct extraction. `project_key` is now a
+// first-class schema field, constrained to an enum of the actual
+// registered project_key values when any are known - so decoding
+// literally cannot produce a project_key that isn't a real project.
+function buildExtractionSchema(projectKeys = []) {
+    const projectKeyField = projectKeys.length > 0
+        ? { type: 'string', enum: projectKeys }
+        : { type: 'string' };
+
+    return {
+        type: 'object',
+        properties: {
+            memories: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        category: { type: 'string' },
+                        subject: { type: 'string' },
+                        // project_key: the canonical project identity for
+                        // category:'project' memories ONLY. Must be one of
+                        // the registered project_key values, never a
+                        // display name, alias, or domain word. Omit
+                        // entirely for every other category.
+                        project_key: projectKeyField,
+                        // Phase: minItems added - same root cause as
+                        // searchKnowledgeExtractor.js's identical schema. Left
+                        // out of `required` deliberately (see the comment above
+                        // this schema on why it's loose) since not every category
+                        // stored via longTermProfile actually persists topics -
+                        // but the model was observed reliably emitting the field
+                        // anyway, just empty, so minItems alone is enough to stop
+                        // that without over-constraining categories that don't
+                        // use it.
+                        topics: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 },
+                        key: { type: 'string' },
+                        value: { type: 'string' },
+                        trigger: { type: 'string' },
+                        action: { type: 'string' },
+                        context: { type: 'string' },
+                        confidence: { type: 'number' },
+                        knowledge_category: { type: 'string' },
+                        type: { type: 'string' },
+                        source: { type: 'string' },
+                        source_type: { type: 'string' }
+                    },
+                    required: ['category', 'key', 'value']
+                }
+            },
+            conversation_update: {
                 type: 'object',
                 properties: {
-                    category: { type: 'string' },
-                    subject: { type: 'string' },
-                    // Phase: minItems added - same root cause as
-                    // searchKnowledgeExtractor.js's identical schema. Left
-                    // out of `required` deliberately (see the comment above
-                    // this schema on why it's loose) since not every category
-                    // stored via longTermProfile actually persists topics -
-                    // but the model was observed reliably emitting the field
-                    // anyway, just empty, so minItems alone is enough to stop
-                    // that without over-constraining categories that don't
-                    // use it.
-                    topics: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 5 },
-                    key: { type: 'string' },
-                    value: { type: 'string' },
-                    trigger: { type: 'string' },
-                    action: { type: 'string' },
-                    context: { type: 'string' },
-                    confidence: { type: 'number' },
-                    knowledge_category: { type: 'string' },
-                    type: { type: 'string' },
-                    source: { type: 'string' },
-                    source_type: { type: 'string' }
-                },
-                required: ['category', 'key', 'value']
+                    current_topic: { type: 'string' },
+                    recent_decisions: { type: 'array', items: { type: 'string' } }
+                }
             }
         },
-        conversation_update: {
-            type: 'object',
-            properties: {
-                current_topic: { type: 'string' },
-                recent_decisions: { type: 'array', items: { type: 'string' } }
-            }
-        }
-    },
-    required: ['memories']
-};
+        required: ['memories']
+    };
+}
+
+// Kept for any external code/tests that import the schema shape directly.
+// Reflects the no-registered-projects case (project_key unconstrained) -
+// extractMemory() always builds the properly-enum-constrained version
+// per-call, since the valid set of project keys can change at runtime.
+const EXTRACTION_SCHEMA = buildExtractionSchema([]);
 
 // Same deterministic-defaulting rationale as the `type`/`source_type`
 // defaulting below - a code-level fallback in case a model still
@@ -83,61 +114,74 @@ async function extractMemory(
     workingContext = {}
 ) {
 
-    let registeredProjects = Array.isArray(
-        workingContext.registered_projects
-    )
+    // Phase: this used to only build a flattened, display-only list of
+    // names/keys/aliases (registeredProjects) with no separate record of
+    // which strings are actual canonical project_key values - so there
+    // was nothing to constrain the schema's project_key field against
+    // (see buildExtractionSchema's comment). This now always loads the
+    // full project rows so project_key values are known with certainty,
+    // regardless of what workingContext happened to carry.
+    let projectRows = [];
+    try {
+        projectRows = await projectRegistry.getAllProjects();
+    } catch (error) {
+        console.error(
+            '[MemoryExtractor] Failed to load registered projects:',
+            error.message
+        );
+    }
+
+    const projectKeys = projectRows
+        .map(project => project.project_key)
+        .filter(Boolean);
+
+    // Display list keeps the richer name/key/alias text (and honors a
+    // caller-supplied workingContext.registered_projects subset when
+    // present) so the model can still pattern-match against whatever
+    // name or alias the user actually typed - project_key is what gets
+    // stored, but the model needs the human-readable forms too in order
+    // to recognize the project in the first place.
+    let displayProjects = Array.isArray(workingContext.registered_projects)
         ? workingContext.registered_projects
             .map(project => {
-
-                if (typeof project === 'string') {
-                    return project;
-                }
-
-                return project.name ||
-                    project.project_key ||
-                    null;
+                if (typeof project === 'string') return project;
+                return project.name || project.project_key || null;
             })
             .filter(Boolean)
         : [];
 
-    if (registeredProjects.length === 0) {
-        try {
-            const projects =
-                await projectRegistry.getAllProjects();
-
-            registeredProjects = projects
-                .flatMap(project => [
-                    project.name,
-                    project.project_key,
-                    ...(Array.isArray(project.aliases)
-                        ? project.aliases
-                        : [])
-                ])
-                .filter(Boolean);
-
-        } catch (error) {
-
-            console.error(
-                '[MemoryExtractor] Failed to load registered projects:',
-                error.message
-            );
-        }
+    if (displayProjects.length === 0) {
+        displayProjects = projectRows.flatMap(project => [
+            project.name,
+            project.project_key,
+            ...(Array.isArray(project.aliases) ? project.aliases : [])
+        ]).filter(Boolean);
     }
 
     const registeredProjectsText =
-        registeredProjects.length > 0
-            ? registeredProjects
-                .map(project => `- ${project}`)
+        projectRows.length > 0
+            ? projectRows
+                .map(project => `- project_key: "${project.project_key}" (name: "${project.name}"${
+                    Array.isArray(project.aliases) && project.aliases.length > 0
+                        ? `, aliases: ${project.aliases.map(a => `"${a}"`).join(', ')}`
+                        : ''
+                })`)
                 .join('\n')
             : 'None';
 
     const projectContextInstruction =
-        registeredProjects.length > 0
+        projectRows.length > 0
             ? `
 The project registry above is authoritative.
 
 If the user's message clearly refers to one of these
-registered projects, you may create a project memory for it.
+registered projects (by name, project_key, or alias), you
+may create a project memory for it. Set "project_key" to the
+EXACT project_key value shown above - never the display name,
+never an alias, and never a generic domain word like "memory"
+or "project". If you cannot confidently match the message to
+one specific project_key from the list, do NOT emit a
+category:"project" memory at all - use "knowledge" instead.
 
 Do NOT reject a project fact merely because Active Project
 is None. A project can be referenced explicitly without
@@ -199,10 +243,17 @@ ALICE SHOULD BEHAVE OR PERFORM A TASK, use "procedure".
 "The current project is Bindex" → state
 
 PROJECT MEMORY FIELDS
+- project_key: REQUIRED for category:"project". Must be the exact
+  project_key string from the REGISTERED PROJECTS list above - copy
+  it verbatim. Never the project's display name, never an alias,
+  never a subject/domain word. If no single project_key confidently
+  matches, do not use category:"project" at all.
 - subject: broad project area the fact belongs to (memory, database,
   authentication, frontend, backend, architecture, files, features,
   integrations, deployment, configuration, testing, logging,
-  performance, models, reasoning, voice). Never the project name.
+  performance, models, reasoning, voice). Never the project name and
+  never the project_key - subject and project_key answer different
+  questions (WHICH project vs WHAT part of it).
   Don't invent an overly specific subject for every fact.
 - topics: 2-5 retrieval terms. NOT relationship words (uses,
   requires, supports, contains, depends_on, connects_to, because,
@@ -419,7 +470,7 @@ If nothing should be remembered:
                         think: false,
                         temperature: 0.1,
                         maxTokens: 600,
-                        format: EXTRACTION_SCHEMA
+                        format: buildExtractionSchema(projectKeys)
                     }
                 )
             );
@@ -513,5 +564,6 @@ If nothing should be remembered:
 
 module.exports = {
     extractMemory,
-    EXTRACTION_SCHEMA
+    EXTRACTION_SCHEMA,
+    buildExtractionSchema
 };

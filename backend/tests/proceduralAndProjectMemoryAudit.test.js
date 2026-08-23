@@ -873,17 +873,38 @@ async function testReasoningLeakRobustness() {
     );
 
     // Same regression check, one level up: memoryExtractor's fallback
-    // classifier call must carry format: EXTRACTION_SCHEMA too.
+    // classifier call must carry a schema-constrained `format` too.
+    //
+    // Phase: this used to assert deep-equality against the static
+    // EXTRACTION_SCHEMA constant. That constant now reflects the
+    // no-registered-projects case only (buildExtractionSchema([])) -
+    // extractMemory() builds the schema per-call via
+    // buildExtractionSchema(projectKeys), constraining project_key to an
+    // enum of whatever projects are actually registered right now (see
+    // memoryExtractor.js's comment on why: an unconstrained project_key
+    // was the root cause of correct extractions being saved under the
+    // wrong/no project). This asserts the field is present and, when the
+    // registry has projects, is properly enum-constrained - not that the
+    // whole schema matches a fixed snapshot that can drift from what
+    // project rows the test DB happens to have.
     fakeCompleteCallLog = [];
     fakeCompleteImpl = async () => '{"memories": [], "conversation_update": {}}';
 
     await memoryExtractor.extractMemory('Some message with no deterministic match at all here.', {});
 
+    const fallbackFormat = fakeCompleteCallLog[0] && fakeCompleteCallLog[0].options.format;
+    const projectKeyField = fallbackFormat &&
+        fallbackFormat.properties.memories.items.properties.project_key;
+
     ok(
-        'memoryExtractor\'s fallback classifier call carries format: EXTRACTION_SCHEMA',
+        'memoryExtractor\'s fallback classifier call carries a project_key-aware schema-constrained format',
         fakeCompleteCallLog.length === 1 &&
-        JSON.stringify(fakeCompleteCallLog[0].options.format) === JSON.stringify(memoryExtractor.EXTRACTION_SCHEMA),
-        JSON.stringify(fakeCompleteCallLog[0] && fakeCompleteCallLog[0].options.format)
+        !!fallbackFormat &&
+        JSON.stringify(fallbackFormat.properties.memories.items.properties.category) === JSON.stringify(memoryExtractor.EXTRACTION_SCHEMA.properties.memories.items.properties.category) &&
+        !!projectKeyField &&
+        projectKeyField.type === 'string' &&
+        (!Array.isArray(projectKeyField.enum) || projectKeyField.enum.every(k => typeof k === 'string')),
+        JSON.stringify(fallbackFormat)
     );
 
     // Reset the fake back to the well-behaved baseline used by later

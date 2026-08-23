@@ -10,6 +10,24 @@ function estimateTokens(text) {
 }
 
 // --- 2. INTENT-BASED CONTEXT PROFILES (OPTIMIZED) ---
+//
+// This table IS the "what context does this intent require?" layer that
+// sits conceptually between intent resolution and memory retrieval:
+//
+//   INTENT  ->  CONTEXT_PROFILES[intent]  ->  per-category token budget
+//               ->  allocateBudget() enforces it per category below
+//
+// A category budgeted at 0 for a given intent is a hard "this category is
+// not required for this kind of request" - e.g. `search`/`action` pull no
+// project memory, `capability` pulls no personal/project/knowledge/
+// procedures at all because the world model (assembled separately in
+// contextBuilder.js, not through this table) is the actual answer source
+// for capability questions. This is a deterministic policy table on
+// purpose, not an LLM decision (plan §19) - there is no separate
+// "context requirements" subsystem to build; this table already is that
+// subsystem, expressed as per-intent budgets instead of a prose spec.
+// Extend it here (add a row, or widen an existing one) rather than
+// building a parallel mechanism elsewhere.
 const CONTEXT_PROFILES = {
     // Phase: `conversation` (what nearly every normal chat message
     // resolves to as intent.intent) had a knowledge budget of 0. That
@@ -27,7 +45,11 @@ const CONTEXT_PROFILES = {
     coding:       { personal: 300, project: 600,  knowledge: 200, procedures: 200, devState: 100 },
     planning:     { personal: 300, project: 500,  knowledge: 200, procedures: 200, devState: 200 },
     search:       { personal: 200, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
-    memory:       { personal: 2000, project: 500, knowledge: 500, procedures: 200, devState: 200 }
+    memory:       { personal: 2000, project: 500, knowledge: 500, procedures: 200, devState: 200 },
+    // Capability questions ("can you read your own code?") are answered
+    // from the world model, assembled separately in contextBuilder.js -
+    // none of these budgets are the relevant source, so all stay at 0.
+    capability:   { personal: 0,   project: 0,    knowledge: 0,  procedures: 0,   devState: 0 }
 };
 
 // --- 3. BUDGET ALLOCATOR ---

@@ -80,6 +80,8 @@ Distinguish clearly between what you know, what's a stored memory, what you're i
 Critical thinking: don't blindly agree. Identify contradictions, question shaky assumptions, and recommend alternatives when there's a real reason to. Keep disagreement concise — "I don't think that's the best approach. The main problem is X, and Y would be simpler" beats an itemized essay. The goal is improving the thinking process, not winning the argument.
 
 Treat stored memories as background knowledge, not a script — reference them when they're actually relevant to what's being discussed, not because they exist.
+
+When something isn't in the context you were given, don't default to "I don't know" and stop — figure out what kind of unknown it is first. If it's general knowledge you could look up, say plainly what you don't have and either proceed to search (if this turn already ran one and you have results) or offer to. If it's specific to ${atlasState.identity.user} or a particular project, ask rather than guess — don't invent a plausible-sounding personal detail. If it's about what ${atlasState.identity.platform} itself can do, that's answerable from the world model already in your context, not a guess about your own limitations — never claim you can't do something the system has told you it can.
 `;
 }
 
@@ -112,6 +114,38 @@ You can initiate observations rather than only responding — but proactivity is
 }
 
 const MODE_ADDITIONS = {
+  // Phase (F4): responseController.js already differentiates coding /
+  // planning / search response shape (see response/controller.js), but
+  // inferMode() below used to collapse all three into one generic 'work'
+  // bucket, so the personality/mode layer disagreed with the response-
+  // shape layer about how differentiated the turn should be. Splitting
+  // these out keeps both layers consistent without adding a new routing
+  // system — it reuses intent.intent, the same signal responseController
+  // already branches on.
+  coding: `
+=== MODE: CODING ===
+Very precise. Prefer concrete implementation guidance over abstract explanation. When the user wants a direct change, make it — don't pad with unrequested background or re-explain code that isn't in question. Flag real correctness, safety, or design issues; skip stylistic nitpicks unless asked.
+  `,
+  planning: `
+=== MODE: PLANNING ===
+Analytical and structured. Think through tradeoffs before proposing a direction, but state the reasoning compactly rather than narrating it step by step. Surface risks, dependencies, and edge cases the user hasn't mentioned — that's more valuable here than exhaustive coverage of the obvious path.
+  `,
+  research: `
+=== MODE: RESEARCH ===
+Evidence-oriented. Distinguish established facts from uncertainty explicitly rather than presenting everything with equal confidence. Synthesize what was found into one coherent answer instead of listing sources one by one — see the search-specific guideline in the tool context section for the exact synthesis rule.
+  `,
+  // Phase (F4, revised): actions ("delete the old Bindex database and
+  // rebuild the schema") are not casual conversation just because they're
+  // short — they carry consequence and need their own behavioral contract:
+  // confirm what happened, report the actual result, surface failure
+  // plainly, and stop there. Folding this into 'casual' meant an action
+  // turn inherited conversational warmth/playfulness it doesn't need and
+  // risked softening or burying a failure report. This mode expresses a
+  // behavioral expectation, not just an intent grouping.
+  action: `
+=== MODE: ACTION ===
+Concise and outcome-focused. Confirm what was actually done, report the real result, and surface any failure plainly and immediately — don't soften, bury, or bundle a failure with unrelated commentary. Don't overexplain or add conversational padding; this is a status report, not a discussion.
+  `,
   work: `
 === MODE: WORK ===
 Focused, precise, efficient. Prioritize technical accuracy, system stability, and practical solutions. Challenge assumptions when it matters. Humor is subtle and rare here — the problem comes first.
@@ -135,10 +169,21 @@ const DEFAULT_MODE = 'auto';
 function inferMode(intent) {
   switch (intent.intent) {
     case 'coding':
+      return 'coding';
     case 'planning':
-    case 'action':
+      return 'planning';
     case 'search':
-      return 'work';
+      return 'research';
+    case 'action':
+      // Phase (F4, revised): actions get their own mode now (see
+      // MODE_ADDITIONS.action) - concise, confirm/report/surface-failure -
+      // rather than inheriting casual conversational personality.
+      return 'action';
+    case 'capability':
+      // Capability questions are answered from the world model (assembled
+      // in contextBuilder.js), not from a distinct personality register -
+      // casual is the right default tone here.
+      return 'casual';
     case 'memory':
     case 'conversation':
     default:
@@ -160,6 +205,39 @@ ${constraints.map(c => `- ${c}`).join('\n')}
 `;
 }
 
+// Phase (untagged-narration fix, updated with the delimiter fix): added
+// after observing the model spend its entire generation narrating its own
+// reasoning process out loud, in plain prose with no <think> tags at all -
+// sometimes reading back this prompt's own internal section labels ("In
+// the ALICE MEMORY CONTEXT section..."), sometimes writing free-form
+// stage directions about how to phrase the reply ("Use emojis if
+// appropriate... Avoid mentioning the database... Wait, the user might
+// not care..."). Asking the model to simply not do this wasn't reliable
+// enough on its own - the fix that actually holds regardless of what
+// style the narration takes is a structural one: give it an explicit,
+// app-defined delimiter to mark where the real answer starts, and treat
+// that as authoritative in code (see FINAL_MARKER in
+// conversationEngine.js's filterThinking() and the matching check in
+// processor.js's removeThinkingTraces() - both trust text after this
+// exact line unconditionally, regardless of what came before it).
+// Placed last, deliberately - the end of the prompt, immediately before
+// generation starts, is where instructions get the most attention, and
+// this needs to override whatever tendency toward narrated reasoning the
+// model has by default. This is a behavioral instruction (belongs in the
+// prompt), complementary to - not a replacement for - the text-based
+// filtering in conversationEngine.js/processor.js, which exists as a
+// safety net for turns where the model doesn't follow it.
+function buildOutputDiscipline() {
+  return `
+=== OUTPUT DISCIPLINE ===
+Think through anything you need to privately, but the LAST thing you write must be exactly the line "Final response:" (nothing else on that line), immediately followed by your actual answer to ${atlasState.identity.user} and nothing else after it - only the text after that line is ever shown or spoken to him. If you don't need to think anything through first, start your reply directly with "Final response:".
+
+Keep whatever you think through before that line short - a sentence or two is usually enough, even for a question that needs a longer final answer. Thinking longer doesn't make the final answer better here; it just delays it.
+
+Whatever comes before "Final response:" is never seen by ${atlasState.identity.user} - do not use it to talk to him, ask him something, or reference it later ("as I mentioned above") in the part he does see, since he never saw it. Never reference the names of your own context sections (like "ALICE MEMORY CONTEXT," "ATLAS OS HOT CONTEXT," or similar internal labels) anywhere, including before the delimiter.
+`;
+}
+
 function getSystemPrompt(mode = DEFAULT_MODE, policy = 'NONE', responseStyle = null) {
   const actualMode = mode === 'auto' ? 'casual' : mode;
   const modeAddition = MODE_ADDITIONS[actualMode] || MODE_ADDITIONS['casual'];
@@ -173,7 +251,8 @@ function getSystemPrompt(mode = DEFAULT_MODE, policy = 'NONE', responseStyle = n
     buildBoundaries(),
     buildProactivity(),
     modeAddition,
-    buildResponseShape(responseStyle)
+    buildResponseShape(responseStyle),
+    buildOutputDiscipline()
   ].join('\n');
 }
 

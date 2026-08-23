@@ -164,8 +164,19 @@ function emitMetrics(data, model, requestId) {
     promptEvalCount: data.prompt_eval_count || 0,
     evalDuration: ms(data.eval_duration || 0),
     evalCount: data.eval_count || 0,
-    totalDuration: ms(data.total_duration || 0)
+    totalDuration: ms(data.total_duration || 0),
+    doneReason: data.done_reason || null
   };
+  // num_predict is a SHARED budget across thinking + content for this
+  // model/Ollama combo (qwen3's reasoning-as-content behavior means there
+  // is no separate reasoning allowance - see reasoning/controller.js).
+  // done_reason: "length" means generation was cut off mid-stream, not
+  // that it finished naturally - if that happens while the reply looked
+  // empty or truncated to the user, the fix is raising maxTokens for the
+  // policy that produced this request, not chasing the think flag again.
+  if (data.done_reason === 'length') {
+    console.warn(`[OllamaProvider] ${requestId}: hit maxTokens (num_predict) before the model finished - reply was likely truncated. evalCount=${data.eval_count || 0}`);
+  }
   eventBus.emit(EventTypes.LLM_METRICS, metrics);
 }
 

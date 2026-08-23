@@ -117,14 +117,41 @@ async function handleMemoryAction(extractedMemories) {
 
         try {
             if (memory.category === 'project') {
+                // Phase: this used to fall back to `memory.subject` when
+                // `project_key` was missing/unresolvable. `subject` is
+                // documented to the extractor (see memoryExtractor.js's
+                // prompt) as a domain area ("memory", "database", ...) and
+                // explicitly "Never the project name" - so that fallback
+                // was looking up exactly the field guaranteed NOT to be a
+                // project identifier, which is how a correct extraction
+                // (right key/value/category) still silently failed to
+                // save: `subject` came back as something like "memory" or
+                // a plural like "projects", failed to match any real
+                // project, and got rejected here. `project_key` is now a
+                // schema-enforced field (see buildExtractionSchema) - an
+                // unresolvable project is now a real signal that the
+                // extraction should be rejected, not a cue to guess from
+                // an unrelated field.
+                if (!memory.project_key) {
+                    console.log(
+                        `[MemoryManager] 🚫 Rejected project memory with no project_key (subject="${memory.subject}").`
+                    );
+
+                    ignored.push({
+                        memory,
+                        reason: 'Project memory is missing project_key.'
+                    });
+
+                    continue;
+                }
+
                 const projectResult = await projectResolver.resolveProject(
-                    memory.project_key ||
-                    memory.subject
+                    memory.project_key
                 );
 
                 if (projectResult.type !== 'existing_project') {
                     console.log(
-                        `[MemoryManager] 🚫 Rejected project memory for unknown project "${memory.project_key || memory.subject}".`
+                        `[MemoryManager] 🚫 Rejected project memory for unknown project "${memory.project_key}".`
                     );
 
                     ignored.push({

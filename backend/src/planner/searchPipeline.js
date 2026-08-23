@@ -5,6 +5,13 @@ const { stripThinking } = require('../utils/jsonExtractor');
 const modelAdapter = createModelAdapter();
 const SEARCH_DELAY = 1000; // Configurable delay (Atlas's suggestion!)
 
+// Query generation is a fast, low-level LLM task - run it on Gemini 2.5
+// Flash when a key is configured (no Qwen3 thinking trace on every search),
+// otherwise fall back to the default provider.
+const queryModelAdapter = process.env.GEMINI_API_KEY
+    ? createModelAdapter('gemini')
+    : modelAdapter;
+
 // Generates 3 distinct search queries using line-by-line generation
 async function generateQueries(message) {
     const prompt = `
@@ -14,10 +21,15 @@ async function generateQueries(message) {
     `;
     
     try {
-        const response = await modelAdapter.complete([
+        // maxTokens bumped from 150: gemini-3.6-flash reserves a token
+        // floor for thinking even at reasoning_effort:'low' (see
+        // gemini.js) - 150 left no room for that floor plus 3 query
+        // lines, so this call to Gemini specifically (queryModelAdapter)
+        // was the "Query generation failed" line seen live.
+        const response = await queryModelAdapter.complete([
             { role: 'system', content: 'You are a search query generator.' },
             { role: 'user', content: prompt }
-        ], { think: true, temperature: 0.3 });
+        ], { temperature: 0.2, maxTokens: 900, timeout: 8000 });
         
         // 1. Strip thinking traces completely before processing (handles a
         // stray closing </think> with no opener, which the old paired-tag

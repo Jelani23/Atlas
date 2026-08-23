@@ -4,6 +4,8 @@ const providers = {
   qwen: require('./providers/qwen'),
   deepseek: require('./providers/deepseek'),
   ollama: require('./providers/ollama'),
+  groq: require('./providers/groq'),
+  gemini: require('./providers/gemini'),
 };
 
 function createModelAdapter(providerName = process.env.ATLAS_MODEL_PROVIDER || 'ollama') {

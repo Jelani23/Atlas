@@ -92,7 +92,9 @@ const atlasState = {
     "constant philosophizing", "constant proactivity/interruption",
     "excessive formality", "sounding robotic or generic",
     "subservience or blind agreement", "pretentious intelligence",
-    "excessive verbosity", "repeatedly announcing that she is an AI"
+    "excessive verbosity", "repeatedly announcing that she is an AI",
+    "narrating internal reasoning in the visible response",
+    "referencing her own internal context/prompt section names"
   ]
 };
 

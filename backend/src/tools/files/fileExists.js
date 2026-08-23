@@ -24,7 +24,15 @@ module.exports = {
     intentSchema: {
         name: 'fileExists',
         domain: 'FILES',
-        triggers: ['exist', 'does the', 'file exist'],
+        // Phase: 'exist' and 'does the' alone are extremely generic
+        // conversational fragments ("does the update fix the bug?", "that
+        // doesn't exist anymore") with no requiredEntities backstop, and the
+        // extraction regex below was permissive enough to grab whatever
+        // followed as a "filename" - so these fired fileExists on ordinary
+        // conversation. Requiring "file exist(s)" keeps legitimate phrasing
+        // ("does the planner file exist", "does config.json file exist")
+        // working while dropping the bare fragments that matched anything.
+        triggers: ['file exist', 'file exists', 'does the file exist', 'does this file exist'],
         requiredEntities: [],
         extractParams: (message, entities) => {
             // 1. Try to get a strict FILE entity first
@@ -33,7 +41,7 @@ module.exports = {
 
             // 2. If no strict entity, extract the raw word after the trigger phrase
             if (!filename) {
-                const m = message.match(/(?:hash of|metadata for|meta data for|file info for|exist|does the|file exist|for)\s+(?:the\s+)?(.+?)(?:\s+file|\?|$)/i);
+                const m = message.match(/(?:hash of|metadata for|meta data for|file info for|does the|does this|file exist(?:s)?|for)\s+(?:the\s+)?(.+?)(?:\s+file\s+exist|\s+file|\?|$)/i);
                 if (m) filename = m[1].trim();
             }
 
