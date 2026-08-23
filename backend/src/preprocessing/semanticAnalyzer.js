@@ -39,6 +39,21 @@ Classify the following user message and return ONLY a flat JSON object with thes
     is ambiguous to classify. "low" for small talk, simple factual questions,
     or a short confirmation. "high" for something that needs working through
     (debugging, planning, multi-part comparisons, non-trivial explanations).
+  "topicFamiliarity": "confident" or "uncertain" or "not_applicable" - ONLY
+    relevant when the message asks about a specific real-world fact, named
+    entity, person, product, event, or piece of media (e.g. "what is X",
+    "who is Y", "tell me about Z"). Answer as YOURSELF, a large well-informed
+    model - not a guess about what a smaller downstream model might do:
+    "confident" if you have specific, verifiable, well-established knowledge
+    of that exact entity/topic. "uncertain" if the entity is obscure, you're
+    not sure you have accurate specific details (names, dates, roles,
+    relationships), it could be confused with something similarly named, or
+    you genuinely don't recognize it. Use "not_applicable" for anything that
+    isn't a specific factual/entity lookup (small talk, opinions, coding,
+    instructions, math, etc). When uncertain whether you're uncertain,
+    prefer "uncertain" - a false "confident" here causes a downstream model
+    to fabricate authoritative-sounding details about something it doesn't
+    actually know.
 }
 Base each field strictly on what the message actually asks for. Do not add fields, prose, or explanation.`;
 

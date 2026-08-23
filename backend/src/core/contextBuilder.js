@@ -281,6 +281,31 @@ Limitations:
         }
     }
 
+    // Phase (hallucination fix): Groq's topicFamiliarity read (see
+    // semanticAnalyzer.js) is the actual enforcement point for "only know
+    // what you know" - personalityEngine.js's EPISTEMIC STANDARDS section
+    // already asked Qwen to hedge on its own, but a live bug report
+    // (confident, fully fabricated "Neuro-sama is a Tensura antagonist"
+    // complete with a details table) confirmed a 4B local model won't
+    // reliably self-police that without something concrete to react to.
+    // Groq runs first, sees only the raw message, and is a much larger/
+    // better-calibrated model - so its own admission of uncertainty about
+    // a specific entity is a real signal, not a guess about what Qwen
+    // will do. This is deliberately its own block, OUTSIDE the `ran`/
+    // notes gate above and phrased as a direct instruction rather than a
+    // classification note - "topicFamiliarity=uncertain" sitting quietly
+    // inside [Groq Semantic Profile] is exactly the kind of context a
+    // small model skims past, the same way it skimmed past the standing
+    // epistemic-honesty instruction already in the system prompt.
+    let uncertaintyDirective = '';
+    if (preprocessed && preprocessed.semantic && preprocessed.semantic.topicFamiliarity === 'uncertain') {
+        uncertaintyDirective = `
+--- KNOWLEDGE CHECK (do not skip) ---
+A preliminary check found you likely do NOT have reliable, specific knowledge of the exact entity/topic in this message - it may be obscure, easily confused with something similarly named, or outside what you actually know. Do not invent specific facts, names, dates, roles, or relationships about it, and do not produce a confident structured answer (list, table, "quick reference") as if you had verified information. Say plainly that you don't have reliable information on this specific topic, and ask if ${atlasState.identity.user} would like you to look it up.
+--- END KNOWLEDGE CHECK ---
+`;
+    }
+
     // Phase (F1): build the memory block from only the sections that
     // actually have content, and drop the whole "ALICE MEMORY CONTEXT"
     // wrapper (plus its two memory-specific guideline bullets below) when
@@ -307,7 +332,7 @@ Limitations:
 
     console.timeEnd("buildContext");
 
-    return `${dateLine}\n${systemPrompt}\n${worldModelContext}\n--- CONVERSATION WORKING CONTEXT ---\n${workingContextStr}\n--- END WORKING CONTEXT ---\n${hotStateContext}${preprocessingContext}${memoryBlock}${proceduralBlockClosed}${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.${toolGuidelines}${memoryGuidelines}\n- Respond naturally as ${atlasState.identity.name}.`;
+    return `${dateLine}\n${systemPrompt}\n${worldModelContext}\n--- CONVERSATION WORKING CONTEXT ---\n${workingContextStr}\n--- END WORKING CONTEXT ---\n${hotStateContext}${preprocessingContext}${memoryBlock}${proceduralBlockClosed}${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n${uncertaintyDirective}\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.${toolGuidelines}${memoryGuidelines}\n- Respond naturally as ${atlasState.identity.name}.`;
 }
 
 module.exports = { buildContext };
