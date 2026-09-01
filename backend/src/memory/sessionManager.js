@@ -2,6 +2,43 @@
 const supabase = require('../database/supabaseClient');
 
 let currentSessionId = null;
+let reflectionLifecycleSupported = null;
+
+const REFLECTION_MIN_MESSAGES = Math.max(
+    1,
+    Number(process.env.REFLECTION_MIN_MESSAGES) || 3
+);
+const REFLECTION_MAX_ATTEMPTS = Math.max(
+    1,
+    Number(process.env.REFLECTION_MAX_ATTEMPTS) || 3
+);
+
+// The lifecycle migration is deliberately feature-detected at runtime. This
+// keeps a checked-out backend usable before migration 004 has been applied to
+// Supabase, while enabling the durable queue automatically after it is.
+async function supportsReflectionLifecycle() {
+    if (reflectionLifecycleSupported !== null) {
+        return reflectionLifecycleSupported;
+    }
+
+    const { error } = await supabase
+        .from('sessions')
+        .select('reflection_status')
+        .limit(1);
+
+    reflectionLifecycleSupported = !error;
+
+    if (error) {
+        console.warn(
+            '[SessionManager] Reflection lifecycle migration is not active; ' +
+            'using the legacy close-session path.'
+        );
+    } else {
+        console.log('[SessionManager] Durable reflection lifecycle is active.');
+    }
+
+    return reflectionLifecycleSupported;
+}
 
 async function startSession() {
     const { data, error } = await supabase
@@ -124,54 +161,256 @@ async function renameSession(sessionId, title) {
     return cleanTitle;
 }
 
-// Quietly clears out sessions that never got a single message — abandoned
-// "New conversation" clicks, connection hiccups, etc. — so they don't
-// clutter the history list. `excludeId` protects whichever session is
-// currently live (it may still be empty if nothing's been sent yet).
-async function pruneEmptySessions(excludeId = null) {
-    const { data: sessions, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('id');
+async function getSessionMessageCount(sessionId) {
+    if (!sessionId) return 0;
 
-    if (sessionsError || !sessions || sessions.length === 0) return;
-
-    const { data: convRows, error: convError } = await supabase
+    const { count, error } = await supabase
         .from('conversations')
-        .select('session_id');
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', sessionId);
 
-    if (convError) {
-        console.error('Failed to check for empty sessions:', convError.message);
-        return;
+    if (error) {
+        throw new Error(`Failed to count session messages: ${error.message}`);
     }
 
-    const nonEmptyIds = new Set((convRows || []).map((r) => r.session_id));
-    const emptyIds = sessions
-        .map((s) => s.id)
-        .filter((id) => !nonEmptyIds.has(id) && String(id) !== String(excludeId));
-
-    if (emptyIds.length === 0) return;
-
-    const { error: deleteError } = await supabase.from('sessions').delete().in('id', emptyIds);
-    if (deleteError) {
-        console.error('Failed to prune empty sessions:', deleteError.message);
-    }
+    return count || 0;
 }
 
-async function endSession() {
-    if (!currentSessionId) {
-        return;
+async function endSession(sessionId = currentSessionId) {
+    if (!sessionId) {
+        return { sessionId: null, reflectionStatus: 'skipped', messageCount: 0 };
+    }
+
+    const lifecycleEnabled = await supportsReflectionLifecycle();
+    let messageCount = 0;
+    let reflectionStatus = null;
+    let update = { ended_at: new Date().toISOString() };
+
+    if (lifecycleEnabled) {
+        messageCount = await getSessionMessageCount(sessionId);
+        reflectionStatus = messageCount >= REFLECTION_MIN_MESSAGES
+            ? 'pending'
+            : 'skipped';
+        update = {
+            ...update,
+            reflection_status: reflectionStatus,
+            reflection_error: null,
+            reflection_started_at: null
+        };
     }
 
     const { error } = await supabase
         .from('sessions')
-        .update({ ended_at: new Date().toISOString() })
-        .eq('id', currentSessionId);
+        .update(update)
+        .eq('id', sessionId);
 
     if (error) {
-        console.error('Failed to close session in Supabase:', error.message);
+        throw new Error(`Failed to close session in Supabase: ${error.message}`);
     }
 
-    currentSessionId = null;
+    if (currentSessionId != null && String(currentSessionId) === String(sessionId)) {
+        currentSessionId = null;
+    }
+
+    console.log(
+        `[SessionManager] Closed session ${sessionId}` +
+        (lifecycleEnabled
+            ? ` | messages=${messageCount} | reflection=${reflectionStatus}`
+            : ' | legacy reflection lifecycle')
+    );
+
+    return { sessionId, reflectionStatus, messageCount, lifecycleEnabled };
+}
+
+// Recover lifecycle work that could not finish because Electron closed,
+// nodemon restarted the backend, or the process crashed. Existing sessions
+// from before migration 004 are marked `backfill_pending` by the migration and
+// are intentionally excluded here so a large historical backlog never steals
+// the GPU from a live conversation without an explicit backfill run.
+async function recoverReflectionLifecycle() {
+    if (!(await supportsReflectionLifecycle())) {
+        return { supported: false, recovered: 0, abandoned: 0 };
+    }
+
+    const { data: staleRows, error: staleError } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'pending',
+            reflection_started_at: null,
+            reflection_error: 'Recovered after an interrupted reflection attempt.'
+        })
+        .eq('reflection_status', 'processing')
+        .select('id');
+
+    if (staleError) {
+        throw new Error(`Failed to recover stale reflection jobs: ${staleError.message}`);
+    }
+
+    const { data: retryRows, error: retryError } = await supabase
+        .from('sessions')
+        .update({ reflection_status: 'pending', reflection_started_at: null })
+        .eq('reflection_status', 'failed')
+        .lt('reflection_attempts', REFLECTION_MAX_ATTEMPTS)
+        .select('id');
+
+    if (retryError) {
+        throw new Error(`Failed to requeue reflection jobs: ${retryError.message}`);
+    }
+
+    const { data: abandonedRows, error: abandonedError } = await supabase
+        .from('sessions')
+        .select('id')
+        .eq('reflection_status', 'open');
+
+    if (abandonedError) {
+        throw new Error(`Failed to find abandoned sessions: ${abandonedError.message}`);
+    }
+
+    let abandoned = 0;
+    for (const row of abandonedRows || []) {
+        await endSession(row.id);
+        abandoned += 1;
+    }
+
+    return {
+        supported: true,
+        recovered: (staleRows || []).length + (retryRows || []).length,
+        abandoned
+    };
+}
+
+async function claimNextReflectionSession() {
+    if (!(await supportsReflectionLifecycle())) return null;
+
+    const { data: candidates, error: candidateError } = await supabase
+        .from('sessions')
+        .select('id, reflection_attempts, ended_at')
+        .eq('reflection_status', 'pending')
+        .order('ended_at', { ascending: true, nullsFirst: true })
+        .limit(1);
+
+    if (candidateError) {
+        throw new Error(`Failed to load pending reflection: ${candidateError.message}`);
+    }
+
+    const candidate = candidates?.[0];
+    if (!candidate) return null;
+
+    return claimReflectionSession(candidate.id);
+}
+
+async function claimReflectionSession(sessionId) {
+    if (!sessionId || !(await supportsReflectionLifecycle())) return null;
+
+    const { data: candidate, error: candidateError } = await supabase
+        .from('sessions')
+        .select('id, reflection_attempts')
+        .eq('id', sessionId)
+        .eq('reflection_status', 'pending')
+        .maybeSingle();
+
+    if (candidateError) {
+        throw new Error(`Failed to load pending reflection ${sessionId}: ${candidateError.message}`);
+    }
+    if (!candidate) return null;
+
+    const { data, error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'processing',
+            reflection_attempts: (candidate.reflection_attempts || 0) + 1,
+            reflection_started_at: new Date().toISOString(),
+            reflection_error: null
+        })
+        .eq('id', candidate.id)
+        .eq('reflection_status', 'pending')
+        .select('id, reflection_attempts')
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to claim pending reflection: ${error.message}`);
+    }
+
+    return data || null;
+}
+
+async function markReflectionComplete(sessionId) {
+    if (!(await supportsReflectionLifecycle())) return;
+
+    const { error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'complete',
+            reflected_at: new Date().toISOString(),
+            reflection_started_at: null,
+            reflection_error: null
+        })
+        .eq('id', sessionId);
+
+    if (error) {
+        throw new Error(`Failed to complete reflection job: ${error.message}`);
+    }
+}
+
+async function markReflectionFailed(sessionId, errorMessage, attemptCount = REFLECTION_MAX_ATTEMPTS) {
+    if (!(await supportsReflectionLifecycle())) return;
+
+    const shouldRetry = Number(attemptCount) < REFLECTION_MAX_ATTEMPTS;
+
+    const { error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: shouldRetry ? 'pending' : 'failed',
+            reflection_started_at: null,
+            reflection_error: String(errorMessage || 'Unknown reflection failure').slice(0, 1000)
+        })
+        .eq('id', sessionId);
+
+    if (error) {
+        throw new Error(`Failed to record reflection failure: ${error.message}`);
+    }
+
+    return shouldRetry ? 'pending' : 'failed';
+}
+
+async function requeueReflection(sessionId) {
+    if (!(await supportsReflectionLifecycle())) {
+        throw new Error('Reflection lifecycle migration is not active.');
+    }
+
+    const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .select('id, ended_at')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+    if (sessionError) {
+        throw new Error(`Failed to load session ${sessionId}: ${sessionError.message}`);
+    }
+    if (!session) throw new Error(`Session ${sessionId} was not found.`);
+    if (!session.ended_at) throw new Error(`Session ${sessionId} is still open.`);
+
+    const messageCount = await getSessionMessageCount(sessionId);
+    if (messageCount < REFLECTION_MIN_MESSAGES) {
+        throw new Error(`Session ${sessionId} has only ${messageCount} messages.`);
+    }
+
+    const { error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'pending',
+            reflection_attempts: 0,
+            reflection_error: null,
+            reflection_started_at: null,
+            reflected_at: null
+        })
+        .eq('id', sessionId);
+
+    if (error) {
+        throw new Error(`Failed to requeue session ${sessionId}: ${error.message}`);
+    }
+
+    return { sessionId: Number(sessionId), messageCount, reflectionStatus: 'pending' };
 }
 
 // Phase 3C.2: Fetch the rolling conversation working context
@@ -248,7 +487,16 @@ module.exports = {
     getSessionMessages,
     deleteSession,
     renameSession,
-    pruneEmptySessions,
     getWorkingContext,
-    mergeWorkingContext
+    mergeWorkingContext,
+    supportsReflectionLifecycle,
+    recoverReflectionLifecycle,
+    claimNextReflectionSession,
+    claimReflectionSession,
+    markReflectionComplete,
+    markReflectionFailed,
+    requeueReflection,
+    getSessionMessageCount,
+    REFLECTION_MIN_MESSAGES,
+    REFLECTION_MAX_ATTEMPTS
 };

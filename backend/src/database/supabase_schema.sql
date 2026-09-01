@@ -15,12 +15,23 @@ create table if not exists sessions (
     id bigint generated always as identity primary key,
     started_at timestamptz not null default now(),
     ended_at timestamptz,
-    title text
+    title text,
+    reflection_status text not null default 'open',
+    reflection_attempts integer not null default 0,
+    reflection_error text,
+    reflection_started_at timestamptz,
+    reflected_at timestamptz,
+    constraint sessions_reflection_status_check check (reflection_status in (
+        'open', 'pending', 'processing', 'complete', 'failed', 'skipped', 'backfill_pending'
+    ))
 );
 
 -- Safe to re-run: adds the column if this schema already ran before
 -- `title` existed.
 alter table sessions add column if not exists title text;
+
+create index if not exists idx_sessions_reflection_queue
+    on sessions(reflection_status, ended_at, id);
 
 create table if not exists conversations (
     id bigint generated always as identity primary key,
@@ -165,6 +176,12 @@ create table if not exists reflections (
     subject text not null default 'general',
     topics text[] not null default '{}',
     summary text not null,
+    anchors text[] not null default '{}',
+    decisions text[] not null default '{}',
+    comparisons text[] not null default '{}',
+    open_loops text[] not null default '{}',
+    schema_version integer not null default 1,
+    source_message_count integer,
     confidence double precision not null default 1.0,
     "timestamp" timestamptz not null default now()
 );
@@ -172,6 +189,7 @@ create table if not exists reflections (
 create index if not exists idx_reflections_category on reflections(category);
 create index if not exists idx_reflections_subject on reflections(subject);
 create index if not exists idx_reflections_topics on reflections using gin(topics);
+create index if not exists idx_reflections_anchors on reflections using gin(anchors);
 create unique index if not exists idx_reflections_session_unique
     on reflections(session_id)
     where session_id is not null;

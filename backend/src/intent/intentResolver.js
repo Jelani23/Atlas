@@ -98,7 +98,7 @@ function resolve(message) {
             }
         }
 
-        // Domain matching
+        // Domain words can support a match, but cannot create one.
         const expectedLexical = domainMap[schema.domain] || [];
         for (const lex of lexical) {
             if (expectedLexical.includes(lex.signal)) {
@@ -115,7 +115,8 @@ function resolve(message) {
             }
         }
 
-        if (matchedTriggers === 0 && score === 0 && entityMatchCount === 0) continue;
+        // Entities validate parameters; the trigger establishes intent.
+        if (matchedTriggers === 0) continue;
 
         // Penalties
         if (schema.requiredEntities.length > 0 && entityMatchCount === 0) {

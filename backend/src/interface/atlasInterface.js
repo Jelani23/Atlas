@@ -17,6 +17,8 @@ const EventTypes = require('../events/eventTypes');
 const eventLogger = require('../events/eventLogger');
 const ollamaProvider = require('../models/providers/ollama');
 const modelRouter = require('../models/modelRouter');
+const reflectionWorker = require('../memory/reflectionWorker');
+const contextManager = require('../core/contextManager');
 
 class AtlasInterface extends EventEmitter {
     constructor() {
@@ -105,10 +107,13 @@ class AtlasInterface extends EventEmitter {
     async _reflectOnSession(sessionId) {
         if (!sessionId) return;
 
-        const history = await memory.workingMemory.getHistory(sessionId);
+        // Reflections cover the entire ordered session. The normal conversation
+        // path intentionally reads only a short recent window, but reusing that
+        // limit here silently discarded the beginning of long sessions.
+        const history = await sessionManager.getSessionMessages(sessionId);
         // Delegates to the shared reflectionEngine (see
         // memory/reflectionEngine.js) - this used to duplicate the
-        // prompt/parser/fallback logic inline here and in the orphaned
+        // prompt/parser logic inline here and in the orphaned
         // index.js CLI entrypoint, and called the model directly instead
         // of through llmQueue. Both are fixed at the shared call site now.
         await memory.reflectionEngine.generateReflection(sessionId, history);
@@ -120,6 +125,25 @@ class AtlasInterface extends EventEmitter {
 
         this._initPromise = (async () => {
             await projectCache.initialize();
+
+            // No live session exists yet, so any `open` row belongs to a prior
+            // backend process. Close/requeue it before creating this process's
+            // session, then let the idle worker handle the durable jobs.
+            reflectionWorker.initialize();
+            try {
+                const recovery = await sessionManager.recoverReflectionLifecycle();
+                if (recovery.supported && (recovery.recovered || recovery.abandoned)) {
+                    console.log(
+                        `[ReflectionWorker] Recovered ${recovery.recovered} interrupted job(s) ` +
+                        `and ${recovery.abandoned} abandoned session(s).`
+                    );
+                }
+            } catch (error) {
+                // Reflection recovery must never stop Alice from starting. The
+                // durable statuses remain available for the next retry.
+                console.error('[ReflectionWorker] Startup recovery failed:', error.message);
+            }
+
             this.sessionId = await sessionManager.startSession();
             
             const defaultModel = modelRouter.getDefaultModel().model;
@@ -127,6 +151,7 @@ class AtlasInterface extends EventEmitter {
 
             this.ready = true;
             this.emit('atlas.status', { phase: 'ready', sessionId: this.sessionId });
+            reflectionWorker.schedule();
             return this.sessionId;
         })();
 
@@ -142,7 +167,6 @@ class AtlasInterface extends EventEmitter {
     }
 
     async listConversations() {
-        await sessionManager.pruneEmptySessions(this.sessionId);
         const sessions = await sessionManager.listSessions();
         return sessions.map((s) => ({
             id: String(s.id),
@@ -150,7 +174,7 @@ class AtlasInterface extends EventEmitter {
             endedAt: s.endedAt,
             title: s.title,
             preview: s.preview,
-            isCurrent: this.sessionId != null && s.id === this.sessionId
+            isCurrent: this.sessionId != null && String(s.id) === String(this.sessionId)
         }));
     }
 
@@ -161,15 +185,42 @@ class AtlasInterface extends EventEmitter {
 
     async newConversation() {
         const outgoingSessionId = this.sessionId;
+        console.log(`[AtlasInterface] New conversation requested | outgoing=${outgoingSessionId || 'none'}`);
+        let closeResult = null;
         if (outgoingSessionId) {
-            await sessionManager.endSession();
+            closeResult = await sessionManager.endSession(outgoingSessionId);
         }
 
         this.sessionId = await sessionManager.startSession();
+        const previousReflectionSessionId = ['pending', 'complete'].includes(closeResult?.reflectionStatus)
+            ? outgoingSessionId
+            : null;
+        contextManager.registerPreviousSession(this.sessionId, previousReflectionSessionId);
+        console.log(`[AtlasInterface] New conversation started | session=${this.sessionId}`);
         this.emit('atlas.status', { phase: 'new_conversation', sessionId: this.sessionId });
 
         if (outgoingSessionId) {
-            this._reflectOnSession(outgoingSessionId);
+            if (closeResult?.lifecycleEnabled) {
+                if (closeResult.reflectionStatus === 'pending') {
+                    const result = await reflectionWorker.processSession(outgoingSessionId);
+                    if (!['complete', 'not_pending'].includes(result.status)) {
+                        console.warn(
+                            `[ReflectionWorker] Session ${outgoingSessionId} was not ready at conversation close ` +
+                            `(status=${result.status}).`
+                        );
+                    }
+                } else {
+                    console.log(
+                        `[ReflectionWorker] Session ${outgoingSessionId} does not require a reflection ` +
+                        `(status=${closeResult.reflectionStatus}).`
+                    );
+                }
+            } else {
+                // Backward-compatible path until migration 004 is applied.
+                this._reflectOnSession(outgoingSessionId).catch(error => {
+                    console.error('[ReflectionEngine] Legacy reflection failed:', error.message);
+                });
+            }
         }
 
         return String(this.sessionId);
@@ -280,9 +331,18 @@ class AtlasInterface extends EventEmitter {
             if (this.sessionId) {
                 const sessionId = this.sessionId;
                 this.sessionId = null;
-                await this._reflectOnSession(sessionId);
-                await sessionManager.endSession();
+                const lifecycleEnabled = await sessionManager.supportsReflectionLifecycle();
+                if (lifecycleEnabled) {
+                    // Closing the session is the durable handoff. The model call
+                    // can finish during a later idle window or after restart;
+                    // Electron no longer has to keep the process alive for it.
+                    await sessionManager.endSession(sessionId);
+                } else {
+                    await this._reflectOnSession(sessionId);
+                    await sessionManager.endSession(sessionId);
+                }
             }
+            reflectionWorker.shutdown();
             this.ready = false;
             this._initPromise = null;
             this.emit('atlas.status', { phase: 'shutdown' });

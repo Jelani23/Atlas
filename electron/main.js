@@ -160,7 +160,17 @@ ipcMain.handle('atlas:resetConversation', async () => callAtlas('resetConversati
 ipcMain.handle('atlas:resolvePermission', (_event, id, decision) => callAtlas('resolvePermission', [id, decision]));
 ipcMain.handle('atlas:listConversations', async () => callAtlas('listConversations'));
 ipcMain.handle('atlas:getConversation', async (_event, sessionId) => callAtlas('getConversation', [sessionId]));
-ipcMain.handle('atlas:newConversation', async () => callAtlas('newConversation'));
+ipcMain.handle('atlas:newConversation', async () => {
+    console.log('[Electron] New conversation requested by renderer.');
+    try {
+        const result = await callAtlas('newConversation');
+        console.log(`[Electron] New conversation ready | session=${result?.sessionId || 'unknown'}`);
+        return result;
+    } catch (error) {
+        console.error('[Electron] New conversation failed:', error.message);
+        throw error;
+    }
+});
 ipcMain.handle('atlas:deleteConversation', async (_event, sessionId) => callAtlas('deleteConversation', [sessionId]));
 ipcMain.handle('atlas:renameConversation', async (_event, sessionId, title) => callAtlas('renameConversation', [sessionId, title]));
 ipcMain.handle('atlas:transcribeAudio', async (_event, base64Audio) => callAtlas('transcribeAudio', [base64Audio]));
@@ -210,8 +220,10 @@ app.on('before-quit', (event) => {
     (async () => {
         try {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // The shutdown RPC waits on an LLM call (session reflection)
-                // — don't let a hung/slow model block quitting forever.
+                // The shutdown RPC durably closes the current session and
+                // marks its reflection pending. It should be fast; retain a
+                // timeout so an unreachable or wedged backend cannot block
+                // quitting forever.
                 await Promise.race([
                     callAtlas('shutdown'),
                     new Promise((_, reject) =>

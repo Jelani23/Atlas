@@ -27,6 +27,13 @@ const { ThinkFilter } = require('../utils/thinkFilter');
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
 
+// Search answers remain available to the current conversation, but durable
+// learning is opt-in while the evidence/provenance pipeline is being hardened.
+// This prevents a weak or hallucinated synthesis from silently contaminating
+// knowledge_library without disabling Alice's web-search capability.
+const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = ['true', 'enabled', 'on', '1']
+    .includes(String(process.env.SEARCH_KNOWLEDGE_PERSISTENCE || 'false').toLowerCase());
+
 async function handleMessage(userInput, { memory, mode, sessionId, taskId, requestId }) {
     const requestStart = Date.now();
 
@@ -446,7 +453,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // and the raw aggregated search material, letting it pull
         // whichever actually supports a durable fact - see
         // searchKnowledgeExtractor.js for the full reasoning.
-        if (ranWebSearch) {
+        if (ranWebSearch && SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED) {
             taskManager.createTask('search_knowledge_extraction', async () => {
                 console.time("[SearchKnowledgeExtraction_BG] Total Time");
                 console.log("[SearchKnowledgeExtraction_BG] Task started...");
@@ -477,6 +484,11 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 console.timeEnd("[SearchKnowledgeExtraction_BG] Total Time");
                 return null;
             }, taskId, requestId, 'NORMAL');
+        } else if (ranWebSearch) {
+            console.log(
+                '[SearchKnowledgeExtraction_BG] Durable persistence is disabled; ' +
+                'search evidence remains scoped to this response.'
+            );
         }
 
         // 5. Emit Request Completed (This triggers the task manager to run the background task)

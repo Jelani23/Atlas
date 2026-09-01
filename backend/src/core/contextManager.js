@@ -49,12 +49,12 @@ const CONTEXT_PROFILES = {
     // not a primary information source the way project/knowledge memory
     // is. `memory` (explicit "what do you remember" questions) is the one
     // intent where it's weighted meaningfully higher.
-    conversation: { personal: 220, project: 220, knowledge: 220, procedures: 100, devState: 0,   reflections: 120, conversationHistory: 260 },
+    conversation: { personal: 220, project: 220, knowledge: 220, procedures: 100, devState: 0,   reflections: 240, conversationHistory: 260 },
     action:       { personal: 120, project: 0,   knowledge: 0,   procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 },
-    coding:       { personal: 160, project: 420, knowledge: 180, procedures: 160, devState: 100, reflections: 80,  conversationHistory: 320 },
-    planning:     { personal: 180, project: 360, knowledge: 180, procedures: 160, devState: 160, reflections: 100, conversationHistory: 320 },
+    coding:       { personal: 160, project: 420, knowledge: 180, procedures: 160, devState: 100, reflections: 140, conversationHistory: 320 },
+    planning:     { personal: 180, project: 360, knowledge: 180, procedures: 160, devState: 160, reflections: 200, conversationHistory: 320 },
     search:       { personal: 80,  project: 0,   knowledge: 0,   procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 },
-    memory:       { personal: 700, project: 360, knowledge: 360, procedures: 160, devState: 160, reflections: 320, conversationHistory: 500 },
+    memory:       { personal: 700, project: 360, knowledge: 360, procedures: 160, devState: 160, reflections: 480, conversationHistory: 500 },
     // Capability questions ("can you read your own code?") are answered
     // from the world model, assembled separately in contextBuilder.js -
     // none of these budgets are the relevant source, so all stay at 0.
@@ -71,7 +71,10 @@ function allocateBudget(items, budget, maxItems = Infinity) {
     for (const item of sorted) {
         if (selected.length >= maxItems) break;
         const topicsText = Array.isArray(item.topics) ? item.topics.join(' ') : '';
-        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''} ${item.summary || ''} ${item.content || ''} ${item.role || ''} ${topicsText} ${item.category || ''} ${item.type || ''}`;
+        const reflectionText = ['anchors', 'decisions', 'comparisons', 'open_loops']
+            .flatMap(key => Array.isArray(item[key]) ? item[key] : [])
+            .join(' ');
+        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''} ${item.summary || ''} ${item.content || ''} ${item.role || ''} ${item.session_id || ''} ${topicsText} ${reflectionText} ${item.category || ''} ${item.type || ''}`;
         const tokens = estimateTokens(text);
         
         if (used + tokens <= budget) {
@@ -128,7 +131,10 @@ function scoreAndBoost(store, item, keywords) {
     // whatever words happen to appear in `value`. `summary` added for
     // reflections, which have no key/value - the summary text itself is
     // the only content there is to match against.
-    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.project_key || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''} ${d.summary || ''} ${topicsText} ${d.category || ''} ${d.type || ''}`.toLowerCase();
+    const reflectionText = ['anchors', 'decisions', 'comparisons', 'open_loops']
+        .flatMap(key => Array.isArray(d[key]) ? d[key] : [])
+        .join(' ');
+    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.project_key || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''} ${d.summary || ''} ${d.session_id || ''} ${topicsText} ${reflectionText} ${d.category || ''} ${d.type || ''}`.toLowerCase();
     
     keywords.forEach(kw => {
         if (itemText.includes(kw)) relevanceScore += 25;
@@ -143,10 +149,122 @@ function scoreAndBoost(store, item, keywords) {
     return { ...d, _activationScore: item.score, _relevanceScore: relevanceScore, _finalScore: finalScore };
 }
 
+function isRecentSessionReference(text) {
+    const input = String(text || '').toLowerCase();
+    const recentFirst = /\b(previous|last|latest|most recent)(?:\s+\w+){0,3}\s+(conversation|session|chat)\b/;
+    const sessionFirst = /\b(conversation|session|chat)(?:\s+\w+){0,3}\s+(previous|last|latest|most recent)\b/;
+    return recentFirst.test(input) || sessionFirst.test(input);
+}
+
+function extractReferencedSessionIds(text) {
+    const ids = [];
+    const pattern = /\bsession\s+#?(\d+)\b/gi;
+    for (const match of String(text || '').matchAll(pattern)) {
+        ids.push(String(match[1]));
+    }
+    return Array.from(new Set(ids));
+}
+
+function scopeReflectionsToSessions(items, sessionIds) {
+    if (!sessionIds || sessionIds.length === 0) return items || [];
+    const allowed = new Set(sessionIds.map(String));
+    return (items || []).filter(item =>
+        allowed.has(String((item.data || item).session_id))
+    );
+}
+
+function newestReflectionId(items) {
+    let newest = null;
+    for (const item of items || []) {
+        const row = item.data || item;
+        const timestamp = Date.parse(row.timestamp || '') || 0;
+        const sessionId = Number(row.session_id) || 0;
+        const rank = [timestamp, sessionId];
+        if (!newest || rank[0] > newest.rank[0] || (rank[0] === newest.rank[0] && rank[1] > newest.rank[1])) {
+            newest = { id: row.id ?? item.id, rank };
+        }
+    }
+    return newest?.id ?? null;
+}
+
+const reflectionScopes = new Map();
+
+function registerPreviousSession(sessionId, previousSessionId = null) {
+    if (!sessionId) return;
+    reflectionScopes.set(String(sessionId), {
+        previousSessionId: previousSessionId == null ? null : String(previousSessionId),
+        activeSessionId: null
+    });
+
+    if (reflectionScopes.size > 100) {
+        reflectionScopes.delete(reflectionScopes.keys().next().value);
+    }
+}
+
+function isReflectionFollowUp(text, history = []) {
+    const input = String(text || '').toLowerCase().trim();
+    if (!input.includes('?') && !/^(list|show|give)\b/.test(input)) return false;
+
+    const hasBackReference = /\b(that|those|same|it|they|did we|do we|was left|were left)\b/.test(input);
+    const hasReflectionField = /\b(label|theme|anchor|comparison|approach|decision|path|open loop|unresolved|left over|preferred)\b/.test(input);
+    const recentContext = (history || []).slice(-4).map(message => String(message.content || '')).join(' ').toLowerCase();
+    const followsRecallTurn = /\b(previous|last|latest|most recent|session\s+#?\d+|reflection)\b/.test(recentContext);
+
+    return hasBackReference || (followsRecallTurn && hasReflectionField);
+}
+
+function isReflectionLookupRequest(text) {
+    const input = String(text || '').toLowerCase();
+    return /\b(previous|last|latest|most recent|earlier|past)\b/.test(input) ||
+        /\bsession\s+#?\d+\b/.test(input) ||
+        /\b(remember|recall|continue|resume|pick up|reflection for)\b/.test(input);
+}
+
+function resolveReflectionScope(userInput, history = [], sessionId = null) {
+    const explicitSessionIds = extractReferencedSessionIds(userInput);
+    const recentReference = explicitSessionIds.length === 0 && isRecentSessionReference(userInput);
+    const state = sessionId ? reflectionScopes.get(String(sessionId)) : null;
+    const followUp = explicitSessionIds.length === 0 && !recentReference && !!state?.activeSessionId &&
+        isReflectionFollowUp(userInput, history);
+
+    let sessionIds = explicitSessionIds;
+    let reason = explicitSessionIds.length > 0 ? 'explicit' : null;
+
+    if (recentReference && state?.previousSessionId) {
+        sessionIds = [state.previousSessionId];
+        reason = 'previous';
+    } else if (recentReference) {
+        reason = 'recent_fallback';
+    } else if (followUp) {
+        sessionIds = [state.activeSessionId];
+        reason = 'follow_up';
+    }
+
+    if (state) {
+        if (sessionIds.length > 0) {
+            state.activeSessionId = sessionIds[0];
+        } else if (!recentReference && !isReflectionLookupRequest(userInput)) {
+            state.activeSessionId = null;
+        }
+    }
+
+    return {
+        sessionIds,
+        reason,
+        recentReference,
+        enabled: sessionIds.length > 0 || recentReference || followUp || isReflectionLookupRequest(userInput)
+    };
+}
+
 async function getRelevantContext(userInput, history, intent, options = {}) {
     console.time("[ContextManager] Total Processing");
+    const reflectionScope = resolveReflectionScope(userInput, history, options.sessionId);
+    const referencedSessionIds = reflectionScope.sessionIds;
     const recentHistoryStr = history.slice(-5).map(m => m.content).join(' ');
-    const keywords = extractKeywords(userInput + ' ' + recentHistoryStr);
+    const keywordSource = referencedSessionIds.length > 0
+        ? userInput
+        : `${userInput} ${recentHistoryStr}`;
+    const keywords = extractKeywords(keywordSource);
 
     const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx] = await Promise.all([
         memoryCache.getMemory('user_profile'),
@@ -330,8 +448,55 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     // otherwise mean "empty"), but capped lower (<=3 vs <=5) since a
     // reflection is a whole-session recap - even the small-table fallback
     // shouldn't casually dump many of them into every turn.
-    let reflectionsScored = reflectionsIdx.map(item => scoreAndBoost('reflections', item, keywords))
-        .filter(r => r._relevanceScore > 0 || reflectionsIdx.length <= 3);
+    const exactSessionReference = referencedSessionIds.length > 0;
+    const recentSessionReference = reflectionScope.recentReference;
+    const strictReflectionScope = exactSessionReference || recentSessionReference;
+    const latestReflectionId = recentSessionReference
+        ? newestReflectionId(reflectionsIdx)
+        : null;
+    const reflectionCandidates = exactSessionReference
+        ? scopeReflectionsToSessions(reflectionsIdx, referencedSessionIds)
+        : reflectionsIdx;
+    let reflectionsScored = reflectionCandidates
+        .map(item => scoreAndBoost('reflections', item, keywords));
+
+    if (exactSessionReference) {
+        reflectionsScored = reflectionsScored.map(reflection => ({
+            ...reflection,
+            _finalScore: reflection._finalScore + 10_000
+        }));
+        console.log(
+            `[ContextManager] Reflection scope: session ${referencedSessionIds.join(', ')} ` +
+            `(${reflectionsScored.length} match${reflectionsScored.length === 1 ? '' : 'es'})`
+        );
+    } else if (reflectionScope.enabled) {
+        reflectionsScored = reflectionsScored.filter(r =>
+            r._relevanceScore > 0 ||
+            reflectionsIdx.length <= 3 ||
+            (recentSessionReference && r.id === latestReflectionId)
+        );
+    } else {
+        reflectionsScored = [];
+    }
+
+    if (recentSessionReference) {
+        reflectionsScored = reflectionsScored.map(reflection =>
+            reflection.id === latestReflectionId
+                ? { ...reflection, _finalScore: reflection._finalScore + 10_000 }
+                : reflection
+        );
+
+        const latest = reflectionsScored.find(reflection => reflection.id === latestReflectionId);
+        const state = options.sessionId ? reflectionScopes.get(String(options.sessionId)) : null;
+        if (latest && state) state.activeSessionId = String(latest.session_id);
+    }
+
+    if (strictReflectionScope) {
+        filteredProjects = [];
+        knowledgeScored = [];
+        proceduresScored = [];
+        devScored = [];
+    }
 
     // Reach beyond the last-N chat window only when this intent has a
     // conversation-history budget. This stays scoped to the live session:
@@ -371,7 +536,10 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge, profileName === 'memory' ? 8 : 4);
     const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures, 3);
     const devAlloc = allocateBudget(devScored, budgetProfile.devState, 4);
-    const reflectionsAlloc = allocateBudget(reflectionsScored, budgetProfile.reflections, profileName === 'memory' ? 5 : 2);
+    const reflectionLimit = exactSessionReference
+        ? referencedSessionIds.length
+        : (recentSessionReference ? 1 : (profileName === 'memory' ? 5 : 2));
+    const reflectionsAlloc = allocateBudget(reflectionsScored, budgetProfile.reflections, reflectionLimit);
     const conversationHistoryAlloc = allocateBudget(conversationHistoryScored, budgetProfile.conversationHistory, 4);
     
     // Populate the hot memory cache with the memories that were
@@ -444,5 +612,13 @@ module.exports = {
     getRelevantContext,
     extractKeywords,
     removeRecentConversationMessages,
-    scoreConversationMessage
+    scoreConversationMessage,
+    isRecentSessionReference,
+    newestReflectionId,
+    extractReferencedSessionIds,
+    scopeReflectionsToSessions,
+    registerPreviousSession,
+    isReflectionFollowUp,
+    isReflectionLookupRequest,
+    resolveReflectionScope
 };

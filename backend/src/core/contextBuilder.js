@@ -212,7 +212,20 @@ Current Task: ${hot.currentTask || 'None'}
             const topics = Array.isArray(r.topics) && r.topics.length > 0
                 ? ` (topics: ${r.topics.join(', ')})`
                 : '';
-            return `- [${r.subject}/${r.category}] ${r.summary}${topics}`;
+            const session = r.session_id ? `session ${r.session_id}` : 'legacy session';
+            const reflectedAt = r.timestamp || 'unknown date';
+            const details = [
+                ['Anchors', r.anchors],
+                ['Comparisons', r.comparisons],
+                ['Decisions', r.decisions],
+                ['Open loops', r.open_loops]
+            ]
+                .filter(([, values]) => Array.isArray(values) && values.length > 0)
+                .map(([label, values]) => `${label}: ${values.join(' | ')}`)
+                .join('; ');
+            const evidence = details ? `Structured evidence: ${details}; ` : '';
+            return `- [${session}; ${reflectedAt}; ${r.subject}/${r.category}] ` +
+                `${evidence}Lossy overview: ${r.summary}${topics}`;
         }).join('\n');
     }
 
@@ -390,7 +403,7 @@ Limitations:
         ? `--- ALICE MEMORY CONTEXT ---\n${memoryBlockInner}--- END MEMORY CONTEXT ---\n\n`
         : '';
     const memoryGuidelines = memoryBlockInner
-        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Reflections summarize past sessions and provide continuity; they are not independently verified facts.'
+        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Reflections summarize past sessions and provide continuity; they are not independently verified facts. For a requested session, structured reflection evidence outranks its lossy overview and earlier assistant replies. Previous assistant replies are not memory evidence. When a requested past-session detail is absent, say the available reflection does not include it. Do not claim a database-wide search or offer to reconstruct unavailable cross-session chat.'
         : '';
     const conversationHistoryGuideline = earlierConversationBlock
         ? '\n- Earlier conversation is current-session dialogue: use it for continuity, not as independently verified long-term memory.'

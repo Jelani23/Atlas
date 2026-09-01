@@ -1,5 +1,47 @@
 const supabase = require('../database/supabaseClient');
 
+const STRUCTURED_COLUMNS =
+    'id, session_id, category, subject, topics, summary, confidence, timestamp, ' +
+    'anchors, decisions, comparisons, open_loops, schema_version, source_message_count';
+const LEGACY_COLUMNS =
+    'id, session_id, category, subject, topics, summary, confidence, timestamp';
+
+function rowFromEntry(entry) {
+    return {
+        session_id: entry.sessionId || null,
+        category: entry.category || 'general',
+        subject: entry.subject || 'general',
+        topics: Array.isArray(entry.topics) ? entry.topics : [],
+        summary: entry.summary,
+        confidence: typeof entry.confidence === 'number' ? entry.confidence : 1.0,
+        anchors: Array.isArray(entry.anchors) ? entry.anchors : [],
+        decisions: Array.isArray(entry.decisions) ? entry.decisions : [],
+        comparisons: Array.isArray(entry.comparisons) ? entry.comparisons : [],
+        open_loops: Array.isArray(entry.openLoops) ? entry.openLoops : [],
+        schema_version: Number(entry.schemaVersion) || 1,
+        source_message_count: Number(entry.sourceMessageCount) || null,
+        timestamp: new Date().toISOString()
+    };
+}
+
+function isLegacySchemaError(error) {
+    return !!error && /anchors|decisions|comparisons|open_loops|schema_version|source_message_count/i
+        .test(error.message || '');
+}
+
+function legacyRow(row) {
+    const {
+        anchors,
+        decisions,
+        comparisons,
+        open_loops,
+        schema_version,
+        source_message_count,
+        ...legacy
+    } = row;
+    return legacy;
+}
+
 /**
  * ============================================================
  * REFLECTION JOURNAL
@@ -25,22 +67,64 @@ const supabase = require('../database/supabaseClient');
  */
 
 async function append(entry) {
-    const { error } = await supabase
+    const row = rowFromEntry(entry);
+    let { error } = await supabase
         .from('reflections')
-        .insert({
-            session_id: entry.sessionId || null,
-            category: entry.category || 'general',
-            subject: entry.subject || 'general',
-            topics: Array.isArray(entry.topics) ? entry.topics : [],
-            summary: entry.summary,
-            confidence: typeof entry.confidence === 'number' ? entry.confidence : 1.0,
-            timestamp: new Date().toISOString()
-        });
+        .insert(row);
+
+    if (isLegacySchemaError(error)) {
+        ({ error } = await supabase.from('reflections').insert(legacyRow(row)));
+    }
 
     if (error) {
         throw new Error(`Failed to save reflection: ${error.message}`);
     }
     return true;
+}
+
+async function replace(entry) {
+    const row = rowFromEntry(entry);
+    const sessionId = entry.sessionId;
+    const { timestamp, session_id, ...updates } = row;
+    let { error } = await supabase
+        .from('reflections')
+        .update(updates)
+        .eq('session_id', sessionId);
+
+    if (isLegacySchemaError(error)) {
+        ({ error } = await supabase
+            .from('reflections')
+            .update(legacyRow(updates))
+            .eq('session_id', sessionId));
+    }
+
+    if (error) {
+        throw new Error(`Failed to replace reflection: ${error.message}`);
+    }
+    return true;
+}
+
+async function getForSession(sessionId) {
+    if (!sessionId) return null;
+
+    let { data, error } = await supabase
+        .from('reflections')
+        .select(STRUCTURED_COLUMNS)
+        .eq('session_id', sessionId)
+        .maybeSingle();
+
+    if (isLegacySchemaError(error)) {
+        ({ data, error } = await supabase
+            .from('reflections')
+            .select(LEGACY_COLUMNS)
+            .eq('session_id', sessionId)
+            .maybeSingle());
+    }
+
+    if (error) {
+        throw new Error(`Failed to load reflection: ${error.message}`);
+    }
+    return data || null;
 }
 
 // Dedup guard - checked by reflectionEngine.js before generating, and
@@ -49,27 +133,28 @@ async function append(entry) {
 // triggers reflecting on the same outgoing session.
 async function hasReflection(sessionId) {
     if (!sessionId) return false;
-
-    const { data, error } = await supabase
-        .from('reflections')
-        .select('id')
-        .eq('session_id', sessionId)
-        .limit(1);
-
-    if (error) {
+    try {
+        return !!(await getForSession(sessionId));
+    } catch (error) {
         console.error('Failed to check existing reflection:', error.message);
         return false;
     }
-
-    return Array.isArray(data) && data.length > 0;
 }
 
 async function getRecent(limit = 1) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('reflections')
-        .select('session_id, category, subject, topics, summary, confidence, timestamp')
+        .select(STRUCTURED_COLUMNS)
         .order('timestamp', { ascending: false })
         .limit(limit);
+
+    if (isLegacySchemaError(error)) {
+        ({ data, error } = await supabase
+            .from('reflections')
+            .select(LEGACY_COLUMNS)
+            .order('timestamp', { ascending: false })
+            .limit(limit));
+    }
 
     if (error) {
         console.error('Failed to load reflections:', error.message);
@@ -86,10 +171,17 @@ async function getRecent(limit = 1) {
 // knowledgeLibrary.getAll()/proceduralMemory.getAll() - contextManager.js
 // scores/budgets/decays this in RAM rather than re-querying per turn.
 async function getAll() {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('reflections')
-        .select('id, session_id, category, subject, topics, summary, confidence, timestamp')
+        .select(STRUCTURED_COLUMNS)
         .order('timestamp', { ascending: false });
+
+    if (isLegacySchemaError(error)) {
+        ({ data, error } = await supabase
+            .from('reflections')
+            .select(LEGACY_COLUMNS)
+            .order('timestamp', { ascending: false }));
+    }
 
     if (error) {
         console.error('Failed to load reflections for cache:', error.message);
@@ -99,4 +191,4 @@ async function getAll() {
     return data;
 }
 
-module.exports = { append, getRecent, getAll, hasReflection };
+module.exports = { append, replace, getForSession, getRecent, getAll, hasReflection };
