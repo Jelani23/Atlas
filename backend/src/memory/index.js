@@ -2,6 +2,7 @@ const workingMemory = require('./workingMemory');
 const longTermProfile = require('./longTermProfile');
 const knowledgeLibrary = require('./knowledgeLibrary');
 const reflectionJournal = require('./reflectionJournal');
+const reflectionEngine = require('./reflectionEngine');
 const projectMemory = require('./projectMemory');
 const memoryManager = require('./memoryManager');
 const memoryExtractor = require('./memoryExtractor');
@@ -15,6 +16,7 @@ module.exports = {
     longTermProfile, 
     knowledgeLibrary, 
     reflectionJournal,
+    reflectionEngine,
     projectMemory,
     memoryManager,
     memoryExtractor,

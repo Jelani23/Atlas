@@ -50,7 +50,7 @@ const CONTEXT_HEAVY_TOOLS = new Set([
   'search_web',
 ]);
 
-const CONTEXT_SECTIONS = ['state', 'personal', 'projects', 'knowledge', 'procedures', 'features'];
+const CONTEXT_SECTIONS = ['state', 'personal', 'projects', 'knowledge', 'procedures', 'features', 'reflections', 'conversationHistory'];
 
 /**
  * Conservative skip gate: requests the deterministic path already fully
@@ -181,7 +181,7 @@ async function runSemanticStage({ userInput, intent, history = [], toolResult, o
  *   calling Groq a second time when a caller already ran it early.
  * @returns {Promise<Object>} never throws
  */
-async function runPreprocessing({ userInput, intent, history = [], toolResult, workingContext, overrides = {} } = {}) {
+async function runPreprocessing({ userInput, intent, history = [], toolResult, workingContext, sessionId, overrides = {} } = {}) {
   const result = {
     ran: false,
     semantic: null,
@@ -227,7 +227,7 @@ async function runPreprocessing({ userInput, intent, history = [], toolResult, w
         // sees what the normal pipeline would have pulled in. `overrides`
         // lets tests inject a fake retrieval without a database.
         const getRelevantContext = overrides.getRelevantContext || contextManager.getRelevantContext;
-        const relevantMemory = await getRelevantContext(userInput, history, intent);
+        const relevantMemory = await getRelevantContext(userInput, history, intent, { sessionId });
         result.relevantMemory = relevantMemory;
 
         if (!contextualProcessor.isWorthProcessing(relevantMemory)) {

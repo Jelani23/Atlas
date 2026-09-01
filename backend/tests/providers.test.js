@@ -11,8 +11,9 @@ require('dotenv').config({
 //     behavior made both providers fail every call with a 400
 //     ("property 'timeout' is unsupported")
 //   - gemini.streamComplete yields {type:'content'} chunks (no thinking)
-//   - modelRouter routes web search to Gemini 2.5 Flash and everything else
-//     stays on the existing ollama/Qwen models
+//   - modelRouter keeps every automatic task route, including web search,
+//     on local Ollama models; remote adapters are transport-only and must
+//     be selected explicitly
 //
 // The openai SDK is replaced in require.cache with a fake that records the
 // create() arguments, so no network call is made.
@@ -129,18 +130,56 @@ async function runTest() {
             console.log('✓ 3. gemini.streamComplete yields content-only chunks');
         }
 
-        // --- 4. modelRouter routes search to Gemini, rest stays on Qwen ---
+        // --- 4. modelRouter keeps automatic routes local ----------------
         {
             const router = require('../src/models/modelRouter');
             const search = router.getModelForTask('search_web');
-            assert(search.provider === 'gemini', 'search_web should route to gemini provider');
-            assert(search.supportsThinking === false, 'Gemini search synthesis should not think');
-            assert(search.model === (process.env.GEMINI_MODEL || 'gemini-2.5-flash'), 'search should use the configured Gemini model');
+            assert(search.provider === 'ollama', 'search_web should stay on the local Ollama provider');
+            assert(search.model === (process.env.OLLAMA_MODEL_GENERAL || 'qwen3:4b'), 'search should use the configured local general model');
 
             assert(router.getModelForTask('analyze_and_suggest').provider === 'ollama', 'coding tasks stay on ollama');
             assert(router.getModelForTask('calculate').provider === 'ollama', 'other tools stay on ollama');
             assert(router.getModelForTask(undefined).provider === 'ollama', 'plain conversation stays on ollama');
-            console.log('✓ 4. modelRouter routes search to Gemini, rest stays on Qwen');
+            console.log('✓ 4. modelRouter keeps every automatic route on local Ollama');
+        }
+
+        // --- 5. Search query generation is deterministic and model-free -
+        {
+            const adapterModulePath = require.resolve('../src/models/modelAdapter');
+            const searchPipelinePath = require.resolve('../src/planner/searchPipeline');
+            const realAdapterModule = require.cache[adapterModulePath];
+            const realGeminiKey = process.env.GEMINI_API_KEY;
+            const requestedProviders = [];
+
+            require.cache[adapterModulePath] = {
+                id: adapterModulePath,
+                filename: adapterModulePath,
+                loaded: true,
+                exports: {
+                    createModelAdapter(providerName) {
+                        requestedProviders.push(providerName || 'default');
+                        return {
+                            complete: async () => 'atlas memory\natlas retrieval\natlas reflections'
+                        };
+                    }
+                }
+            };
+            process.env.GEMINI_API_KEY = 'present-but-must-not-auto-route';
+            delete require.cache[searchPipelinePath];
+
+            try {
+                const searchPipeline = require('../src/planner/searchPipeline');
+                const queries = await searchPipeline.generateQueries('Atlas memory');
+                assert(requestedProviders.length === 0, 'search query generation must not construct or call any model adapter');
+                assert(queries.length === 3, 'search query generation should still return three queries');
+                console.log('✓ 5. Search query generation is deterministic and never calls Gemini or another model');
+            } finally {
+                if (realAdapterModule) require.cache[adapterModulePath] = realAdapterModule;
+                else delete require.cache[adapterModulePath];
+                delete require.cache[searchPipelinePath];
+                if (realGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+                else process.env.GEMINI_API_KEY = realGeminiKey;
+            }
         }
 
         console.log('\n========================================');

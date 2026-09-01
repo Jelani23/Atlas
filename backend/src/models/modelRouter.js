@@ -2,11 +2,6 @@
 
 const GENERAL_MODEL = process.env.OLLAMA_MODEL_GENERAL || 'qwen3:4b';
 const CODER_MODEL = process.env.OLLAMA_MODEL_CODER || 'qwen2.5-coder:7b';
-// gemini-2.5-flash started 404ing ("no longer available") ahead of its
-// official shutdown date - see gemini.js's provider-level comment.
-// gemini-3.6-flash is the current stable GA replacement; keep this in
-// sync with the defaults in gemini.js and preprocessingConfig.js.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
 const GENERAL_DECISION = {
   provider: 'ollama',
@@ -25,17 +20,12 @@ const CODER_DECISION = {
   reason: 'tool is a code/file semantic task - routed to coding specialist',
 };
 
-// Web search synthesis goes to Gemini 2.5 Flash instead of Qwen3: the
-// search request already gathered raw source material, and Gemini Flash
-// synthesizes it into the final answer much faster than Qwen3's long
-// thinking trace over the (potentially large) search + memory context.
-// Falls back to Qwen3 automatically when GEMINI_API_KEY is missing
-// (conversationEngine guards that).
+// Search synthesis stays on the configured local general model. Remote
+// free-tier providers previously made search availability and latency
+// depend on external quotas; no automatic route should require them.
 const SEARCH_DECISION = {
-  provider: 'gemini',
-  model: GEMINI_MODEL,
-  supportsThinking: false,
-  reason: 'web search synthesis routed to Gemini 2.5 Flash for fast responses',
+  ...GENERAL_DECISION,
+  reason: 'web search synthesis routed to the local general model',
 };
 
 const CODE_SEMANTIC_TASKS = new Set([

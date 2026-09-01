@@ -32,7 +32,8 @@ async function route(intent, message, history) {
 
     if (isAffirmative && state.lastSearchQuery) {
         console.log(`[Planner] Executing Follow-up Web Search for: "${state.lastSearchQuery}"`);
-        const searchResult = await execute('webSearch', [state.lastSearchQuery]);
+        const searchPipeline = require('../searchPipeline');
+        const searchResult = await searchPipeline.executeSearch([state.lastSearchQuery]);
         return { needsTool: true, toolName: 'webSearch', toolResult: searchResult };
     }
 

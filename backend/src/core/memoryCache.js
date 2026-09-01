@@ -4,6 +4,7 @@ const projectMemory = require('../memory/projectMemory');
 const knowledgeLibrary = require('../memory/knowledgeLibrary');
 const proceduralMemory = require('../memory/proceduralMemory');
 const devState = require('../memory/devState');
+const reflectionJournal = require('../memory/reflectionJournal');
 
 const warmIndex = {};
 const hotState = {
@@ -18,7 +19,9 @@ const hotState = {
         project_memory: [],
         knowledge_library: [],
         procedural_memory: [],
-        dev_state: []
+        dev_state: [],
+        reflections: [],
+        conversation_history: []
     },
 
     lastUpdated: null
@@ -46,6 +49,7 @@ async function getMemory(store) {
                 case 'knowledge_library': data = await knowledgeLibrary.getAll(); break;
                 case 'procedural_memory': data = await proceduralMemory.getAll(); break;
                 case 'dev_state': data = await devState.getAll(); break;
+                case 'reflections': data = await reflectionJournal.getAll(); break;
             }
             
             warmIndex[store] = data.map(d => ({
@@ -86,14 +90,29 @@ function invalidate(store) {
     if (warmIndex[store]) {
         delete warmIndex[store];
     }
+
+    // Warm and hot are two views of the same underlying store. Leaving the
+    // previously selected hot rows in place after a write makes callers see
+    // stale data until a later context build happens to overwrite them.
+    if (Object.prototype.hasOwnProperty.call(hotState.memories, store)) {
+        hotState.memories[store] = [];
+    }
+    hotState.lastUpdated = null;
 }
 
 function clearCache(store = null) {
     if (store) {
         delete warmIndex[store];
+        if (Object.prototype.hasOwnProperty.call(hotState.memories, store)) {
+            hotState.memories[store] = [];
+        }
     } else {
         for (const key in warmIndex) delete warmIndex[key];
+        for (const key of Object.keys(hotState.memories)) {
+            hotState.memories[key] = [];
+        }
     }
+    hotState.lastUpdated = null;
 }
 
 function setHotState(key, value) {

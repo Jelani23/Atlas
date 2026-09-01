@@ -27,10 +27,17 @@ create table if not exists conversations (
     session_id bigint references sessions(id) on delete cascade,
     role text not null,
     content text not null,
-    "timestamp" timestamptz not null default now()
+    "timestamp" timestamptz not null default now(),
+    topics text[] not null default '{}',
+    project_key text,
+    importance smallint not null default 0
 );
 
 create index if not exists idx_conversation_session on conversations(session_id);
+create index if not exists idx_conversations_topics on conversations using gin(topics);
+create index if not exists idx_conversations_project_key on conversations(project_key);
+create index if not exists idx_conversations_project_importance
+    on conversations(project_key, importance desc, "timestamp" desc);
 
 -- ─────────────────────────────────────────────────────────────
 -- Long-term profile (previously: atlas.db `user_profile`)
@@ -143,14 +150,31 @@ create table if not exists dev_state (
 
 -- ─────────────────────────────────────────────────────────────
 -- Reflection journal (previously: src/memory/reflections.json)
+--
+-- One row per conversation session: a compact summary written for
+-- Alice's own contextual understanding, not a standalone fact (no
+-- key/value — see migrations/002_reflections_upgrade.sql for the
+-- upgrade path from the original bare shape, and for why this is
+-- deliberately thinner than knowledge_library).
 -- ─────────────────────────────────────────────────────────────
 
 create table if not exists reflections (
     id bigint generated always as identity primary key,
     session_id bigint references sessions(id) on delete set null,
+    category text not null default 'general',
+    subject text not null default 'general',
+    topics text[] not null default '{}',
     summary text not null,
+    confidence double precision not null default 1.0,
     "timestamp" timestamptz not null default now()
 );
+
+create index if not exists idx_reflections_category on reflections(category);
+create index if not exists idx_reflections_subject on reflections(subject);
+create index if not exists idx_reflections_topics on reflections using gin(topics);
+create unique index if not exists idx_reflections_session_unique
+    on reflections(session_id)
+    where session_id is not null;
 
 -- ─────────────────────────────────────────────────────────────
 -- World model (previously: src/memory/worldModel.json)

@@ -57,6 +57,37 @@ function stripThinking(text) {
     return cleanText.replace(/<\/?think>/gi, '').trim();
 }
 
+// Signals observed in Qwen's untagged content-channel self-narration. These
+// are intentionally about the model discussing the user, prompt, response,
+// or its own answer construction—not generic transition words that commonly
+// belong in a legitimate answer.
+const REASONING_PROSE_PATTERNS = [
+    /\bokay,\s+the user\b/i,
+    /\bthe user (?:is asking|asked|said|wants|requested)\b/i,
+    /\bhmm\b/i,
+    /\bfirst,\s+i need\b/i,
+    /^\s*let me\b/i,
+    /\bi need to (?:respond|answer|recall|check|follow|make sure)\b/i,
+    /\bas (?:atlas|alice),?\s+i\b/i,
+    /\b(?:the )?(?:final )?(?:answer|response) should\b/i,
+    /\bfinal response (?:will|should|must|is)\b/i,
+    /\bwe are given (?:a|the)\b/i,
+    /\blooking at (?:the|my)\b/i,
+    /\bwait,\s*(?:the user|no|but)\b/i
+];
+
+function reasoningProseDensity(text) {
+    const value = String(text || '');
+    return REASONING_PROSE_PATTERNS.reduce(
+        (count, pattern) => count + (pattern.test(value) ? 1 : 0),
+        0
+    );
+}
+
+function looksLikeReasoningProse(text) {
+    return reasoningProseDensity(text) > 0;
+}
+
 // Safe preview for debug logging: thinking-stripped and length-capped, so a
 // "parsing failed" log line can never turn into a multi-thousand-token dump.
 function safePreview(text, maxLength = 200) {
@@ -65,4 +96,10 @@ function safePreview(text, maxLength = 200) {
     return stripped.slice(0, maxLength) + `... [truncated, ${stripped.length} chars total]`;
 }
 
-module.exports = { extractJSON, stripThinking, safePreview };
+module.exports = {
+    extractJSON,
+    stripThinking,
+    safePreview,
+    looksLikeReasoningProse,
+    reasoningProseDensity
+};

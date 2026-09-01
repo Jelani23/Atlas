@@ -3,10 +3,7 @@ const http = require('http');
 
 async function testStream(think, useNoThinkPrompt) {
     const messages = [];
-    if (useNoThinkPrompt) {
-        messages.push({ role: 'system', content: '/no_think' });
-    }
-    messages.push({ role: 'user', content: 'Hello' });
+    messages.push({ role: 'user', content: useNoThinkPrompt ? 'Hello\n/no_think' : 'Hello' });
 
     const payload = JSON.stringify({
         model: 'qwen3:4b',
@@ -114,8 +111,8 @@ async function run() {
     console.log(`Thinking Preview:${resB.thinkingPreview}`);
     console.log(`Content Preview: ${resB.contentPreview}\n`);
 
-    console.log('--- TEST C: think = true + /no_think prompt ---');
-    const resC = await testStream(true, true);
+    console.log('--- TEST C: think = false + /no_think prompt ---');
+    const resC = await testStream(false, true);
     console.log(`1st Chunk:      ${resC.firstChunkMs} ms`);
     console.log(`1st Thinking:   ${resC.firstThinkingMs !== null ? resC.firstThinkingMs + ' ms' : 'None'}`);
     console.log(`1st Content:    ${resC.firstContentMs !== null ? resC.firstContentMs + ' ms' : 'None'}`);

@@ -16,13 +16,9 @@
 // background task (see core/conversationEngine.js) after a web search
 // resolves, and:
 //
-//   1. Reads BOTH the final synthesized summary Alice gave the user
-//      (already comprehended, deduplicated, coherent prose) and the
-//      raw aggregated source material the search pipeline gathered
-//      (noisier, but has specific figures/details that can get
-//      smoothed over in a short summary) - and lets the model pull
-//      from whichever actually has the durable, well-supported fact,
-//      rather than assuming one is always better than the other.
+//   1. Uses raw search-provider material as the evidence authority. The
+//      final synthesized answer is supplied only as an organizational aid;
+//      it can never make an unsupported claim eligible for storage.
 //   2. Extracts only durable, generally-true facts worth remembering
 //      later - not the user's question, not conversational filler,
 //      not anything that's really a claim/rumor rather than a fact
@@ -47,6 +43,7 @@ const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const llmQueue = require('./llmQueue');
 const memoryManager = require('./memoryManager');
 const { KNOWN_KNOWLEDGE_TYPES } = require('./knowledgeLibrary');
+const { hasVerifiedSearchEvidence } = require('../utils/searchEvidence');
 
 const modelAdapter = createModelAdapter();
 
@@ -86,18 +83,10 @@ const EXTRACTION_SCHEMA = {
 // Cheap pre-filter so a failed/empty search doesn't even bother
 // queuing an LLM call - there's nothing to extract from "no results".
 function hasExtractableContent(summary, rawResults) {
-    const s = (summary || '').trim();
-    const r = (rawResults || '').trim();
-
-    if (!s && !r) return false;
-
-    const looksEmpty = (text) =>
-        !text ||
-        text.length < 20 ||
-        /^error:/i.test(text) ||
-        /no direct results found/i.test(text);
-
-    return !looksEmpty(s) || !looksEmpty(r);
+    // The synthesized reply is model output, not evidence. Requiring actual
+    // source material prevents a hallucinated fallback answer from becoming
+    // durable knowledge when every search provider returned nothing.
+    return hasVerifiedSearchEvidence(rawResults);
 }
 
 function buildPrompt(query, summary, rawResults) {
@@ -127,11 +116,11 @@ over):
 ${trimmedRaw || '(none)'}
 """
 
-Use whichever of the two actually supports a specific, well-formed
-fact - the synthesized answer for general understanding, the raw
-material when it has a concrete detail (a number, a date, a named
-entity's specific property) the summary didn't spell out. Don't
-extract the same fact twice just because it appears in both.
+RAW SOURCE MATERIAL is the authority. The synthesized answer is only
+an organizational aid and may contain unsupported model output. Every
+fact you extract must be directly supported by the raw source material;
+if a claim appears only in the synthesized answer, do not extract it.
+Don't extract the same fact twice just because it appears in both.
 
 WHAT COUNTS AS KNOWLEDGE
 - Durable facts, definitions, concepts, or relationships that would
@@ -284,5 +273,6 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
 
 module.exports = {
     extractAndSaveFromSearch,
-    EXTRACTION_SCHEMA
+    EXTRACTION_SCHEMA,
+    hasExtractableContent
 };

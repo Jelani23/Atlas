@@ -45,6 +45,21 @@ const PROSE_MIN_DENSITY = 2; // narration must keep going, not just open once.
 const BUFFER_HARD_CAP = 20000; // pathological never-closing reasoning guard.
 const BUFFER_KEEP_TAIL = 2000;
 
+// The model sometimes quotes its own instruction while narrating, e.g.
+// `the line "Final response:" exactly`. A plain substring search treats that
+// quoted phrase as the real answer boundary and releases all subsequent
+// reasoning to UI/TTS. The delimiter is valid only at the beginning of a
+// response line (optionally indented), which matches the system instruction
+// while rejecting quoted/in-sentence mentions.
+function findStandaloneFinalMarker(text) {
+    const match = String(text || '').match(/(?:^|\r?\n)[ \t]*final response:[ \t]*/i);
+    if (!match) return null;
+    return {
+        index: match.index,
+        end: match.index + match[0].length
+    };
+}
+
 // True if the buffer ends mid-tag (e.g. "...</thi"), so scanning now would
 // split a tag across a chunk boundary and let half of it leak through
 // unrecognized.
@@ -77,6 +92,14 @@ class ThinkFilter {
         this.pending += text;
 
         if (this.state === 'unresolved') {
+            const finalMarker = findStandaloneFinalMarker(this.pending);
+            if (finalMarker) {
+                const after = this.pending.slice(finalMarker.end);
+                this._log(`found standalone "Final response:" boundary - discarded ${finalMarker.end} leading chars.`);
+                this.pending = '';
+                this.state = 'outside';
+                return after;
+            }
             const closeIdx = this.pending.indexOf(CLOSE_TAG);
             if (closeIdx !== -1) {
                 // Paired <think>...</think>, or a stray opener-less closer -
@@ -121,7 +144,18 @@ class ThinkFilter {
             return ''; // still ambiguous, keep holding
         }
 
-        // 'inside' or 'prose' - confirmed reasoning; buffer until </think>.
+        // 'inside' or 'prose' - confirmed reasoning. The app-defined final
+        // boundary is authoritative even if qwen omits its closing think tag.
+        const finalMarker = findStandaloneFinalMarker(this.pending);
+        if (finalMarker) {
+            const after = this.pending.slice(finalMarker.end);
+            this._log('found standalone "Final response:" boundary while reasoning; resuming content.');
+            this.pending = '';
+            this.state = 'outside';
+            return after;
+        }
+
+        // Otherwise buffer until </think>.
         const closeIdx = this.pending.indexOf(CLOSE_TAG);
         if (closeIdx !== -1) {
             const after = this.pending.slice(closeIdx + CLOSE_TAG.length);
@@ -181,4 +215,4 @@ class ThinkFilter {
     }
 }
 
-module.exports = { ThinkFilter };
+module.exports = { ThinkFilter, findStandaloneFinalMarker };

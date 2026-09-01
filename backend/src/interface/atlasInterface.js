@@ -15,42 +15,8 @@ const permissionManager = require('../permissions/permissionManager');
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
 const eventLogger = require('../events/eventLogger');
-const { createModelAdapter } = require('../models/modelAdapter');
-const { stripThinking } = require('../utils/jsonExtractor');
 const ollamaProvider = require('../models/providers/ollama');
 const modelRouter = require('../models/modelRouter');
-
-const reflectionModelAdapter = createModelAdapter();
-
-const REFLECTION_SYSTEM_PROMPT =
-    'You are Atlas\'s reflection engine. Analyze the conversation. Return ONLY valid JSON.\n' +
-    'Format: {"summary": "2-3 sentence summary of topics and tasks.", "learnings": [{"trigger": "conceptual condition", "action": "generalized behavior to follow", "context": "category"}]}\n' +
-    'For "learnings", extract any implicit rules, corrections, or behaviors the user explicitly taught you (e.g., "Always do X", "Never do Y"). CRITICAL: The "trigger" MUST be a generalized concept (e.g., "When asked about system history"), NOT the exact user sentence. The "action" MUST be the generalized behavior. Do NOT extract questions or casual chat. If none, return an empty array.';
-
-function parseReflection(text) {
-    const cleanText = stripThinking(text);
-    const firstBrace = cleanText.indexOf('{');
-    const lastBrace = cleanText.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        try {
-            return JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
-        } catch (e) {
-            const summaryMatch = cleanText.match(/"summary":\s*"([^"]+)"/i);
-            const learningsMatch = cleanText.match(/"learnings":\s*(\[[\s\S]*?\])/i);
-
-            const summary = summaryMatch ? summaryMatch[1] : null;
-            let learnings = [];
-            if (learningsMatch) {
-                try {
-                    learnings = JSON.parse(learningsMatch[1]);
-                } catch (e2) {}
-            }
-
-            if (summary) return { summary, learnings };
-        }
-    }
-    return null;
-}
 
 class AtlasInterface extends EventEmitter {
     constructor() {
@@ -139,47 +105,13 @@ class AtlasInterface extends EventEmitter {
     async _reflectOnSession(sessionId) {
         if (!sessionId) return;
 
-        try {
-            const history = await memory.workingMemory.getHistory(sessionId);
-            if (history.length <= 2) return;
-
-            const fastModel = process.env.OLLAMA_MODEL_FAST || 'qwen3:4b';
-            const reflectionResponse = await reflectionModelAdapter.complete(
-                [
-                    { role: 'system', content: REFLECTION_SYSTEM_PROMPT },
-                    { role: 'user', content: JSON.stringify(history) }
-                ],
-                { think: true, temperature: 0.3, model: fastModel }
-            );
-
-            let parsed = parseReflection(reflectionResponse);
-            if (!parsed) {
-                let cleanFallback = stripThinking(reflectionResponse);
-                if (cleanFallback.length > 300 || cleanFallback === '') {
-                    cleanFallback = "The session involved various tasks and interactions. Detailed summary parsing encountered an issue, but the session was completed successfully.";
-                }
-                parsed = { summary: cleanFallback, learnings: [] };
-            }
-
-            if (parsed.learnings && parsed.learnings.length > 0) {
-                for (const learning of parsed.learnings) {
-                    if (learning.trigger && learning.action) {
-                        await memory.proceduralMemory.addProcedure({
-                            trigger: learning.trigger,
-                            action: learning.action,
-                            context: learning.context || 'reflection_learning'
-                        });
-                    }
-                }
-            }
-
-            await memory.reflectionJournal.append({
-                sessionId,
-                summary: parsed.summary
-            });
-        } catch (err) {
-            console.error('[Atlas Backend] Reflection failed:', err.message);
-        }
+        const history = await memory.workingMemory.getHistory(sessionId);
+        // Delegates to the shared reflectionEngine (see
+        // memory/reflectionEngine.js) - this used to duplicate the
+        // prompt/parser/fallback logic inline here and in the orphaned
+        // index.js CLI entrypoint, and called the model directly instead
+        // of through llmQueue. Both are fixed at the shared call site now.
+        await memory.reflectionEngine.generateReflection(sessionId, history);
     }
 
     async initialize() {

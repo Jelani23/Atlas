@@ -33,6 +33,8 @@ const SECTIONS = [
   ['knowledge', 'Knowledge library'],
   ['procedures', 'Procedural heuristics'],
   ['features', 'Dev state'],
+  ['reflections', 'Past session reflections'],
+  ['conversationHistory', 'Relevant earlier conversation'],
 ];
 
 function serializeRelevantMemory(relevantMemory) {
@@ -51,6 +53,9 @@ function serializeRelevantMemory(relevantMemory) {
         item.action,
         item.feature,
         item.status,
+        item.summary,
+        item.role,
+        item.content,
         Array.isArray(item.topics) ? item.topics.join(', ') : '',
       ];
       lines.push(`[${i}] ${parts.filter(Boolean).join(' | ')}`);

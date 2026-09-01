@@ -1,59 +1,40 @@
-const { createModelAdapter } = require('../models/modelAdapter');
 const tools = require('../tools');
-const { stripThinking } = require('../utils/jsonExtractor');
-
-const modelAdapter = createModelAdapter();
+const { SEARCH_STATUS, isUsableSearchResult } = require('../utils/searchEvidence');
 const SEARCH_DELAY = 1000; // Configurable delay (Atlas's suggestion!)
 
-// Query generation is a fast, low-level LLM task - run it on Gemini 2.5
-// Flash when a key is configured (no Qwen3 thinking trace on every search),
-// otherwise fall back to the default provider.
-const queryModelAdapter = process.env.GEMINI_API_KEY
-    ? createModelAdapter('gemini')
-    : modelAdapter;
+function normalizeSearchRequest(message) {
+    const raw = String(message || '').trim();
+    const normalized = raw
+        .replace(/^(?:please\s+)?(?:search|look up|find)(?:\s+the)?\s+(?:web|internet|online)\s+(?:for\s+)?/i, '')
+        .replace(/^(?:please\s+)?(?:search|look up|find)\s+(?:for\s+)?/i, '')
+        .replace(/\s+and\s+(?:briefly\s+)?summarize\b[\s\S]*$/i, '')
+        .replace(/\s+(?:and\s+)?(?:briefly\s+)?(?:summarize|explain|tell me)(?:\s+what)?\s+(?:changed|you find|it)?[.!?]*$/i, '')
+        .replace(/^['"]|['"]$/g, '')
+        .trim();
 
-// Generates 3 distinct search queries using line-by-line generation
+    return normalized || raw;
+}
+
+// Search-query construction is deliberately deterministic. Generating three
+// tiny strings does not require a second LLM pass, and treating a model's
+// narration as queries previously added 13 seconds before searching while
+// sending nonsense to every provider. Temporal searches include the runtime
+// year so "latest" cannot silently collapse back to the model's cutoff era.
 async function generateQueries(message) {
-    const prompt = `
-        User Request: "${message}"
-        Generate 3 distinct, concise search engine queries to find information about this request. Include different perspectives (e.g., the core subject, specific platforms, related terms).
-        Output ONE query per line. Do not number them. Do not output any other text.
-    `;
-    
-    try {
-        // maxTokens bumped from 150: gemini-3.6-flash reserves a token
-        // floor for thinking even at reasoning_effort:'low' (see
-        // gemini.js) - 150 left no room for that floor plus 3 query
-        // lines, so this call to Gemini specifically (queryModelAdapter)
-        // was the "Query generation failed" line seen live.
-        const response = await queryModelAdapter.complete([
-            { role: 'system', content: 'You are a search query generator.' },
-            { role: 'user', content: prompt }
-        ], { temperature: 0.2, maxTokens: 900, timeout: 8000 });
-        
-        // 1. Strip thinking traces completely before processing (handles a
-        // stray closing </think> with no opener, which the old paired-tag
-        // regex here missed) 
-        let cleanResponse = stripThinking(response);
-        
-        const lines = cleanResponse.split('\n')
-            .map(l => l.trim().replace(/^[-*\d.\s]+/, ''))
-            .filter(l => l.length > 0 && !l.toLowerCase().startsWith('query') && !l.toLowerCase().includes('do not'));
-            
-        if (lines.length > 0) {
-            return lines.slice(0, 3);
-        }
-        
-        console.log("[SearchPipeline] Query generation failed, using raw message.");
-        return [message];
-    } catch (e) { 
-        console.error("[SearchPipeline] Query generation failed:", e.message);
-        return [message]; 
-    }
+    const base = normalizeSearchRequest(message);
+    const isTemporal = /\b(latest|current|today|recent|newest|now|this (?:year|month|week)|as of)\b/i.test(base);
+    const year = new Date().getFullYear();
+    const candidates = isTemporal
+        ? [base, `${base} ${year}`, `${base} official`]
+        : [base, `${base} official source`, `${base} documentation`];
+
+    return [...new Set(candidates.map(query => query.replace(/\s+/g, ' ').trim()))]
+        .filter(Boolean)
+        .slice(0, 3);
 }
 
 // Executes searches sequentially with rate limiting and per-query error handling (Atlas's suggestion!)
-async function executeSearch(queries) {
+async function executeSearch(queries, { search = tools.webSearch.execute, delayMs = SEARCH_DELAY } = {}) {
     console.log('[SearchPipeline] Queries:', queries);
     // Phase: framing this as raw research material to be read in full and
     // synthesized into ONE answer (see response/controller.js's "search"
@@ -61,7 +42,7 @@ async function executeSearch(queries) {
     // one-by-one - that framing was part of why replies came out reading
     // like three shortened summaries stitched together instead of one
     // comprehended answer.
-    let aggregatedResult = "Raw research material gathered from multiple related searches below. Read all of it, cross-reference overlapping/conflicting details, and write ONE complete synthesized answer in your own words - do not summarize each block separately.\n\n";
+    const sourceBlocks = [];
 
     for (let i = 0; i < queries.length; i++) {
         const q = queries[i];
@@ -75,20 +56,25 @@ async function executeSearch(queries) {
             // query." for EVERY query, every time - meaning this 3-query
             // pipeline has never actually returned a real result. Calling
             // .execute() is the fix.
-            const res = await tools.webSearch.execute(q);
-            aggregatedResult += `--- Source material ${i+1} (from query: "${q}") ---\n${res}\n\n`;
+            const res = await search(q);
+            if (isUsableSearchResult(res)) {
+                sourceBlocks.push(`--- Source material ${i+1} (from query: "${q}") ---\n${res}`);
+            }
         } catch (e) {
             console.error(`[SearchPipeline] Failed to execute query ${i+1}: "${q}"`, e.message);
-            aggregatedResult += `--- Source material ${i+1} (from query: "${q}") ---\nError: Search failed for this query.\n\n`;
         }
         
         // Add configurable delay between searches
         if (i < queries.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, SEARCH_DELAY));
+            await new Promise(resolve => setTimeout(resolve, delayMs));
         }
     }
-    
-    return aggregatedResult;
+
+    if (sourceBlocks.length === 0) {
+        return `${SEARCH_STATUS.NO_RESULTS}\nNo verified web evidence was returned by the configured search providers. Do not substitute training-cutoff knowledge or infer that the requested current information does not exist.`;
+    }
+
+    return `${SEARCH_STATUS.RESULTS_FOUND}\nRaw research material gathered from multiple related searches follows. Use only this evidence for claims about what is current or latest, cross-reference overlapping/conflicting details, and write one synthesized answer.\n\n${sourceBlocks.join('\n\n')}`;
 }
 
-module.exports = { generateQueries, executeSearch };
+module.exports = { normalizeSearchRequest, generateQueries, executeSearch };

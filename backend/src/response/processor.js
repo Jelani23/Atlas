@@ -1,4 +1,9 @@
-const { stripThinking } = require('../utils/jsonExtractor');
+const {
+    stripThinking,
+    looksLikeReasoningProse,
+    reasoningProseDensity
+} = require('../utils/jsonExtractor');
+const { findStandaloneFinalMarker } = require('../utils/thinkFilter');
 
 function processResponse(response, style) {
     let cleaned = response;
@@ -34,9 +39,9 @@ function removeThinkingTraces(text) {
     // internal-marker echo happened to appear earlier in the same text.
     // Checking first and returning immediately avoids that ordering bug
     // entirely.
-    const finalMatch = text.match(/final response:\s*([\s\S]*)/i);
-    if (finalMatch) {
-        return finalMatch[1].trim();
+    const finalMarker = findStandaloneFinalMarker(text);
+    if (finalMarker) {
+        return text.slice(finalMarker.end).trim();
     }
 
     // Remove everything up to the LAST </think> tag - handles a stray
@@ -70,6 +75,14 @@ function removeThinkingTraces(text) {
         // point) - dropping it entirely and letting the existing
         // empty-reply fallback handle it is safer than guessing at a
         // split point and accidentally including more narration.
+        cleaned = '';
+    }
+
+    // A no-thinking request can still produce self-narration in the content
+    // channel. If multiple independent narration signals are present and no
+    // closing tag/final delimiter supplied a safe boundary, dropping the
+    // whole trace is safer than presenting or speaking it as Alice's answer.
+    if (looksLikeReasoningProse(cleaned) && reasoningProseDensity(cleaned) >= 2) {
         cleaned = '';
     }
 

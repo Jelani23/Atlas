@@ -75,6 +75,8 @@ function swapContext(context = {}) {
     memoryCache.setHotMemory('knowledge_library', []);
     memoryCache.setHotMemory('procedural_memory', []);
     memoryCache.setHotMemory('dev_state', []);
+    memoryCache.setHotMemory('reflections', []);
+    memoryCache.setHotMemory('conversation_history', []);
 
     console.log(
         `[HotSwap] 🔄 Context swapped → ${cacheKey}`

@@ -15,7 +15,7 @@
 // Run: node tests/thinkFilter.test.js
 
 const assert = require('assert');
-const { ThinkFilter } = require('../src/utils/thinkFilter');
+const { ThinkFilter, findStandaloneFinalMarker } = require('../src/utils/thinkFilter');
 const {
     looksLikeReasoningProse,
     reasoningProseDensity,
@@ -98,6 +98,18 @@ function check(name, fn) {
 }
 
 console.log('ThinkFilter streaming behavior');
+
+check('quoted Final response instruction is not treated as an answer boundary', () => {
+    const quoted = 'The last thing should be exactly the line "Final response:" (nothing else on that line).';
+    assert.strictEqual(findStandaloneFinalMarker(quoted), null);
+});
+
+check('standalone Final response line is recognized as the answer boundary', () => {
+    const raw = 'Private thought mentioning "Final response:" in prose.\nFinal response:\nReflection retrieval.';
+    const marker = findStandaloneFinalMarker(raw);
+    assert(marker, 'standalone marker should be found');
+    assert.strictEqual(raw.slice(marker.end), '\nReflection retrieval.');
+});
 
 check('prose reasoning + stray </think>: never emits reasoning, only the answer', () => {
     const out = runFilter(PROSE_CAPITAL);

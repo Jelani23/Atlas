@@ -2,6 +2,8 @@
 const memoryCache = require('./memoryCache');
 const hotSwapManager = require('./hotSwapManager');
 const projectRegistry = require('../memory/projectRegistry');
+const workingMemory = require('../memory/workingMemory');
+const { extractKeywords } = require('../utils/keywordExtractor');
 
 // --- 1. TOKEN ESTIMATOR ---
 function estimateTokens(text) {
@@ -40,28 +42,36 @@ const CONTEXT_PROFILES = {
     // pull from it, and part of why she'd fall back to
     // possibly-wrong base-model knowledge instead of what she actually
     // has on file.
-    conversation: { personal: 600, project: 300,  knowledge: 400,  procedures: 150, devState: 0 },
-    action:       { personal: 300, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
-    coding:       { personal: 300, project: 600,  knowledge: 200, procedures: 200, devState: 100 },
-    planning:     { personal: 300, project: 500,  knowledge: 200, procedures: 200, devState: 200 },
-    search:       { personal: 200, project: 0,    knowledge: 0,  procedures: 0,   devState: 0 },
-    memory:       { personal: 2000, project: 500, knowledge: 500, procedures: 200, devState: 200 },
+    // `reflections` follows the same "0 for intents that don't need it"
+    // pattern as the other categories. It's deliberately modest even
+    // where non-zero - a reflection is a session-scoped recap, useful as
+    // light background for continuity ("what were we doing last time"),
+    // not a primary information source the way project/knowledge memory
+    // is. `memory` (explicit "what do you remember" questions) is the one
+    // intent where it's weighted meaningfully higher.
+    conversation: { personal: 220, project: 220, knowledge: 220, procedures: 100, devState: 0,   reflections: 120, conversationHistory: 260 },
+    action:       { personal: 120, project: 0,   knowledge: 0,   procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 },
+    coding:       { personal: 160, project: 420, knowledge: 180, procedures: 160, devState: 100, reflections: 80,  conversationHistory: 320 },
+    planning:     { personal: 180, project: 360, knowledge: 180, procedures: 160, devState: 160, reflections: 100, conversationHistory: 320 },
+    search:       { personal: 80,  project: 0,   knowledge: 0,   procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 },
+    memory:       { personal: 700, project: 360, knowledge: 360, procedures: 160, devState: 160, reflections: 320, conversationHistory: 500 },
     // Capability questions ("can you read your own code?") are answered
     // from the world model, assembled separately in contextBuilder.js -
     // none of these budgets are the relevant source, so all stay at 0.
-    capability:   { personal: 0,   project: 0,    knowledge: 0,  procedures: 0,   devState: 0 }
+    capability:   { personal: 0,   project: 0,    knowledge: 0,  procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 }
 };
 
 // --- 3. BUDGET ALLOCATOR ---
-function allocateBudget(items, budget) {
+function allocateBudget(items, budget, maxItems = Infinity) {
     const selected = [];
     let used = 0;
     
     const sorted = items.sort((a, b) => b._finalScore - a._finalScore);
     
     for (const item of sorted) {
+        if (selected.length >= maxItems) break;
         const topicsText = Array.isArray(item.topics) ? item.topics.join(' ') : '';
-        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''} ${topicsText} ${item.category || ''} ${item.type || ''}`;
+        const text = `${item.key || ''} ${item.value || ''} ${item.subject || ''} ${item.trigger || ''} ${item.action || ''} ${item.feature || ''} ${item.status || ''} ${item.summary || ''} ${item.content || ''} ${item.role || ''} ${topicsText} ${item.category || ''} ${item.type || ''}`;
         const tokens = estimateTokens(text);
         
         if (used + tokens <= budget) {
@@ -73,11 +83,38 @@ function allocateBudget(items, budget) {
     return { selected, usedTokens: used };
 }
 
-function extractKeywords(text) {
-    if (!text) return new Set();
-    const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'to', 'of', 'and', 'in', 'on', 'for', 'with', 'about', 'can', 'you', 'me', 'my', 'i', 'it', 'this', 'that']);
-    return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w)));
+// `workingMemory.getRelevant()` can return some of the same turns already
+// present in the normal recent-history window. Remove those exact rows so
+// Alice sees each turn once. Timestamp is part of the identity because the
+// same role/content can legitimately occur more than once in a session.
+function removeRecentConversationMessages(rows, history) {
+    const recentKeys = new Set((history || []).map(message =>
+        `${message.role || ''}\u0000${message.timestamp || ''}\u0000${message.content || ''}`
+    ));
+
+    return (rows || []).filter(message => !recentKeys.has(
+        `${message.role || ''}\u0000${message.timestamp || ''}\u0000${message.content || ''}`
+    ));
 }
+
+function scoreConversationMessage(message, keywords) {
+    const topicsText = Array.isArray(message.topics) ? message.topics.join(' ') : '';
+    const text = `${message.content || ''} ${topicsText}`.toLowerCase();
+    let relevanceScore = 0;
+
+    keywords.forEach(keyword => {
+        if (text.includes(keyword)) relevanceScore += 25;
+    });
+
+    const importance = Number(message.importance) || 0;
+    return {
+        ...message,
+        _relevanceScore: relevanceScore,
+        _finalScore: relevanceScore + (importance * 10)
+    };
+}
+
+
 
 function scoreAndBoost(store, item, keywords) {
     let relevanceScore = 0;
@@ -88,8 +125,10 @@ function scoreAndBoost(store, item, keywords) {
     // actually be matched by their retrieval metadata instead of
     // only their literal key/value text - see plan §13: knowledge
     // must be findable by category/subject/topics/key, not just
-    // whatever words happen to appear in `value`.
-    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''} ${topicsText} ${d.category || ''} ${d.type || ''}`.toLowerCase();
+    // whatever words happen to appear in `value`. `summary` added for
+    // reflections, which have no key/value - the summary text itself is
+    // the only content there is to match against.
+    const itemText = `${d.key || ''} ${d.value || ''} ${d.subject || ''} ${d.project_key || ''} ${d.trigger || ''} ${d.action || ''} ${d.feature || ''} ${d.status || ''} ${d.summary || ''} ${topicsText} ${d.category || ''} ${d.type || ''}`.toLowerCase();
     
     keywords.forEach(kw => {
         if (itemText.includes(kw)) relevanceScore += 25;
@@ -104,17 +143,18 @@ function scoreAndBoost(store, item, keywords) {
     return { ...d, _activationScore: item.score, _relevanceScore: relevanceScore, _finalScore: finalScore };
 }
 
-async function getRelevantContext(userInput, history, intent) {
+async function getRelevantContext(userInput, history, intent, options = {}) {
     console.time("[ContextManager] Total Processing");
     const recentHistoryStr = history.slice(-5).map(m => m.content).join(' ');
     const keywords = extractKeywords(userInput + ' ' + recentHistoryStr);
 
-    const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx] = await Promise.all([
+    const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx] = await Promise.all([
         memoryCache.getMemory('user_profile'),
         memoryCache.getMemory('project_memory'),
         memoryCache.getMemory('knowledge_library'),
         memoryCache.getMemory('dev_state'),
-        memoryCache.getMemory('procedural_memory')
+        memoryCache.getMemory('procedural_memory'),
+        memoryCache.getMemory('reflections')
     ]);
 
     const lowerInput = userInput.toLowerCase();
@@ -243,9 +283,14 @@ async function getRelevantContext(userInput, history, intent) {
             );
     }
 
-    // 2. Essentials: Score them, force-include up to 300 tokens
+    const profileName = isAskingAboutSelf ? 'memory' : (intent && intent.intent ? intent.intent : 'conversation');
+    const budgetProfile = CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation;
+
+    // Identity/relationship essentials personalize every turn, but the core
+    // Alice/ATLAS identity already lives in the system prompt. Keep only a
+    // small set here instead of duplicating the full profile on every request.
     const essentialsScored = essentials.map(item => scoreAndBoost('user_profile', item, keywords));
-    const essentialsAlloc = allocateBudget(essentialsScored, 300);
+    const essentialsAlloc = allocateBudget(essentialsScored, Math.min(120, budgetProfile.personal), 4);
 
     // 3. Dynamic Personal: Only include if relevant OR if asking about self
     let dynamicPersonalScored = dynamicPersonal.map(item => scoreAndBoost('user_profile', item, keywords))
@@ -268,7 +313,7 @@ async function getRelevantContext(userInput, history, intent) {
     );
 
     let filteredProjects = projectScored.filter(m =>
-        allowedProjectKeys.has(m.project_key?.toLowerCase())
+        allowedProjectKeys.has(m.project_key?.toLowerCase()) && m._relevanceScore > 0
     );
         
     let knowledgeScored = knowledgeIdx.map(item => scoreAndBoost('knowledge_library', item, keywords))
@@ -280,21 +325,54 @@ async function getRelevantContext(userInput, history, intent) {
     const isDevRelevant = intent.action || intent.coding || intent.planning || isAskingAboutAtlas || isAskingAboutSelf || keywords.has('feature') || keywords.has('state');
     let devScored = isDevRelevant ? featuresIdx.map(item => scoreAndBoost('dev_state', item, keywords)).filter(f => f._relevanceScore > 0 || featuresIdx.length <= 5) : [];
 
-    const profileName = isAskingAboutSelf ? 'memory' : (intent && intent.intent ? intent.intent : 'conversation');
-    const budgetProfile = CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation;
+    // Reflections: same fallback pattern as knowledge/procedures (include
+    // everything when the table is small enough that "relevant" would
+    // otherwise mean "empty"), but capped lower (<=3 vs <=5) since a
+    // reflection is a whole-session recap - even the small-table fallback
+    // shouldn't casually dump many of them into every turn.
+    let reflectionsScored = reflectionsIdx.map(item => scoreAndBoost('reflections', item, keywords))
+        .filter(r => r._relevanceScore > 0 || reflectionsIdx.length <= 3);
+
+    // Reach beyond the last-N chat window only when this intent has a
+    // conversation-history budget. This stays scoped to the live session:
+    // reflections are the compact cross-session continuity layer, while raw
+    // historical turns are deliberately not injected across sessions by
+    // default. The DB query already requires topic overlap; this pass removes
+    // duplicates from `history`, scores importance, and enforces a small
+    // independent token budget before anything reaches the prompt.
+    let conversationHistoryScored = [];
+    const sessionId = options.sessionId || null;
+    const conversationStore = options.workingMemory || workingMemory;
+    if (budgetProfile.conversationHistory > 0 && sessionId && keywords.size > 0) {
+        try {
+            const candidates = await conversationStore.getRelevant(keywords, {
+                sessionId,
+                projectKey: currentProjectKeyResolved,
+                crossSession: false,
+                limit: 12
+            });
+            conversationHistoryScored = removeRecentConversationMessages(candidates, history)
+                .map(message => scoreConversationMessage(message, keywords))
+                .filter(message => message._relevanceScore > 0);
+        } catch (error) {
+            console.error('[ContextManager] Failed to retrieve earlier conversation context:', error.message);
+        }
+    }
 
     const remainingPersonalBudget = Math.max(0, budgetProfile.personal - essentialsAlloc.usedTokens);
-    const dynamicPersonalAlloc = allocateBudget(dynamicPersonalScored, remainingPersonalBudget);
+    const dynamicPersonalAlloc = allocateBudget(dynamicPersonalScored, remainingPersonalBudget, 4);
 
     const personalAlloc = {
         selected: [...essentialsAlloc.selected, ...dynamicPersonalAlloc.selected],
         usedTokens: essentialsAlloc.usedTokens + dynamicPersonalAlloc.usedTokens
     };
 
-    const projectAlloc = allocateBudget(filteredProjects, budgetProfile.project);
-    const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge);
-    const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures);
-    const devAlloc = allocateBudget(devScored, budgetProfile.devState);
+    const projectAlloc = allocateBudget(filteredProjects, budgetProfile.project, profileName === 'memory' ? 8 : 4);
+    const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge, profileName === 'memory' ? 8 : 4);
+    const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures, 3);
+    const devAlloc = allocateBudget(devScored, budgetProfile.devState, 4);
+    const reflectionsAlloc = allocateBudget(reflectionsScored, budgetProfile.reflections, profileName === 'memory' ? 5 : 2);
+    const conversationHistoryAlloc = allocateBudget(conversationHistoryScored, budgetProfile.conversationHistory, 4);
     
     // Populate the hot memory cache with the memories that were
     // actually selected as relevant for the current request.
@@ -303,6 +381,8 @@ async function getRelevantContext(userInput, history, intent) {
     memoryCache.setHotMemory('knowledge_library', knowledgeAlloc.selected);
     memoryCache.setHotMemory('procedural_memory', proceduresAlloc.selected);
     memoryCache.setHotMemory('dev_state', devAlloc.selected);
+    memoryCache.setHotMemory('reflections', reflectionsAlloc.selected);
+    memoryCache.setHotMemory('conversation_history', conversationHistoryAlloc.selected);
 
     console.log(
     `[ContextManager] 🔥 Hot Cache Updated | ` +
@@ -310,12 +390,14 @@ async function getRelevantContext(userInput, history, intent) {
     `Projects: ${projectAlloc.selected.length} | ` +
     `Knowledge: ${knowledgeAlloc.selected.length} | ` +
     `Procedures: ${proceduresAlloc.selected.length} | ` +
-    `DevState: ${devAlloc.selected.length}`
+    `DevState: ${devAlloc.selected.length} | ` +
+    `Reflections: ${reflectionsAlloc.selected.length} | ` +
+    `Earlier turns: ${conversationHistoryAlloc.selected.length}`
 );
 
     console.timeEnd("[ContextManager] Total Processing");
 
-    const totalUsed = personalAlloc.usedTokens + projectAlloc.usedTokens + knowledgeAlloc.usedTokens + proceduresAlloc.usedTokens + devAlloc.usedTokens;
+    const totalUsed = personalAlloc.usedTokens + projectAlloc.usedTokens + knowledgeAlloc.usedTokens + proceduresAlloc.usedTokens + devAlloc.usedTokens + reflectionsAlloc.usedTokens + conversationHistoryAlloc.usedTokens;
     const manifest = {
         task: profileName,
         allocations: {
@@ -323,20 +405,24 @@ async function getRelevantContext(userInput, history, intent) {
             projects: projectAlloc.usedTokens,
             knowledge: knowledgeAlloc.usedTokens,
             procedures: proceduresAlloc.usedTokens,
-            devState: devAlloc.usedTokens
+            devState: devAlloc.usedTokens,
+            reflections: reflectionsAlloc.usedTokens,
+            conversationHistory: conversationHistoryAlloc.usedTokens
         },
         selected: {
             personal: personalAlloc.selected.length,
             projects: projectAlloc.selected.length,
             knowledge: knowledgeAlloc.selected.length,
             procedures: proceduresAlloc.selected.length,
-            devState: devAlloc.selected.length
+            devState: devAlloc.selected.length,
+            reflections: reflectionsAlloc.selected.length,
+            conversationHistory: conversationHistoryAlloc.selected.length
         },
         totalUsed: totalUsed
     };
     
     console.log(`[ContextManager] 📊 Context Manifest (Task: ${manifest.task}) - Used ${totalUsed} tokens`);
-    console.log(`   State: ${stateScored.length}t | Essentials: ${essentialsAlloc.selected.length}t | Dynamic: ${dynamicPersonalAlloc.selected.length}t | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items`);
+    console.log(`   State: ${stateScored.length}t | Essentials: ${essentialsAlloc.selected.length}t | Dynamic: ${dynamicPersonalAlloc.selected.length}t | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items | Reflections: ${manifest.selected.reflections} items | Earlier turns: ${manifest.selected.conversationHistory} items`);
 
     return {
         hotState: memoryCache.getHotState(),
@@ -348,8 +434,15 @@ async function getRelevantContext(userInput, history, intent) {
         knowledge: knowledgeAlloc.selected,
         procedures: proceduresAlloc.selected,
         features: devAlloc.selected,
+        reflections: reflectionsAlloc.selected,
+        conversationHistory: conversationHistoryAlloc.selected,
         manifest
     };
 }
 
-module.exports = { getRelevantContext };
+module.exports = {
+    getRelevantContext,
+    extractKeywords,
+    removeRecentConversationMessages,
+    scoreConversationMessage
+};

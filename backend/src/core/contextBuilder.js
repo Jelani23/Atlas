@@ -3,6 +3,7 @@ const { atlasState } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
+const { SEARCH_STATUS, hasVerifiedSearchEvidence } = require('../utils/searchEvidence');
 
 // Phase (context-assembly refinement, F1): contextManager.js already
 // scores/budgets each memory category per-intent (e.g. `project: 0` for a
@@ -14,6 +15,26 @@ const contextManager = require('./contextManager');
 function section(title, body) {
     if (!body || body === 'None' || body.trim() === '') return '';
     return `${title}\n${body}\n`;
+}
+
+// Keep all gathered search perspectives represented when raw pages are large.
+// A simple prefix slice lets source 1 consume the whole allowance and silently
+// removes sources 2/3, defeating cross-checking. This allocator preserves the
+// status/header and gives every source block an equal deterministic share.
+function compactSearchEvidence(raw, maxChars = 12000) {
+    const text = String(raw || '');
+    if (text.length <= maxChars) return text;
+
+    const parts = text.split(/(?=--- Source material \d+)/i);
+    if (parts.length <= 1) {
+        return `${text.slice(0, maxChars)}\n[Additional search material omitted from synthesis context.]`;
+    }
+
+    const header = parts.shift().slice(0, 1000);
+    const footer = '\n[Additional text from each source was omitted from synthesis context.]';
+    const available = Math.max(1000, maxChars - header.length - footer.length);
+    const perSource = Math.max(500, Math.floor(available / parts.length));
+    return `${header}${parts.map(part => part.slice(0, perSource)).join('')}${footer}`;
 }
 
 // Fast-path only (see isWorldRelevant below) - fires when Groq semantic
@@ -33,7 +54,7 @@ function deterministicCapabilityMatch(userInput) {
     return CAPABILITY_FAST_PATH_PHRASES.some(p => lower.includes(p));
 }
 
-async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy, workingContext, preprocessed }) {
+async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy, workingContext, preprocessed, sessionId }) {
     console.time("buildContext");
     
     // Phase: when the optional preprocessing layer already retrieved (and
@@ -42,8 +63,7 @@ async function buildContext({ mode, intent, responseStyle, memoryResult, toolRes
     // absent or has no relevantMemory, behavior is identical to before.
     const relevantMemory = (preprocessed && preprocessed.relevantMemory)
         ? preprocessed.relevantMemory
-        : await contextManager.getRelevantContext(userInput, history, intent);
-    const world = await worldModel.getAll();
+        : await contextManager.getRelevantContext(userInput, history, intent, { sessionId });
 
     // Phase (F2): the underlying model's training cutoff/year must never
     // determine Alice's perceived current date - see plan §9. This is a
@@ -182,6 +202,39 @@ Current Task: ${hot.currentTask || 'None'}
         proceduralContext = relevantMemory.procedures.map(p => `- IF ${p.trigger} THEN ${p.action}`).join('\n');
     }
 
+    // Reflections: session-scoped recaps, distinct from Knowledge Library
+    // Topics above (durable facts) - see memory/reflectionEngine.js. Kept
+    // dense and tag-first (subject/category leading, topics trailing) since
+    // this is written for Alice to parse quickly, not as narrative prose.
+    let reflectionContext = "None";
+    if (relevantMemory.reflections && relevantMemory.reflections.length > 0) {
+        reflectionContext = relevantMemory.reflections.map(r => {
+            const topics = Array.isArray(r.topics) && r.topics.length > 0
+                ? ` (topics: ${r.topics.join(', ')})`
+                : '';
+            return `- [${r.subject}/${r.category}] ${r.summary}${topics}`;
+        }).join('\n');
+    }
+
+    // Topic-matched turns from earlier in the CURRENT session. Recent turns
+    // are still supplied as normal chat messages; contextManager removes
+    // those from this list so this block only fills the gap beyond the
+    // short recency window.
+    let earlierConversationContext = "None";
+    if (relevantMemory.conversationHistory && relevantMemory.conversationHistory.length > 0) {
+        earlierConversationContext = relevantMemory.conversationHistory.map(message => {
+            const role = message.role === 'assistant' ? 'Alice' : 'User';
+            return `- ${role}: ${message.content}`;
+        }).join('\n');
+    }
+    const earlierConversationBlock = section(
+        '--- RELEVANT EARLIER CONVERSATION (CURRENT SESSION) ---',
+        earlierConversationContext
+    );
+    const earlierConversationBlockClosed = earlierConversationBlock
+        ? `${earlierConversationBlock}--- END EARLIER CONVERSATION ---\n\n`
+        : '';
+
     let worldModelContext = "";
     // Phase (F3, revised): the world model is the source of truth for what
     // Atlas can do - the trigger below only decides whether this turn needs
@@ -210,7 +263,8 @@ Current Task: ${hot.currentTask || 'None'}
         intent.intent === 'capability' ||
         (preprocessed && preprocessed.semantic && preprocessed.semantic.taskType === 'capability') ||
         deterministicCapabilityMatch(userInput);
-    if (isWorldRelevant && world) {
+    const world = isWorldRelevant ? await worldModel.getAll() : null;
+    if (world) {
         worldModelContext = `
 --- ATLAS OS WORLD MODEL ---
 Runtime: ${world.environment.runtime} | Model: ${world.models.current_default}
@@ -224,7 +278,9 @@ Limitations:
 
     const systemPrompt = personalityEngine.getSystemPrompt(mode, policy, responseStyle);
 
-    let toolContext = "No tools used.";
+    const isWebSearchResult = toolResult && toolResult.needsTool &&
+        (toolResult.toolName === 'search_web' || toolResult.toolName === 'webSearch');
+    let toolContext = '';
     if (toolResult && toolResult.needsTool) {
         // Phase: prefer Gemini's condensed version of the raw tool result
         // (preprocessed.condensedToolResult, from preprocessingLayer's
@@ -236,9 +292,16 @@ Limitations:
         // only ever read toolResult.toolResult directly. That's the single
         // biggest context-bloat source in the pipeline, and it's exactly
         // what Gemini's contextual stage exists to reduce.
-        const resultData = (preprocessed && preprocessed.condensedToolResult)
+        let resultData = (preprocessed && preprocessed.condensedToolResult)
             ? preprocessed.condensedToolResult
             : toolResult.toolResult;
+        // Remote LLM condensation is no longer on the critical path. Put a
+        // deterministic ceiling on raw web material so one unusually large
+        // result page cannot crowd the instructions and conversation out of
+        // a small local model's context. Status and source ordering survive.
+        if (isWebSearchResult) {
+            resultData = compactSearchEvidence(resultData);
+        }
         toolContext = `Tool Executed: ${toolResult.toolName}\nResult Data:\n${resultData}`;
     }
 
@@ -247,11 +310,12 @@ Limitations:
     // style ever actually engaging (see conversationEngine.js's
     // intent.intent fix) - putting the instruction here too means a
     // synthesized answer happens regardless of which style path executes.
-    const isWebSearchResult = toolResult && toolResult.needsTool &&
-        (toolResult.toolName === 'search_web' || toolResult.toolName === 'webSearch');
-    const searchGuideline = isWebSearchResult
-        ? '\n- "TOOL CONTEXT" for a web search contains raw source material from multiple related queries, not a finished answer. Read and comprehend all of it, then write ONE complete synthesized answer in your own words. Do not summarize each source or query separately, do not just shorten/quote one snippet, and do not artificially compress a substantive answer down to one or two sentences.'
-        : '';
+    const searchHasEvidence = isWebSearchResult && hasVerifiedSearchEvidence(toolResult.toolResult);
+    const searchGuideline = !isWebSearchResult
+        ? ''
+        : searchHasEvidence
+            ? '\n- For current claims, use only the supplied web evidence. Synthesize the source blocks into one answer.'
+            : '\n- Search returned no verified evidence. Say you could not verify the current answer; do not substitute an old remembered fact.';
 
     // Phase (F1): these bullets are meaningless without a tool result -
     // previously they were unconditional, so a plain conversational turn
@@ -261,7 +325,7 @@ Limitations:
     // executed.
     let toolGuidelines = '';
     if (toolResult && toolResult.needsTool) {
-        toolGuidelines = '\n- If "TOOL CONTEXT" contains an error, output the exact error message.\n- If "TOOL CONTEXT" says "CLARIFICATION REQUESTED", ask the user the exact question provided.\n- If "TOOL CONTEXT" contains a list or code, output it exactly without summarizing.' + searchGuideline;
+        toolGuidelines = '\n- If the tool failed or requested clarification, report that result plainly. Preserve exact code or data when the user requested it.' + searchGuideline;
     }
 
     // Phase: optional preprocessing annotations from the Groq/Gemini
@@ -299,12 +363,13 @@ Limitations:
     // epistemic-honesty instruction already in the system prompt.
     let uncertaintyDirective = '';
     if (preprocessed && preprocessed.semantic && preprocessed.semantic.topicFamiliarity === 'uncertain') {
-        uncertaintyDirective = `
---- KNOWLEDGE CHECK (do not skip) ---
-A preliminary check found you likely do NOT have reliable, specific knowledge of the exact entity/topic in this message - it may be obscure, easily confused with something similarly named, or outside what you actually know. Do not invent specific facts, names, dates, roles, or relationships about it, and do not produce a confident structured answer (list, table, "quick reference") as if you had verified information. Say plainly that you don't have reliable information on this specific topic, and ask if ${atlasState.identity.user} would like you to look it up.
---- END KNOWLEDGE CHECK ---
-`;
+        uncertaintyDirective = `\nKNOWLEDGE CHECK: The exact topic may be unfamiliar or ambiguous. Do not invent specifics; say what is uncertain and offer to look it up.\n`;
     }
+
+    const isTimeSensitiveRequest = /\b(latest|current|today|recent|newest|now|this (?:year|month|week)|as of)\b/i.test(userInput || '');
+    const currentInformationDirective = isTimeSensitiveRequest
+        ? `\nCURRENT INFORMATION: Use verified evidence from this turn for latest/current claims. If evidence is missing or reports ${SEARCH_STATUS.NO_RESULTS}, say the current answer could not be verified.\n`
+        : '';
 
     // Phase (F1): build the memory block from only the sections that
     // actually have content, and drop the whole "ALICE MEMORY CONTEXT"
@@ -317,14 +382,18 @@ A preliminary check found you likely do NOT have reliable, specific knowledge of
         section('User Profile (Stable Facts):', personalMemoryContext),
         section('Active User State:', userStateContext),
         section('Project Knowledge:', projectMemoryContext),
-        section('Knowledge Library Topics:', knowledgeContext)
+        section('Knowledge Library Topics:', knowledgeContext),
+        section('Past Session Reflections:', reflectionContext)
     ].filter(Boolean).join('\n');
 
     const memoryBlock = memoryBlockInner
         ? `--- ALICE MEMORY CONTEXT ---\n${memoryBlockInner}--- END MEMORY CONTEXT ---\n\n`
         : '';
     const memoryGuidelines = memoryBlockInner
-        ? '\n- "ALICE MEMORY CONTEXT" contains specific facts about the user, your active projects, and things you\'ve directly learned (from conversation, research, or search) and stored in your knowledge library. If "Knowledge Library Topics" contains an entry relevant to this request, treat it as something you actually know and use it - don\'t restate it as a guess and don\'t second-guess it in favor of your own general training. Only fall back to your base training data for topics that aren\'t covered there.\n- Project Knowledge is grouped by project under its own "=== ACTIVE PROJECT: X ===" or "=== PROJECT: X ===" header. Never blend facts from two different project headers together, and never attribute a fact to a project other than the header it appeared under.\n- If asked what you remember about the user or your projects, use the "ALICE MEMORY CONTEXT". DO NOT say you lack personal information if it is listed there.\n- A knowledge entry tagged [assumption], [claim], or [hypothesis] is NOT a verified fact - present it with appropriate hedging (e.g. "I believe..." / "I\'m not certain, but...") rather than stating it as settled.'
+        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Reflections summarize past sessions and provide continuity; they are not independently verified facts.'
+        : '';
+    const conversationHistoryGuideline = earlierConversationBlock
+        ? '\n- Earlier conversation is current-session dialogue: use it for continuity, not as independently verified long-term memory.'
         : '';
 
     const proceduralBlock = section('--- ATLAS OS OPERATIONAL HEURISTICS (PROCEDURES) ---', proceduralContext);
@@ -332,7 +401,29 @@ A preliminary check found you likely do NOT have reliable, specific knowledge of
 
     console.timeEnd("buildContext");
 
-    return `${dateLine}\n${systemPrompt}\n${worldModelContext}\n--- CONVERSATION WORKING CONTEXT ---\n${workingContextStr}\n--- END WORKING CONTEXT ---\n${hotStateContext}${preprocessingContext}${memoryBlock}${proceduralBlockClosed}${devStateContext}\n--- TOOL CONTEXT ---\n${toolContext}\n--- END TOOL CONTEXT ---\n${uncertaintyDirective}\n--- CURRENT TASK ---\nIntent: ${intent.intent}\n\n--- RESPONSE GUIDELINES ---\n- Respond directly with only the final answer. Do not narrate reasoning.${toolGuidelines}${memoryGuidelines}\n- Respond naturally as ${atlasState.identity.name}.`;
+    const workingBlock = workingContextStr === 'None'
+        ? ''
+        : `\n--- CURRENT SESSION STATE ---\n${workingContextStr}\n--- END SESSION STATE ---\n`;
+    const toolBlock = toolContext
+        ? `\n--- TOOL EVIDENCE ---\n${toolContext}\n--- END TOOL EVIDENCE ---\n`
+        : '';
+
+    return [
+        dateLine,
+        systemPrompt,
+        worldModelContext,
+        workingBlock,
+        hotStateContext,
+        earlierConversationBlockClosed,
+        preprocessingContext,
+        memoryBlock,
+        proceduralBlockClosed,
+        devStateContext,
+        toolBlock,
+        uncertaintyDirective,
+        currentInformationDirective,
+        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- Respond naturally as ${atlasState.identity.name}.`
+    ].filter(Boolean).join('\n');
 }
 
-module.exports = { buildContext };
+module.exports = { buildContext, compactSearchEvidence };

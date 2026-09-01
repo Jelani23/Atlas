@@ -3,11 +3,11 @@ const http = require('http');
 const { eventBus } = require('../../events/eventBus');
 const EventTypes = require('../../events/eventTypes');
 
-async function complete(messages, options = {}) {
+function buildRequestBody(messages, options = {}, stream = false) {
   const body = {
     model: options.model || process.env.OLLAMA_MODEL || 'qwen3:4b',
     messages,
-    stream: false,
+    stream,
     think: options.think ?? false,
     keep_alive: options.keepAlive || Number(process.env.OLLAMA_KEEP_ALIVE) || 1800,
     options: {
@@ -16,27 +16,16 @@ async function complete(messages, options = {}) {
       ...(options.maxTokens !== undefined ? { num_predict: options.maxTokens } : {})
     }
   };
+  if (options.format) body.format = options.format;
+  return body;
+}
 
-  // When the caller passes `format`, forward it as Ollama's native
-  // structured-output constraint (either the string "json" or a full
-  // JSON Schema object). This makes Ollama's decoder itself refuse to
-  // emit anything but conforming JSON, token by token - it is not a
-  // prompt instruction the model can choose to ignore.
-  //
-  // This matters because `think: false` only disables the model's
-  // dedicated <think> reasoning channel - it does NOT stop a model
-  // from writing reasoning-as-prose directly into the regular content
-  // field for a task that "feels like" it needs working-out, which is
-  // exactly what was happening here: qwen3:4b would spend its entire
-  // token budget on prose like "We are given: ... Steps: 1. ..." and
-  // get cut off by maxTokens before ever producing JSON, no matter
-  // how the prompt was worded. `format` fixes that at the decoding
-  // level instead of the prompt level, so no future prompt wording
-  // change can silently reopen the same failure mode.
-  if (options.format) {
-    body.format = options.format;
-  }
+async function complete(messages, options = {}) {
+  const body = buildRequestBody(messages, options, false);
 
+  // Optional structured formats remain available for internal extraction
+  // tasks. Alice's user-facing response path intentionally does not use a
+  // grammar; it uses native thinking plus content-channel filtering.
   const response = await fetch('http://localhost:11434/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -59,18 +48,8 @@ async function* streamComplete(messages, options = {}) {
   const log = (msg) => console.log(`[OllamaProvider Timing] ${Date.now() - startTime}ms - ${msg}`);
   
   log('Building payload...');
-  const payload = JSON.stringify({
-    model: options.model || process.env.OLLAMA_MODEL || 'qwen3:4b',
-    messages,
-    stream: true,
-    think: options.think ?? false,
-    keep_alive: options.keepAlive || Number(process.env.OLLAMA_KEEP_ALIVE) || 1800,
-    options: {
-      temperature: options.temperature ?? 0.7,
-      num_ctx: options.context ?? (Number(process.env.OLLAMA_NUM_CTX) || 8192),
-      ...(options.maxTokens !== undefined ? { num_predict: options.maxTokens } : {})
-    }
-  });
+  const body = buildRequestBody(messages, options, true);
+  const payload = JSON.stringify(body);
 
   const req = http.request({
     hostname: 'localhost',
@@ -145,6 +124,15 @@ async function* streamComplete(messages, options = {}) {
         }
         if (data.done) {
           emitMetrics(data, modelName, options.requestId);
+          // Surface completion state to the orchestration layer. A Qwen
+          // generation that ends because num_predict was exhausted is not a
+          // successful empty answer; conversationEngine can recover before
+          // returning a user-facing failure.
+          yield {
+            type: 'done',
+            doneReason: data.done_reason || null,
+            evalCount: data.eval_count || 0
+          };
         }
       } catch (e) {
         console.error('[OllamaProvider] Failed to parse stream JSON:', e);
@@ -203,4 +191,4 @@ async function warmup(modelName) {
   }
 }
 
-module.exports = { complete, streamComplete, warmup };
+module.exports = { complete, streamComplete, warmup, buildRequestBody };
