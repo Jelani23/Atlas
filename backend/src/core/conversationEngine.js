@@ -23,6 +23,8 @@ const sessionManager = require('../memory/sessionManager');
 const memoryCache = require('./memoryCache');
 const { extractKeywords } = require('../utils/keywordExtractor');
 const { ThinkFilter } = require('../utils/thinkFilter');
+const contextManager = require('./contextManager');
+const { resolveReflectionAnswer } = require('../memory/reflectionAnswerResolver');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
@@ -33,6 +35,27 @@ let lastEmittedModel = null;
 // knowledge_library without disabling Alice's web-search capability.
 const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = ['true', 'enabled', 'on', '1']
     .includes(String(process.env.SEARCH_KNOWLEDGE_PERSISTENCE || 'false').toLowerCase());
+
+async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart }) {
+    await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
+    taskManager.endRequest(taskId);
+    eventBus.emit(EventTypes.REQUEST_COMPLETED, {
+        taskId,
+        requestId,
+        reply,
+        timestamp: Date.now(),
+        duration: Date.now() - requestStart
+    });
+
+    try {
+        const cleanReply = prepareForTTS(responseProcessor.removeThinkingTraces(reply));
+        if (cleanReply) ttsManager.enqueue(cleanReply, { requestId });
+    } catch (error) {
+        console.error('[TTS] Deterministic generation failed:', error.message);
+    }
+
+    return { reply, audio: null };
+}
 
 async function handleMessage(userInput, { memory, mode, sessionId, taskId, requestId }) {
     const requestStart = Date.now();
@@ -94,27 +117,9 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // Short-Circuit for Deterministic Tools & Background Tasks
         if (toolResult.shortCircuit) {
             const instantReply = toolResult.toolResult;
-            await memory.workingMemory.append({ role: 'assistant', content: instantReply }, sessionId);
-            taskManager.endRequest(taskId);
-            eventBus.emit(EventTypes.REQUEST_COMPLETED, { taskId, requestId, reply: instantReply, timestamp: Date.now(), duration: Date.now() - requestStart });
-            
-            // Phase 10B: Feed deterministic tool responses straight into TTS pipeline
-            try {
-                const ttsManager = require('../voice/tts/ttsManager.js');
-                // Phase (defense-in-depth): this computed `cleanReply` but
-                // then enqueued the raw `instantReply` instead - the
-                // prepared text was silently discarded. Also run
-                // removeThinkingTraces() here even though deterministic
-                // tool output shouldn't normally contain reasoning - it's
-                // a one-line safety net, not the primary fix (see the
-                // streaming/non-streaming LLM paths below for that).
-                const cleanReply = prepareForTTS(responseProcessor.removeThinkingTraces(instantReply));
-                ttsManager.enqueue(cleanReply, { requestId });
-            } catch (e) {
-                console.error("[TTS] Deterministic generation failed:", e.message);
-            }
-
-            return { reply: instantReply, audio: null };
+            return finishImmediateReply(instantReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
         }
 
         const modelChoice = modelRouter.getModelForTask(toolResult.toolName);
@@ -136,6 +141,22 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'context', timestamp: Date.now() });
         const contextStart = Date.now();
 
+        const relevantMemory = await contextManager.getRelevantContext(
+            userInput,
+            history,
+            intent,
+            { sessionId }
+        );
+        const reflectionReply = resolveReflectionAnswer(userInput, relevantMemory);
+        if (reflectionReply) {
+            const contextDuration = Date.now() - contextStart;
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
+            console.log('[ReflectionRecall] Answered from structured reflection evidence.');
+            return finishImmediateReply(reflectionReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
         const context = await contextBuilder.buildContext({
             mode: effectiveMode,
             intent,
@@ -146,6 +167,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             history,
             policy: reasoning.policy,
             workingContext,
+            preprocessed: { relevantMemory },
             sessionId
         });
         const contextDuration = Date.now() - contextStart;

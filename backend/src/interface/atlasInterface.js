@@ -145,6 +145,7 @@ class AtlasInterface extends EventEmitter {
             }
 
             this.sessionId = await sessionManager.startSession();
+            contextManager.registerPreviousSession(this.sessionId);
             
             const defaultModel = modelRouter.getDefaultModel().model;
             ollamaProvider.warmup(defaultModel);
@@ -235,6 +236,7 @@ class AtlasInterface extends EventEmitter {
         let newSessionId = null;
         if (wasCurrent) {
             this.sessionId = await sessionManager.startSession();
+            contextManager.registerPreviousSession(this.sessionId);
             newSessionId = String(this.sessionId);
             this.emit('atlas.status', { phase: 'new_conversation', sessionId: this.sessionId });
         }

@@ -164,6 +164,63 @@ function testOrdinaryStatementsDoNotActivateOldReflections() {
         isReflectionLookupRequest('Let\'s continue the reflection retrieval work.'),
         true
     );
+    assert.strictEqual(
+        isReflectionLookupRequest('We still need to verify recall after the backend loses its in-memory scope.'),
+        false
+    );
+}
+
+async function testRestartFallbackBecomesTheFollowUpScope() {
+    const memoryCache = require('../src/core/memoryCache');
+    const projectRegistry = require('../src/memory/projectRegistry');
+    const originalGetMemory = memoryCache.getMemory;
+    const originalGetAllProjects = projectRegistry.getAllProjects;
+
+    memoryCache.getMemory = async store => {
+        if (store === 'reflections') {
+            return [
+                { id: 10, score: 0, data: { id: 10, session_id: 1196, timestamp: '2026-09-01T18:00:00Z', summary: 'Sequoia', anchors: ['test_label: Sequoia'], topics: ['recovery'] } },
+                { id: 9, score: 0, data: { id: 9, session_id: 1194, timestamp: '2026-09-01T17:00:00Z', summary: 'Magnolia', anchors: ['test_label: Magnolia'], topics: ['reflection'] } }
+            ];
+        }
+        return [];
+    };
+    projectRegistry.getAllProjects = async () => [];
+    registerPreviousSession(1198);
+
+    try {
+        const first = await getRelevantContext(
+            'What was the reflection test label in the most recent meaningful completed conversation?',
+            [],
+            { intent: 'conversation' },
+            { sessionId: 1198, workingMemory: { getRelevant: async () => [] } }
+        );
+        const followUp = resolveReflectionScope(
+            'What two recovery approaches did we compare?',
+            [
+                { role: 'user', content: 'What was the label in the most recent completed conversation?' },
+                { role: 'assistant', content: 'Sequoia' }
+            ],
+            1198
+        );
+        const laterFollowUp = resolveReflectionScope(
+            'What remained to be verified?',
+            [
+                { role: 'user', content: 'What two recovery approaches did we compare?' },
+                { role: 'assistant', content: 'Database-backed and in-memory recovery.' },
+                { role: 'user', content: 'Which recovery path did we select?' },
+                { role: 'assistant', content: 'Database-backed recovery.' }
+            ],
+            1198
+        );
+
+        assert.deepStrictEqual(first.reflections.map(row => row.session_id), [1196]);
+        assert.deepStrictEqual(followUp.sessionIds, ['1196']);
+        assert.deepStrictEqual(laterFollowUp.sessionIds, ['1196']);
+    } finally {
+        memoryCache.getMemory = originalGetMemory;
+        projectRegistry.getAllProjects = originalGetAllProjects;
+    }
 }
 
 async function testScopedReflectionLookupExcludesCompetingMemoryStores() {
@@ -374,6 +431,7 @@ async function run() {
     testPreviousConversationUsesTheActualOutgoingSession();
     testReflectionScopeCarriesAcrossFollowUps();
     testOrdinaryStatementsDoNotActivateOldReflections();
+    await testRestartFallbackBecomesTheFollowUpScope();
     await testScopedReflectionLookupExcludesCompetingMemoryStores();
     testSearchCompactionPreservesEverySource();
     await testEarlierConversationIsRenderedAsDialogueNotFact();

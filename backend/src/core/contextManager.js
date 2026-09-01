@@ -205,7 +205,7 @@ function isReflectionFollowUp(text, history = []) {
     const input = String(text || '').toLowerCase().trim();
     if (!input.includes('?') && !/^(list|show|give)\b/.test(input)) return false;
 
-    const hasBackReference = /\b(that|those|same|it|they|did we|do we|was left|were left)\b/.test(input);
+    const hasBackReference = /\b(that|those|same|it|they|did we|do we|was left|were left|remained|remains|to be verified)\b/.test(input);
     const hasReflectionField = /\b(label|theme|anchor|comparison|approach|decision|path|open loop|unresolved|left over|preferred)\b/.test(input);
     const recentContext = (history || []).slice(-4).map(message => String(message.content || '')).join(' ').toLowerCase();
     const followsRecallTurn = /\b(previous|last|latest|most recent|session\s+#?\d+|reflection)\b/.test(recentContext);
@@ -214,10 +214,16 @@ function isReflectionFollowUp(text, history = []) {
 }
 
 function isReflectionLookupRequest(text) {
-    const input = String(text || '').toLowerCase();
-    return /\b(previous|last|latest|most recent|earlier|past)\b/.test(input) ||
-        /\bsession\s+#?\d+\b/.test(input) ||
-        /\b(remember|recall|continue|resume|pick up|reflection for)\b/.test(input);
+    const input = String(text || '').toLowerCase().trim();
+    const continuation = /^(?:let['’]?s\s+)?(?:continue|resume|pick up)\b/.test(input);
+    if (continuation) return true;
+
+    const question = input.includes('?') ||
+        /^(?:what|which|who|when|where|why|how|do|did|does|can|could|would|was|were|is|are|tell|remind|recall|remember)\b/.test(input);
+    if (!question) return false;
+
+    return /\b(?:remember|recall|previously|earlier|last time|reflection for)\b/.test(input) ||
+        /\bwhat did we\b/.test(input);
 }
 
 function resolveReflectionScope(userInput, history = [], sessionId = null) {
@@ -451,7 +457,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     const exactSessionReference = referencedSessionIds.length > 0;
     const recentSessionReference = reflectionScope.recentReference;
     const strictReflectionScope = exactSessionReference || recentSessionReference;
-    const latestReflectionId = recentSessionReference
+    const latestReflectionId = recentSessionReference && !exactSessionReference
         ? newestReflectionId(reflectionsIdx)
         : null;
     const reflectionCandidates = exactSessionReference
@@ -479,7 +485,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         reflectionsScored = [];
     }
 
-    if (recentSessionReference) {
+    if (recentSessionReference && !exactSessionReference) {
         reflectionsScored = reflectionsScored.map(reflection =>
             reflection.id === latestReflectionId
                 ? { ...reflection, _finalScore: reflection._finalScore + 10_000 }
@@ -488,7 +494,10 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
 
         const latest = reflectionsScored.find(reflection => reflection.id === latestReflectionId);
         const state = options.sessionId ? reflectionScopes.get(String(options.sessionId)) : null;
-        if (latest && state) state.activeSessionId = String(latest.session_id);
+        if (latest && state) {
+            state.activeSessionId = String(latest.session_id);
+            console.log(`[ContextManager] Reflection scope: recent session ${latest.session_id} (1 match)`);
+        }
     }
 
     if (strictReflectionScope) {
@@ -604,6 +613,11 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         features: devAlloc.selected,
         reflections: reflectionsAlloc.selected,
         conversationHistory: conversationHistoryAlloc.selected,
+        reflectionScope: {
+            reason: reflectionScope.reason,
+            sessionIds: [...reflectionScope.sessionIds],
+            strict: strictReflectionScope
+        },
         manifest
     };
 }
