@@ -112,6 +112,7 @@ Return ONLY valid JSON: {"filename": "snake_case_name", "content": "the text to 
 
 function fastRegexNormalizer(message) {
     const lowerMessage = message.toLowerCase();
+    const hasNoteTarget = /\bnotes?\b/.test(lowerMessage) || /\.(?:txt|md)\b/.test(lowerMessage);
 
     // NEW: Fast Path for analyze_and_suggest
     if (lowerMessage.includes('analyze') && (lowerMessage.includes('suggest') || lowerMessage.includes('improvements') || lowerMessage.includes('review'))) {
@@ -134,12 +135,12 @@ function fastRegexNormalizer(message) {
         }
     }
 
-    if (lowerMessage.includes('rename')) {
+    if (hasNoteTarget && lowerMessage.includes('rename')) {
         const m = message.match(/(?:rename)\s+(?:the\s+)?(.+?)\s+(?:to|as)\s+(?:be\s+)?(.+?)(?:\s+instead|\?|$)/i);
         if (m) return { intent: 'rename_note', old_filename: m[1].trim(), new_filename: m[2].trim() };
     }
 
-        if (lowerMessage.includes('delete') || lowerMessage.includes('remove')) {
+    if (hasNoteTarget && (lowerMessage.includes('delete') || lowerMessage.includes('remove'))) {
         const m = message.match(/(?:called|named)\s+(?:the\s+)?(?:file\s+|note\s+)?(.+?)(?:\?|$)/i);
         return { intent: 'delete_note', filename: m ? m[1].trim() : 'USE_LAST' };
     }
@@ -149,7 +150,9 @@ function fastRegexNormalizer(message) {
         return { intent: 'read_note', filename: m ? m[1].trim() : 'USE_LAST' };
     }
 
-    if (lowerMessage.includes('update') || lowerMessage.includes('edit') || lowerMessage.includes('append') || lowerMessage.includes('add') || lowerMessage.includes('include')) {
+    const noteFollowUp = /^(?:add|append)\s+(?:another\s+)?(?:line|this|that)\b/.test(lowerMessage);
+    if ((hasNoteTarget || noteFollowUp) &&
+        (lowerMessage.includes('update') || lowerMessage.includes('edit') || lowerMessage.includes('append') || lowerMessage.includes('add') || lowerMessage.includes('include'))) {
         const fileMatch = message.match(/(?:named|called|note|file|into|to)\s+(.+?)(?:\s+saying|\s+with|\s+that\s+says|\?|$)/i);
         const contentMatch = message.match(/(?:saying|with|that says|to say|to add|to include|add another line saying|add a line saying)\s+(.*)/i);
         let filename = fileMatch ? fileMatch[1].trim() : 'USE_LAST';

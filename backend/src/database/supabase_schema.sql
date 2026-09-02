@@ -50,6 +50,24 @@ create index if not exists idx_conversations_project_key on conversations(projec
 create index if not exists idx_conversations_project_importance
     on conversations(project_key, importance desc, "timestamp" desc);
 
+create or replace function remove_empty_sessions(
+    p_exclude_session_id bigint default null
+)
+returns table(id bigint)
+language sql
+security invoker
+set search_path = public
+as $$
+    delete from sessions s
+    where (p_exclude_session_id is null or s.id <> p_exclude_session_id)
+      and not exists (
+          select 1
+          from conversations c
+          where c.session_id = s.id
+      )
+    returning s.id;
+$$;
+
 -- ─────────────────────────────────────────────────────────────
 -- Long-term profile (previously: atlas.db `user_profile`)
 -- Holds "user", "behavior", and "relationship" category memories.
@@ -122,19 +140,56 @@ create table if not exists knowledge_library (
     confidence double precision not null default 1.0,
     source text,
     source_type text not null default 'conversation',
+    verification_status text not null default 'unverified',
+    verification_method text,
+    verification_sources jsonb not null default '[]'::jsonb,
+    verification_note text,
+    verification_error text,
+    verification_attempts integer not null default 0,
+    last_checked_at timestamptz,
+    last_verified_at timestamptz,
+    expires_at timestamptz,
+    superseded_by bigint references knowledge_library(id) on delete set null,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
+    constraint knowledge_library_verification_status_check check (verification_status in (
+        'needs_source', 'unverified', 'pending', 'verified',
+        'contradicted', 'superseded', 'failed'
+    )),
     unique (category, subject, key)
 );
 
 create index if not exists idx_knowledge_category on knowledge_library(category);
 create index if not exists idx_knowledge_subject on knowledge_library(subject);
 create index if not exists idx_knowledge_topics on knowledge_library using gin(topics);
+create index if not exists idx_knowledge_verification_status
+    on knowledge_library(verification_status, expires_at, updated_at desc);
 
 drop trigger if exists trg_knowledge_library_updated_at on knowledge_library;
 create trigger trg_knowledge_library_updated_at
     before update on knowledge_library
     for each row execute function set_updated_at();
+
+create table if not exists knowledge_verification_runs (
+    id bigint generated always as identity primary key,
+    knowledge_id bigint not null references knowledge_library(id) on delete cascade,
+    status text not null default 'pending',
+    query text not null,
+    previous_value text,
+    proposed_value text,
+    confidence double precision,
+    reason text,
+    evidence jsonb not null default '[]'::jsonb,
+    error text,
+    started_at timestamptz not null default now(),
+    completed_at timestamptz,
+    constraint knowledge_verification_runs_status_check check (status in (
+        'pending', 'confirmed', 'updated', 'contradicted', 'insufficient', 'failed'
+    ))
+);
+
+create index if not exists idx_knowledge_verification_runs_record
+    on knowledge_verification_runs(knowledge_id, started_at desc);
 
 -- ─────────────────────────────────────────────────────────────
 -- Procedural memory (previously: src/memory/proceduralMemory.json)

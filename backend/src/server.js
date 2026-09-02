@@ -83,6 +83,11 @@ wss.on('connection', (ws) => {
                 result = { ok: true, sessionId: await atlas.newConversation() };
                 console.log(`[Atlas Backend] RPC newConversation completed | session=${result.sessionId}`);
             }
+            else if (method === 'resumeConversation') {
+                console.log(`[Atlas Backend] RPC resumeConversation received | session=${args[0]}`);
+                result = { ok: true, sessionId: await atlas.resumeConversation(...args) };
+                console.log(`[Atlas Backend] RPC resumeConversation completed | session=${result.sessionId}`);
+            }
             else if (method === 'deleteConversation') result = await atlas.deleteConversation(...args);
             else if (method === 'renameConversation') result = await atlas.renameConversation(...args);
             else if (method === 'shutdown') {

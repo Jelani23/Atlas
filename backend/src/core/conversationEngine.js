@@ -25,16 +25,19 @@ const { extractKeywords } = require('../utils/keywordExtractor');
 const { ThinkFilter } = require('../utils/thinkFilter');
 const contextManager = require('./contextManager');
 const { resolveReflectionAnswer } = require('../memory/reflectionAnswerResolver');
+const {
+    resolveUserNoteReply,
+    resolveImplementationBoundaryReply,
+    resolveTrustedKnowledgeBoundaryReply
+} = require('../utils/turnGrounding');
+const { isSearchKnowledgePersistenceEnabled } = require('../memory/knowledgePersistencePolicy');
+const { shouldRecoverResponse, getRecoveryAppend } = require('../response/recovery');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
 
-// Search answers remain available to the current conversation, but durable
-// learning is opt-in while the evidence/provenance pipeline is being hardened.
-// This prevents a weak or hallucinated synthesis from silently contaminating
-// knowledge_library without disabling Alice's web-search capability.
-const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = ['true', 'enabled', 'on', '1']
-    .includes(String(process.env.SEARCH_KNOWLEDGE_PERSISTENCE || 'false').toLowerCase());
+// Source-backed extraction is enabled by default. Set the flag to false to pause it.
+const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = isSearchKnowledgePersistenceEnabled();
 
 async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart }) {
     await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
@@ -55,6 +58,74 @@ async function finishImmediateReply(reply, { memory, sessionId, taskId, requestI
     }
 
     return { reply, audio: null };
+}
+
+function scheduleMemoryExtraction({ userInput, memory, userMessageId, workingContext, sessionId, taskId, requestId }) {
+    taskManager.createTask('memory_extraction', async () => {
+        console.time("[MemoryExtraction_BG] Total Time");
+        console.log("[MemoryExtraction_BG] Task started...");
+
+        try {
+            const { checkEligibility } = require('../memory/memoryEligibility');
+            const eligibility = await checkEligibility(userInput);
+            console.log('[MemoryEligibility DEBUG] Result:', eligibility);
+            console.log('[MemoryEligibility DEBUG] Type:', typeof eligibility);
+            console.log('[MemoryEligibility DEBUG] Module:', require.resolve('../memory/memoryEligibility'));
+            console.log(`[MemoryEligibility] Score: ${eligibility.score} | Decision: ${eligibility.eligible ? 'EXTRACT' : 'SKIP'} | Reason: ${eligibility.reason}`);
+
+            if (!eligibility.eligible) return null;
+
+            const deterministic = require('../memory/deterministicExtractor');
+            let extracted = await deterministic.extract(userInput);
+
+            if (extracted.deterministic) {
+                console.log('[MemoryExtraction_BG] Deterministic hit!');
+                console.time("[MemoryExtraction_BG] Semantic Enrichment");
+                extracted.memories = await semanticEnricher.enrichMemories(extracted.memories);
+                console.timeEnd("[MemoryExtraction_BG] Semantic Enrichment");
+            } else {
+                console.time("[MemoryExtraction_BG] LLM Extraction");
+                extracted = await memoryExtractor.extractMemory(userInput, workingContext);
+                console.timeEnd("[MemoryExtraction_BG] LLM Extraction");
+            }
+
+            const extractedMemory = extracted.memories || [];
+            const conversationUpdate = extracted.conversation_update || {};
+            console.log(
+                `[MemoryExtraction_BG] Extracted for "${userInput}":`,
+                JSON.stringify(extractedMemory, null, 2)
+            );
+
+            console.time("[MemoryExtraction_BG] DB Save");
+            const saveResult = await memoryManager.handleMemoryAction(extractedMemory);
+            console.timeEnd("[MemoryExtraction_BG] DB Save");
+            console.log('[MemoryExtraction_BG] Save Result:', saveResult.action);
+
+            try {
+                const topics = Array.from(extractKeywords(userInput));
+                const importance = extractedMemory.length > 0 ? 2 : 1;
+                const activeProjectKey = memoryCache.getHotState().activeProject || null;
+                await memory.workingMemory.tagMessage(userMessageId, {
+                    topics,
+                    projectKey: activeProjectKey,
+                    importance
+                });
+            } catch (tagErr) {
+                console.error('[MemoryExtraction_BG] Failed to tag chat log message:', tagErr.message);
+            }
+
+            if (Object.keys(conversationUpdate).length > 0) {
+                await sessionManager.mergeWorkingContext(sessionId, conversationUpdate);
+                console.log('[MemoryExtraction_BG] Working Context delta merged.');
+            }
+        } catch (err) {
+            console.error("[MemoryExtraction_BG] Failed:", err.message);
+        } finally {
+            console.timeEnd("[MemoryExtraction_BG] Total Time");
+        }
+
+        return null;
+    }, taskId, requestId, 'NORMAL');
 }
 
 async function handleMessage(userInput, { memory, mode, sessionId, taskId, requestId }) {
@@ -147,6 +218,73 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             intent,
             { sessionId }
         );
+        const userNoteReply = resolveUserNoteReply(userInput);
+        if (userNoteReply) {
+            const contextDuration = Date.now() - contextStart;
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
+            console.log('[GroundedAcknowledgement] Answered without model synthesis.');
+            scheduleMemoryExtraction({
+                userInput,
+                memory,
+                userMessageId,
+                workingContext,
+                sessionId,
+                taskId,
+                requestId
+            });
+            return finishImmediateReply(userNoteReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
+        const implementationReply = resolveImplementationBoundaryReply(userInput, {
+            toolName: toolResult.toolName,
+            toolResult: toolResult.toolResult
+        });
+        if (implementationReply) {
+            const contextDuration = Date.now() - contextStart;
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
+            console.log('[GroundedImplementation] No verified implementation evidence was available.');
+            scheduleMemoryExtraction({
+                userInput,
+                memory,
+                userMessageId,
+                workingContext,
+                sessionId,
+                taskId,
+                requestId
+            });
+            return finishImmediateReply(implementationReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
+        const trustedKnowledgeReply = resolveTrustedKnowledgeBoundaryReply(userInput, relevantMemory);
+        if (trustedKnowledgeReply) {
+            const contextDuration = Date.now() - contextStart;
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
+            const verifiedCount = Array.isArray(relevantMemory.knowledge)
+                ? relevantMemory.knowledge.length
+                : 0;
+            console.log(
+                verifiedCount > 0
+                    ? `[GroundedKnowledge] Answered from ${verifiedCount} verified structured record${verifiedCount === 1 ? '' : 's'}.`
+                    : '[GroundedKnowledge] No verified stored knowledge was available.'
+            );
+            scheduleMemoryExtraction({
+                userInput,
+                memory,
+                userMessageId,
+                workingContext,
+                sessionId,
+                taskId,
+                requestId
+            });
+            return finishImmediateReply(trustedKnowledgeReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
         const reflectionReply = resolveReflectionAnswer(userInput, relevantMemory);
         if (reflectionReply) {
             const contextDuration = Date.now() - contextStart;
@@ -276,19 +414,21 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                 ttsManager.enqueue(cleanedForTts, { requestId });
             }
 
-            // Qwen's thinking and answer share num_predict. If a generation
-            // still returns no visible content, retry once with a larger
-            // budget before the request is allowed to fail. This is a model-
-            // level recovery for every intent, not a prompt-specific patch.
-            if (!reply || !reply.trim()) {
+            // Qwen's thinking and answer share num_predict. Recover empty and
+            // visibly truncated responses once with a larger budget.
+            if (shouldRecoverResponse(reply, completionMeta)) {
+                const wasTruncated = completionMeta?.doneReason === 'length';
                 console.warn(
-                    `[ResponseRecovery] ${requestId}: no visible content` +
+                    `[ResponseRecovery] ${requestId}: ${wasTruncated ? 'response truncated' : 'no visible content'}` +
                     `${completionMeta?.doneReason ? ` (done_reason=${completionMeta.doneReason}, evalCount=${completionMeta.evalCount})` : ''}; retrying once.`
                 );
+                const recoveryInstruction = wasTruncated && reply.trim()
+                    ? `The prior generation was cut off mid-answer. Continue from exactly where this visible text ended without repeating it. Finish any cut-off word and complete the answer concisely.\n\nPARTIAL VISIBLE ANSWER:\n${reply}`
+                    : 'The prior generation produced no visible answer. Answer the current user message now. Keep private reasoning focused and always complete the visible answer.';
                 const recoveryMessages = [
                     {
                         role: 'system',
-                        content: `${context}\n\nRECOVERY: The prior generation produced no visible answer. Answer the current user message now. Keep private reasoning focused and always complete the visible answer.`
+                        content: `${context}\n\nRECOVERY: ${recoveryInstruction}`
                     },
                     ...messages.slice(1)
                 ];
@@ -299,7 +439,8 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                     requestId: `${requestId}:recovery`
                 });
                 const recovered = responseProcessor.removeThinkingTraces(recoveryRaw);
-                if (recovered) emitContent(recovered);
+                const recoveryAppend = getRecoveryAppend(reply, recovered);
+                if (recoveryAppend) emitContent(recoveryAppend);
             }
         } finally {
             const llmDuration = Date.now() - llmStart;
@@ -323,146 +464,15 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
 
-            // 6. Background Memory Extraction (Non-blocking, linked to parent)
-            //
-            // Memory extraction is intentionally independent of tool routing.
-            // A request may require clarification, a tool, or another action
-            // while still containing information worth remembering.
-            //
-            // The eligibility filter is responsible for deciding whether the
-            // message should actually be extracted.
-            taskManager.createTask('memory_extraction', async () => {
-                console.time("[MemoryExtraction_BG] Total Time");
-                console.log("[MemoryExtraction_BG] Task started...");
-                
-                try {
-                    // Phase 3C.4 (Step 2): Memory Eligibility Filter
-                    const { checkEligibility } = require('../memory/memoryEligibility');
-                    const eligibility = await checkEligibility(userInput);
-                    console.log('[MemoryEligibility DEBUG] Result:', eligibility);
-                    console.log('[MemoryEligibility DEBUG] Type:', typeof eligibility);
-                    console.log(
-                        '[MemoryEligibility DEBUG] Module:',
-                        require.resolve('../memory/memoryEligibility')
-                    );
-                    
-                    console.log(`[MemoryEligibility] Score: ${eligibility.score} | Decision: ${eligibility.eligible ? 'EXTRACT' : 'SKIP'} | Reason: ${eligibility.reason}`);
-                    
-                    if (!eligibility.eligible) {
-                        console.timeEnd("[MemoryExtraction_BG] Total Time");
-                        return null;
-                    }
-
-                    // Phase 3C.4 (Step 4): Deterministic Fast-Path
-                    const deterministic = require('../memory/deterministicExtractor');
-
-                    let extracted = await deterministic.extract(userInput);
-
-                    if (extracted.deterministic) {
-                        console.log(
-                            `[MemoryExtraction_BG] Deterministic hit!`
-                        );
-
-                        if (extracted.deterministic) {
-                            console.log(
-                                `[MemoryExtraction_BG] Deterministic hit!`
-                            );
-
-                            console.time(
-                                "[MemoryExtraction_BG] Semantic Enrichment"
-                            );
-
-                            extracted.memories =
-                                await semanticEnricher.enrichMemories(
-                                    extracted.memories
-                                );
-
-                            console.timeEnd(
-                                "[MemoryExtraction_BG] Semantic Enrichment"
-                            );
-                        }
-
-                    } else {
-                        console.time("[MemoryExtraction_BG] LLM Extraction");
-
-                        extracted =
-                            await memoryExtractor.extractMemory(
-                                userInput,
-                                workingContext
-                            );
-
-                        console.timeEnd("[MemoryExtraction_BG] LLM Extraction");
-                    }
-                    
-                    const extractedMemory = extracted.memories || [];
-                    const conversationUpdate = extracted.conversation_update || {};
-
-                    console.log(
-                        `[MemoryExtraction_BG] Extracted for "${userInput}":`,
-                        JSON.stringify(extractedMemory, null, 2)
-                    );
-
-                    let memoriesToSave = extractedMemory;
-
-                    console.time("[MemoryExtraction_BG] DB Save");
-
-                    const saveResult =
-                        await memoryManager.handleMemoryAction(
-                            memoriesToSave
-                        );
-
-                    console.timeEnd("[MemoryExtraction_BG] DB Save");
-
-                    console.log(
-                        `[MemoryExtraction_BG] Save Result:`,
-                        saveResult.action
-                    );
-
-                    // Tag the chat-log row for this turn with the
-                    // retrieval metadata this extraction pass already
-                    // computed - no new LLM call (plan §4). `importance`
-                    // is a coarse deterministic signal: 2 if this
-                    // message actually produced a saved memory, 1 if it
-                    // was merely eligible/extracted but produced nothing
-                    // to save, 0 otherwise (messages that never reach
-                    // this block, e.g. eligibility.eligible === false
-                    // above, keep the default 0/[] from insert time).
-                    try {
-                        const topics = Array.from(extractKeywords(userInput));
-                        const importance = extractedMemory.length > 0 ? 2 : 1;
-                        const activeProjectKey = memoryCache.getHotState().activeProject || null;
-                        await memory.workingMemory.tagMessage(userMessageId, {
-                            topics,
-                            projectKey: activeProjectKey,
-                            importance
-                        });
-                    } catch (tagErr) {
-                        console.error('[MemoryExtraction_BG] Failed to tag chat log message:', tagErr.message);
-                    }
-                    
-                    // Phase 3C.2: Atomically merge rolling working-context changes.
-                    //
-                    // conversationUpdate is intentionally treated as a DELTA.
-                    // Do not merge it against the request's workingContext snapshot here.
-                    // That snapshot may already be stale because background memory extraction
-                    // can run concurrently with other requests.
-                    if (Object.keys(conversationUpdate).length > 0) {
-                        await sessionManager.mergeWorkingContext(
-                            sessionId,
-                            conversationUpdate
-                        );
-
-                        console.log(
-                            `[MemoryExtraction_BG] Working Context delta merged.`
-                        );
-                    }
-                } catch (err) {
-                    console.error("[MemoryExtraction_BG] Failed:", err.message);
-                }
-                
-                console.timeEnd("[MemoryExtraction_BG] Total Time");
-                return null;
-        }, taskId, requestId, 'NORMAL');
+        scheduleMemoryExtraction({
+            userInput,
+            memory,
+            userMessageId,
+            workingContext,
+            sessionId,
+            taskId,
+            requestId
+        });
 
         // 6b. Background Knowledge Extraction from Web Search
         // (Non-blocking, linked to parent)

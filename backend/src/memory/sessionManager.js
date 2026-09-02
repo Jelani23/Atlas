@@ -3,6 +3,7 @@ const supabase = require('../database/supabaseClient');
 
 let currentSessionId = null;
 let reflectionLifecycleSupported = null;
+let emptySessionCleanupSupported = null;
 
 const REFLECTION_MIN_MESSAGES = Math.max(
     1,
@@ -106,6 +107,21 @@ async function listSessions(limit = 50) {
     }));
 }
 
+async function listTitledSessions(limit = 500) {
+    const { data, error } = await supabase
+        .from('sessions')
+        .select('id, title, started_at, ended_at')
+        .not('title', 'is', null)
+        .order('started_at', { ascending: false })
+        .limit(limit);
+
+    if (error) {
+        throw new Error(`Failed to list titled sessions from Supabase: ${error.message}`);
+    }
+
+    return (data || []).filter(session => String(session.title || '').trim());
+}
+
 // Full ordered transcript for a single session (for reopening a past
 // conversation, or restoring the current one after a renderer reload).
 async function getSessionMessages(sessionId) {
@@ -161,6 +177,58 @@ async function renameSession(sessionId, title) {
     return cleanTitle;
 }
 
+function getSessionResumeUpdate(lifecycleEnabled) {
+    const update = { ended_at: null };
+    if (lifecycleEnabled) {
+        Object.assign(update, {
+            reflection_status: 'open',
+            reflection_attempts: 0,
+            reflection_error: null,
+            reflection_started_at: null,
+            reflected_at: null
+        });
+    }
+    return update;
+}
+
+async function resumeSession(sessionId) {
+    if (!sessionId) {
+        throw new Error('A conversation id is required.');
+    }
+
+    const lifecycleEnabled = await supportsReflectionLifecycle();
+    const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .select(lifecycleEnabled ? 'id, reflection_status' : 'id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+    if (sessionError) {
+        throw new Error(`Failed to load conversation ${sessionId}: ${sessionError.message}`);
+    }
+    if (!session) {
+        throw new Error(`Conversation ${sessionId} does not exist.`);
+    }
+    if (lifecycleEnabled && session.reflection_status === 'processing') {
+        throw new Error('That conversation is still being reflected. Try again shortly.');
+    }
+
+    const update = getSessionResumeUpdate(lifecycleEnabled);
+
+    const { error } = await supabase
+        .from('sessions')
+        .update(update)
+        .eq('id', session.id);
+
+    if (error) {
+        throw new Error(`Failed to resume conversation ${sessionId}: ${error.message}`);
+    }
+
+    currentSessionId = session.id;
+    console.log(`[SessionManager] Resumed session ${session.id}.`);
+    return session.id;
+}
+
 async function getSessionMessageCount(sessionId) {
     if (!sessionId) return 0;
 
@@ -176,21 +244,43 @@ async function getSessionMessageCount(sessionId) {
     return count || 0;
 }
 
+function getSessionCloseOutcome(messageCount, lifecycleEnabled) {
+    if (messageCount === 0) {
+        return { deleted: true, reflectionStatus: 'deleted' };
+    }
+
+    return {
+        deleted: false,
+        reflectionStatus: lifecycleEnabled
+            ? (messageCount >= REFLECTION_MIN_MESSAGES ? 'pending' : 'skipped')
+            : null
+    };
+}
+
 async function endSession(sessionId = currentSessionId) {
     if (!sessionId) {
         return { sessionId: null, reflectionStatus: 'skipped', messageCount: 0 };
     }
 
     const lifecycleEnabled = await supportsReflectionLifecycle();
-    let messageCount = 0;
-    let reflectionStatus = null;
+    const messageCount = await getSessionMessageCount(sessionId);
+    const outcome = getSessionCloseOutcome(messageCount, lifecycleEnabled);
+    if (outcome.deleted) {
+        await deleteSession(sessionId);
+        console.log(`[SessionManager] Removed empty session ${sessionId}.`);
+        return {
+            sessionId,
+            reflectionStatus: outcome.reflectionStatus,
+            messageCount,
+            lifecycleEnabled,
+            deleted: true
+        };
+    }
+
+    let reflectionStatus = outcome.reflectionStatus;
     let update = { ended_at: new Date().toISOString() };
 
     if (lifecycleEnabled) {
-        messageCount = await getSessionMessageCount(sessionId);
-        reflectionStatus = messageCount >= REFLECTION_MIN_MESSAGES
-            ? 'pending'
-            : 'skipped';
         update = {
             ...update,
             reflection_status: reflectionStatus,
@@ -219,7 +309,32 @@ async function endSession(sessionId = currentSessionId) {
             : ' | legacy reflection lifecycle')
     );
 
-    return { sessionId, reflectionStatus, messageCount, lifecycleEnabled };
+    return { sessionId, reflectionStatus, messageCount, lifecycleEnabled, deleted: false };
+}
+
+async function removeHistoricalEmptySessions() {
+    if (emptySessionCleanupSupported === false) {
+        return { supported: false, removed: 0 };
+    }
+
+    const { data, error } = await supabase.rpc('remove_empty_sessions', {
+        p_exclude_session_id: currentSessionId
+    });
+
+    if (error) {
+        emptySessionCleanupSupported = false;
+        console.warn(
+            '[SessionManager] Empty-session cleanup migration is not active.'
+        );
+        return { supported: false, removed: 0 };
+    }
+
+    emptySessionCleanupSupported = true;
+    const removed = Array.isArray(data) ? data.length : Number(data) || 0;
+    if (removed > 0) {
+        console.log(`[SessionManager] Removed ${removed} historical empty session(s).`);
+    }
+    return { supported: true, removed };
 }
 
 // Recover lifecycle work that could not finish because Electron closed,
@@ -230,6 +345,21 @@ async function endSession(sessionId = currentSessionId) {
 async function recoverReflectionLifecycle() {
     if (!(await supportsReflectionLifecycle())) {
         return { supported: false, recovered: 0, abandoned: 0 };
+    }
+
+    const { data: staleBackfillRows, error: staleBackfillError } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'backfill_pending',
+            reflection_started_at: null,
+            reflection_error: 'Recovered interrupted historical backfill.'
+        })
+        .eq('reflection_status', 'processing')
+        .like('reflection_error', 'Historical backfill%')
+        .select('id');
+
+    if (staleBackfillError) {
+        throw new Error(`Failed to recover historical backfills: ${staleBackfillError.message}`);
     }
 
     const { data: staleRows, error: staleError } = await supabase
@@ -274,7 +404,7 @@ async function recoverReflectionLifecycle() {
 
     return {
         supported: true,
-        recovered: (staleRows || []).length + (retryRows || []).length,
+        recovered: (staleBackfillRows || []).length + (staleRows || []).length + (retryRows || []).length,
         abandoned
     };
 }
@@ -413,6 +543,161 @@ async function requeueReflection(sessionId) {
     return { sessionId: Number(sessionId), messageCount, reflectionStatus: 'pending' };
 }
 
+async function listReflectionBackfillCandidates(limit = 5, sessionIds = []) {
+    if (!(await supportsReflectionLifecycle())) {
+        throw new Error('Reflection lifecycle migration is not active.');
+    }
+
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 5));
+    let query = supabase
+        .from('sessions')
+        .select('id, title, started_at, ended_at')
+        .eq('reflection_status', 'backfill_pending')
+        .not('ended_at', 'is', null);
+
+    if (sessionIds.length > 0) {
+        query = query.in('id', sessionIds);
+    }
+
+    const { data, error } = await query
+        .order('ended_at', { ascending: false, nullsFirst: false })
+        .limit(safeLimit);
+
+    if (error) {
+        throw new Error(`Failed to load reflection backfill candidates: ${error.message}`);
+    }
+
+    const candidates = [];
+    for (const session of data || []) {
+        const [messageCount, previewResult] = await Promise.all([
+            getSessionMessageCount(session.id),
+            supabase
+                .from('conversations')
+                .select('content')
+                .eq('session_id', session.id)
+                .eq('role', 'user')
+                .order('id', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+        ]);
+
+        if (previewResult.error) {
+            throw new Error(
+                `Failed to load preview for session ${session.id}: ${previewResult.error.message}`
+            );
+        }
+
+        candidates.push({
+            ...session,
+            messageCount,
+            preview: previewResult.data?.content || ''
+        });
+    }
+
+    return candidates;
+}
+
+async function claimReflectionBackfillSession(sessionId) {
+    if (!(await supportsReflectionLifecycle())) {
+        throw new Error('Reflection lifecycle migration is not active.');
+    }
+
+    const { data: session, error: sessionError } = await supabase
+        .from('sessions')
+        .select('id, reflection_status, reflection_attempts, ended_at')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+    if (sessionError) {
+        throw new Error(`Failed to load session ${sessionId}: ${sessionError.message}`);
+    }
+    if (!session) throw new Error(`Session ${sessionId} was not found.`);
+    if (session.reflection_status !== 'backfill_pending') {
+        throw new Error(
+            `Session ${sessionId} is ${session.reflection_status}, not backfill_pending.`
+        );
+    }
+    if (!session.ended_at) throw new Error(`Session ${sessionId} is still open.`);
+
+    const messageCount = await getSessionMessageCount(sessionId);
+    if (messageCount < REFLECTION_MIN_MESSAGES) {
+        const { error } = await supabase
+            .from('sessions')
+            .update({ reflection_status: 'skipped' })
+            .eq('id', sessionId)
+            .eq('reflection_status', 'backfill_pending');
+        if (error) {
+            throw new Error(`Failed to skip short session ${sessionId}: ${error.message}`);
+        }
+        return {
+            id: Number(sessionId),
+            reflection_attempts: session.reflection_attempts || 0,
+            skipReason: 'too_short'
+        };
+    }
+
+    const { data, error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'processing',
+            reflection_attempts: (session.reflection_attempts || 0) + 1,
+            reflection_error: 'Historical backfill in progress.',
+            reflection_started_at: new Date().toISOString()
+        })
+        .eq('id', sessionId)
+        .eq('reflection_status', 'backfill_pending')
+        .select('id, reflection_attempts')
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to claim backfill session ${sessionId}: ${error.message}`);
+    }
+    if (!data) {
+        throw new Error(`Session ${sessionId} changed before it could be claimed.`);
+    }
+
+    return data;
+}
+
+async function markReflectionBackfillFailed(sessionId, errorMessage) {
+    const { error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'backfill_pending',
+            reflection_started_at: null,
+            reflection_error: String(errorMessage || 'Unknown backfill failure').slice(0, 1000)
+        })
+        .eq('id', sessionId)
+        .eq('reflection_status', 'processing');
+
+    if (error) {
+        throw new Error(`Failed to return session ${sessionId} to backfill: ${error.message}`);
+    }
+}
+
+async function skipReflectionBackfill(sessionId, reason = 'Reviewed as low-value historical context.') {
+    const { data, error } = await supabase
+        .from('sessions')
+        .update({
+            reflection_status: 'skipped',
+            reflection_started_at: null,
+            reflection_error: String(reason).slice(0, 1000)
+        })
+        .eq('id', sessionId)
+        .eq('reflection_status', 'backfill_pending')
+        .select('id')
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to skip backfill session ${sessionId}: ${error.message}`);
+    }
+    if (!data) {
+        throw new Error(`Session ${sessionId} is no longer backfill_pending.`);
+    }
+
+    return { sessionId: Number(sessionId), status: 'skipped' };
+}
+
 // Phase 3C.2: Fetch the rolling conversation working context
 async function getWorkingContext(sessionId) {
     if (!sessionId) return {};
@@ -484,9 +769,14 @@ module.exports = {
     getCurrentSession,
     endSession,
     listSessions,
+    listTitledSessions,
     getSessionMessages,
     deleteSession,
     renameSession,
+    resumeSession,
+    getSessionResumeUpdate,
+    getSessionCloseOutcome,
+    removeHistoricalEmptySessions,
     getWorkingContext,
     mergeWorkingContext,
     supportsReflectionLifecycle,
@@ -496,6 +786,10 @@ module.exports = {
     markReflectionComplete,
     markReflectionFailed,
     requeueReflection,
+    listReflectionBackfillCandidates,
+    claimReflectionBackfillSession,
+    markReflectionBackfillFailed,
+    skipReflectionBackfill,
     getSessionMessageCount,
     REFLECTION_MIN_MESSAGES,
     REFLECTION_MAX_ATTEMPTS

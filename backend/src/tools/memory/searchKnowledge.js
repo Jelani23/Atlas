@@ -1,18 +1,22 @@
 // src/tools/memory/searchKnowledge.js
 const knowledgeLibrary = require('../../memory/knowledgeLibrary');
+const { isKnowledgeRetrievable } = require('../../memory/knowledgeAudit');
+const { formatProvisionalKnowledge } = require('../../memory/knowledgeRecall');
 
 async function searchKnowledge(query) {
     const results = await knowledgeLibrary.search(query);
-    if (results.length === 0) return "No knowledge found for that query.";
-    // Phase: topics were being fetched from the DB just fine but silently
-    // dropped from the formatted output - the field never made it in front
-    // of Alice even though it was stored correctly.
-    return results.map(r => {
+    const trustedResults = results.filter(isKnowledgeRetrievable);
+    const provisionalResults = results.filter(result => !isKnowledgeRetrievable(result));
+    const trustedSummary = trustedResults.map(r => {
         const topicsLine = Array.isArray(r.topics) && r.topics.length > 0
             ? `\nTopics: ${r.topics.join(', ')}`
             : '';
         return `Subject: ${r.subject}\nKey: ${r.key}${topicsLine}\nValue:\n${r.value}`;
     }).join('\n---\n');
+    const provisionalSummary = formatProvisionalKnowledge(provisionalResults, query);
+
+    if (!trustedSummary && !provisionalSummary) return 'No knowledge found for that query.';
+    return [trustedSummary, provisionalSummary].filter(Boolean).join('\n\n');
 }
 
 module.exports = {

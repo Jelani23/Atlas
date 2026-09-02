@@ -1,4 +1,10 @@
 const supabase = require('../database/supabaseClient');
+const {
+    getKnowledgeSearchTerms,
+    getKnowledgeAnchorTerms,
+    isKnowledgeRowRelevant,
+    scoreKnowledgeRow
+} = require('./knowledgeRelevance');
 
 /**
  * ============================================================
@@ -109,6 +115,16 @@ const SELECT_COLUMNS = `
     confidence,
     source,
     source_type,
+    verification_status,
+    verification_method,
+    verification_sources,
+    verification_note,
+    verification_error,
+    verification_attempts,
+    last_checked_at,
+    last_verified_at,
+    expires_at,
+    superseded_by,
     created_at,
     updated_at
 `;
@@ -132,10 +148,17 @@ function validateKnowledgeIdentity(memoryData) {
  * knowledge_library. Centralized here so addKnowledge/updateKnowledge
  * /upsertKnowledge can't drift apart on defaulting rules.
  */
-function buildRow(memoryData) {
+function initialVerificationStatus(memoryData) {
+    const source = String(memoryData.source || '');
+    if (!source) return 'needs_source';
+    if (memoryData.source_type === 'web_search' && !/https?:\/\//i.test(source)) return 'needs_source';
+    return 'unverified';
+}
+
+function buildRow(memoryData, { includeVerificationReset = true } = {}) {
     validateKnowledgeIdentity(memoryData);
 
-    return {
+    const row = {
         category: normalizeSlug(memoryData.category, 'general'),
         subject: normalizeSlug(memoryData.subject, 'general'),
         topics: normalizeTopics(memoryData.topics),
@@ -146,6 +169,20 @@ function buildRow(memoryData) {
         source: memoryData.source || null,
         source_type: normalizeSlug(memoryData.source_type, 'conversation')
     };
+
+    if (includeVerificationReset) {
+        row.verification_status = initialVerificationStatus(memoryData);
+        row.verification_method = null;
+        row.verification_sources = [];
+        row.verification_note = null;
+        row.verification_error = null;
+        row.last_checked_at = null;
+        row.last_verified_at = null;
+        row.expires_at = null;
+        row.superseded_by = null;
+    }
+
+    return row;
 }
 
 /**
@@ -189,12 +226,7 @@ async function updateKnowledge(memoryData) {
     const { data, error } = await supabase
         .from('knowledge_library')
         .update({
-            topics: row.topics,
-            type: row.type,
-            value: row.value,
-            confidence: row.confidence,
-            source: row.source,
-            source_type: row.source_type,
+            ...row,
             updated_at: new Date().toISOString()
         })
         .eq('category', row.category)
@@ -230,8 +262,8 @@ async function updateKnowledge(memoryData) {
  * for what is structurally one deterministic write.
  * ------------------------------------------------------------
  */
-async function upsertKnowledge(memoryData) {
-    const row = buildRow(memoryData);
+async function upsertKnowledge(memoryData, { preserveVerification = false } = {}) {
+    const row = buildRow(memoryData, { includeVerificationReset: !preserveVerification });
 
     const { error } = await supabase
         .from('knowledge_library')
@@ -277,6 +309,95 @@ async function find(category, subject, key) {
     }
 
     return data || null;
+}
+
+async function getById(id) {
+    const { data, error } = await supabase
+        .from('knowledge_library')
+        .select(SELECT_COLUMNS)
+        .eq('id', id)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to load knowledge record: ${error.message}`);
+    }
+
+    return data || null;
+}
+
+async function beginVerification(id, currentAttempts = 0) {
+    const { error } = await supabase
+        .from('knowledge_library')
+        .update({
+            verification_status: 'pending',
+            verification_error: null,
+            verification_attempts: Number(currentAttempts || 0) + 1
+        })
+        .eq('id', id);
+
+    if (error) {
+        throw new Error(`Failed to start knowledge verification: ${error.message}`);
+    }
+
+}
+
+async function applyVerification(id, update) {
+    const { data, error } = await supabase
+        .from('knowledge_library')
+        .update({
+            ...update,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select(SELECT_COLUMNS)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Failed to update knowledge verification: ${error.message}`);
+    }
+
+    if (!data) {
+        throw new Error('Knowledge verification matched no record.');
+    }
+
+    return data;
+}
+
+async function createVerificationRun(run) {
+    const { data, error } = await supabase
+        .from('knowledge_verification_runs')
+        .insert({
+            knowledge_id: run.knowledgeId,
+            query: run.query,
+            previous_value: run.previousValue || null
+        })
+        .select('id')
+        .single();
+
+    if (error) {
+        throw new Error(`Failed to create verification run: ${error.message}`);
+    }
+
+    return data.id;
+}
+
+async function completeVerificationRun(id, update) {
+    const { error } = await supabase
+        .from('knowledge_verification_runs')
+        .update({
+            status: update.status,
+            proposed_value: update.proposedValue || null,
+            confidence: update.confidence ?? null,
+            reason: update.reason || null,
+            evidence: update.evidence || [],
+            error: update.error || null,
+            completed_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+    if (error) {
+        throw new Error(`Failed to complete verification run: ${error.message}`);
+    }
 }
 
 /**
@@ -363,18 +484,35 @@ async function getByTopics(topics = [], category = null) {
  * Alice right now should actually use.
  * ------------------------------------------------------------
  */
-async function getAll() {
+async function getAll({ throwOnError = false } = {}) {
     const { data, error } = await supabase
         .from('knowledge_library')
         .select(SELECT_COLUMNS)
         .order('updated_at', { ascending: false });
 
     if (error) {
+        if (throwOnError) {
+            throw new Error(`Failed to load knowledge library: ${error.message}`);
+        }
+
         console.error('Failed to load knowledge library:', error.message);
         return [];
     }
 
     return data || [];
+}
+
+function getSearchTerms(query) {
+    return getKnowledgeSearchTerms(query);
+}
+
+function rankSearchResults(rows, terms) {
+    const anchors = getKnowledgeAnchorTerms(terms);
+    return (rows || [])
+        .filter(row => isKnowledgeRowRelevant(row, terms, anchors))
+        .map(row => ({ row, score: scoreKnowledgeRow(row, terms) }))
+        .sort((a, b) => b.score - a.score)
+        .map(result => result.row);
 }
 
 /**
@@ -387,21 +525,27 @@ async function getAll() {
  * ------------------------------------------------------------
  */
 async function search(query) {
-    const pattern = `%${query}%`;
+    const terms = getSearchTerms(query);
+    if (terms.length === 0) return [];
+    const anchors = getKnowledgeAnchorTerms(terms);
+    const lookupTerms = anchors.length > 0 ? anchors : terms;
+
+    const fields = ['subject', 'key', 'value', 'category', 'type'];
+    const filters = lookupTerms.flatMap(term =>
+        fields.map(field => `${field}.ilike.%${term}%`)
+    ).join(',');
 
     const { data, error } = await supabase
         .from('knowledge_library')
         .select(SELECT_COLUMNS)
-        .or(
-            `subject.ilike.${pattern},key.ilike.${pattern},value.ilike.${pattern},category.ilike.${pattern},type.ilike.${pattern}`
-        );
+        .or(filters);
 
     if (error) {
         console.error('Failed to search knowledge library:', error.message);
         return [];
     }
 
-    return data || [];
+    return rankSearchResults(data || [], terms);
 }
 
 /**
@@ -443,13 +587,21 @@ module.exports = {
     updateKnowledge,
     upsertKnowledge,
     find,
+    getById,
+    beginVerification,
+    applyVerification,
+    createVerificationRun,
+    completeVerificationRun,
     getByCategory,
     getBySubject,
     getByTopics,
     getAll,
     search,
     getContextString,
+    getSearchTerms,
+    rankSearchResults,
     normalizeTopics,
+    initialVerificationStatus,
     KNOWN_KNOWLEDGE_TYPES,
     KNOWN_SOURCE_TYPES
 };

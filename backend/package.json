@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "check:supabase": "node scripts/checkSupabaseConnection.js",
     "migrate:supabase": "node scripts/migrateToSupabase.js",
-    "reflection:requeue": "node scripts/requeueReflection.js"
+    "reflection:requeue": "node scripts/requeueReflection.js",
+    "reflection:backfill": "node scripts/backfillReflections.js",
+    "knowledge:audit": "node scripts/auditKnowledge.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

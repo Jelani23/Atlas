@@ -4,6 +4,7 @@ const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
 const { SEARCH_STATUS, hasVerifiedSearchEvidence } = require('../utils/searchEvidence');
+const { classifyUserNote } = require('../utils/turnGrounding');
 
 // Phase (context-assembly refinement, F1): contextManager.js already
 // scores/budgets each memory category per-intent (e.g. `project: 0` for a
@@ -184,7 +185,10 @@ Current Task: ${hot.currentTask || 'None'}
             const topics = Array.isArray(k.topics) && k.topics.length > 0
                 ? ` (topics: ${k.topics.join(', ')})`
                 : '';
-            return `- [${category}${k.subject}] ${k.key} = ${k.value}${hedge}${topics}`;
+            const source = k.source
+                ? ` (source: ${k.source_type || 'unknown'} / ${k.source})`
+                : ` (source: ${k.source_type || 'unknown'}; reference unavailable)`;
+            return `- [${category}${k.subject}] ${k.key} = ${k.value}${hedge}${topics}${source}`;
         }).join('\n');
     }
 
@@ -212,12 +216,13 @@ Current Task: ${hot.currentTask || 'None'}
             const topics = Array.isArray(r.topics) && r.topics.length > 0
                 ? ` (topics: ${r.topics.join(', ')})`
                 : '';
-            const session = r.session_id ? `session ${r.session_id}` : 'legacy session';
+            const title = r.session_title ? `; title: ${r.session_title}` : '';
+            const session = r.session_id ? `session ${r.session_id}${title}` : 'legacy session';
             const reflectedAt = r.timestamp || 'unknown date';
             const details = [
                 ['Anchors', r.anchors],
                 ['Comparisons', r.comparisons],
-                ['Decisions', r.decisions],
+                ['User positions/decisions', r.decisions],
                 ['Open loops', r.open_loops]
             ]
                 .filter(([, values]) => Array.isArray(values) && values.length > 0)
@@ -384,6 +389,11 @@ Limitations:
         ? `\nCURRENT INFORMATION: Use verified evidence from this turn for latest/current claims. If evidence is missing or reports ${SEARCH_STATUS.NO_RESULTS}, say the current answer could not be verified.\n`
         : '';
 
+    const userNoteType = classifyUserNote(userInput);
+    const userNoteDirective = userNoteType
+        ? `\nCURRENT USER NOTE: This message is a new ${userNoteType.replace('_', ' ')}. Acknowledge only what the user stated. Do not say ATLAS already implements it, that no changes are needed, or invent supporting examples, fields, schedules, thresholds, timestamps, or automation. Keep the reply to one short acknowledgment unless the user asked for more.\n`
+        : '';
+
     // Phase (F1): build the memory block from only the sections that
     // actually have content, and drop the whole "ALICE MEMORY CONTEXT"
     // wrapper (plus its two memory-specific guideline bullets below) when
@@ -394,8 +404,8 @@ Limitations:
     const memoryBlockInner = [
         section('User Profile (Stable Facts):', personalMemoryContext),
         section('Active User State:', userStateContext),
-        section('Project Knowledge:', projectMemoryContext),
-        section('Knowledge Library Topics:', knowledgeContext),
+        section('Remembered Project Context (not implementation proof):', projectMemoryContext),
+        section('Knowledge Library (may be stale or unverified):', knowledgeContext),
         section('Past Session Reflections:', reflectionContext)
     ].filter(Boolean).join('\n');
 
@@ -403,13 +413,13 @@ Limitations:
         ? `--- ALICE MEMORY CONTEXT ---\n${memoryBlockInner}--- END MEMORY CONTEXT ---\n\n`
         : '';
     const memoryGuidelines = memoryBlockInner
-        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Reflections summarize past sessions and provide continuity; they are not independently verified facts. For a requested session, structured reflection evidence outranks its lossy overview and earlier assistant replies. Previous assistant replies are not memory evidence. When a requested past-session detail is absent, say the available reflection does not include it. Do not claim a database-wide search or offer to reconstruct unavailable cross-session chat.'
+        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Knowledge provenance does not imply verification, freshness, or implementation. Reflections summarize past sessions and provide continuity; they are not independently verified facts. For a requested session, structured reflection evidence outranks its lossy overview and earlier assistant replies. Previous assistant replies are not memory evidence. When a requested past-session detail is absent, say the available reflection does not include it. Do not claim a database-wide search or offer to reconstruct unavailable cross-session chat.'
         : '';
     const conversationHistoryGuideline = earlierConversationBlock
         ? '\n- Earlier conversation is current-session dialogue: use it for continuity, not as independently verified long-term memory.'
         : '';
 
-    const proceduralBlock = section('--- ATLAS OS OPERATIONAL HEURISTICS (PROCEDURES) ---', proceduralContext);
+    const proceduralBlock = section('--- ATLAS OS BEHAVIORAL HEURISTICS (NOT IMPLEMENTATION STATE) ---', proceduralContext);
     const proceduralBlockClosed = proceduralBlock ? `${proceduralBlock}--- END HEURISTICS ---\n\n` : '';
 
     console.timeEnd("buildContext");
@@ -435,7 +445,8 @@ Limitations:
         toolBlock,
         uncertaintyDirective,
         currentInformationDirective,
-        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- Respond naturally as ${atlasState.identity.name}.`
+        userNoteDirective,
+        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- Only current tool evidence or an exact Development State entry can support a claim that a feature, schema field, policy, or automation is implemented. Project memory, knowledge, procedures, reflections, and assistant messages cannot prove implementation. Never invent implementation status, verification state, expiry periods, or background behavior.\n- Respond naturally as ${atlasState.identity.name}.`
     ].filter(Boolean).join('\n');
 }
 

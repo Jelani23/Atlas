@@ -160,6 +160,7 @@ ipcMain.handle('atlas:resetConversation', async () => callAtlas('resetConversati
 ipcMain.handle('atlas:resolvePermission', (_event, id, decision) => callAtlas('resolvePermission', [id, decision]));
 ipcMain.handle('atlas:listConversations', async () => callAtlas('listConversations'));
 ipcMain.handle('atlas:getConversation', async (_event, sessionId) => callAtlas('getConversation', [sessionId]));
+ipcMain.handle('atlas:resumeConversation', async (_event, sessionId) => callAtlas('resumeConversation', [sessionId]));
 ipcMain.handle('atlas:newConversation', async () => {
     console.log('[Electron] New conversation requested by renderer.');
     try {

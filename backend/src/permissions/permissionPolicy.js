@@ -40,6 +40,7 @@ const POLICY = {
     appendNote:         { risk: 'MEDIUM', default: 'allow' },
     renameNote:         { risk: 'MEDIUM', default: 'allow' },
     updateDevState:     { risk: 'MEDIUM', default: 'allow' },
+    reverifyKnowledge:  { risk: 'MEDIUM', default: 'allow' },
     writeProposal:      { risk: 'MEDIUM', default: 'allow' },
     runTests:           { risk: 'MEDIUM', default: 'allow' }, 
 

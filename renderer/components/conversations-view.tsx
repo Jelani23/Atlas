@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { MessageSquarePlus, MessagesSquare, Pencil, Trash2 } from "lucide-react"
+import { MessageSquarePlus, MessagesSquare, Pencil, RotateCcw, Trash2 } from "lucide-react"
 import { ConversationThread } from "./conversation-thread"
 import { ChatInput } from "./chat-input"
 import { STATE_LABEL, type AtlasState } from "./atlas-state"
@@ -19,6 +19,7 @@ interface ConversationsViewProps {
   onSend: (text: string) => void
   onToggleMic: () => void
   onNewConversation: () => void
+  onResumeConversation: (sessionId: string) => Promise<void>
   /** Called after a right-click "Delete" removes the currently-live session, with its replacement id. */
   onConversationDeleted: (newSessionId: string | null) => void
 }
@@ -49,9 +50,11 @@ export function ConversationsView({
   onSend,
   onToggleMic,
   onNewConversation,
+  onResumeConversation,
   onConversationDeleted,
 }: ConversationsViewProps) {
   const active = state === "thinking" || state === "working"
+  const resumeBlocked = state !== "idle" && state !== "error"
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [listLoading, setListLoading] = useState(true)
@@ -61,6 +64,7 @@ export function ConversationsView({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
+  const [resuming, setResuming] = useState(false)
 
   // Refetches whenever the live session changes (e.g. after "New") so the
   // list stays in sync with what's actually in Supabase.
@@ -115,6 +119,18 @@ export function ConversationsView({
 
   const returnToCurrent = () => setViewingId(null)
 
+  const resumeConversation = async () => {
+    if (!viewingId || resuming) return
+    setResuming(true)
+    try {
+      await onResumeConversation(viewingId)
+      setViewingId(null)
+      setViewingMessages([])
+    } finally {
+      setResuming(false)
+    }
+  }
+
   // Close the right-click menu on Escape or a click anywhere outside it.
   useEffect(() => {
     if (!contextMenu) return
@@ -163,6 +179,7 @@ export function ConversationsView({
 
   const isViewingPast = viewingId !== null
   const shownMessages = isViewingPast ? viewingMessages : messages
+  const viewingConversation = conversations.find((conversation) => conversation.id === viewingId)
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
@@ -290,16 +307,34 @@ export function ConversationsView({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-2 md:px-8 md:pt-4">
           <h1 className="font-display text-base font-semibold text-foreground">
-            {isViewingPast ? "Past conversation" : "Conversations"}
+            {isViewingPast
+              ? viewingConversation?.title || "Past conversation"
+              : "Conversations"}
+            {isViewingPast && viewingId && (
+              <span className="ml-2 font-sans text-[10px] font-medium text-muted-foreground/60">
+                Session {viewingId}
+              </span>
+            )}
           </h1>
           {isViewingPast ? (
-            <button
-              type="button"
-              onClick={returnToCurrent}
-              className="cursor-pointer text-xs font-medium text-primary underline decoration-primary/30 underline-offset-4 transition-colors hover:text-primary/80"
-            >
-              ← Back to current
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={returnToCurrent}
+                className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                ← Back to current
+              </button>
+              <button
+                type="button"
+                onClick={resumeConversation}
+                disabled={resuming || resumeBlocked}
+                className="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                {resuming ? "Opening…" : "Continue conversation"}
+              </button>
+            </div>
           ) : (
             <span
               className={`text-[10px] font-medium uppercase tracking-[0.12em] text-primary/70 ${

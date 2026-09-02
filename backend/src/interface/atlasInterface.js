@@ -144,6 +144,12 @@ class AtlasInterface extends EventEmitter {
                 console.error('[ReflectionWorker] Startup recovery failed:', error.message);
             }
 
+            try {
+                await sessionManager.removeHistoricalEmptySessions();
+            } catch (error) {
+                console.error('[SessionManager] Empty-session cleanup failed:', error.message);
+            }
+
             this.sessionId = await sessionManager.startSession();
             contextManager.registerPreviousSession(this.sessionId);
             
@@ -184,13 +190,39 @@ class AtlasInterface extends EventEmitter {
         return sessionManager.getSessionMessages(sessionId);
     }
 
+    async _closeCurrentConversation() {
+        const outgoingSessionId = this.sessionId;
+        if (!outgoingSessionId) {
+            return { outgoingSessionId: null, closeResult: null };
+        }
+
+        const closeResult = await sessionManager.endSession(outgoingSessionId);
+        if (closeResult.deleted) {
+            console.log(`[ReflectionWorker] Empty session ${outgoingSessionId} was removed.`);
+        } else if (closeResult.lifecycleEnabled && closeResult.reflectionStatus === 'pending') {
+            const result = await reflectionWorker.processSession(outgoingSessionId);
+            if (!['complete', 'not_pending'].includes(result.status)) {
+                console.warn(
+                    `[ReflectionWorker] Session ${outgoingSessionId} was not ready at conversation close ` +
+                    `(status=${result.status}).`
+                );
+            }
+        } else if (closeResult.lifecycleEnabled) {
+            console.log(
+                `[ReflectionWorker] Session ${outgoingSessionId} does not require a reflection ` +
+                `(status=${closeResult.reflectionStatus}).`
+            );
+        } else {
+            await this._reflectOnSession(outgoingSessionId);
+        }
+
+        return { outgoingSessionId, closeResult };
+    }
+
     async newConversation() {
         const outgoingSessionId = this.sessionId;
         console.log(`[AtlasInterface] New conversation requested | outgoing=${outgoingSessionId || 'none'}`);
-        let closeResult = null;
-        if (outgoingSessionId) {
-            closeResult = await sessionManager.endSession(outgoingSessionId);
-        }
+        const { closeResult } = await this._closeCurrentConversation();
 
         this.sessionId = await sessionManager.startSession();
         const previousReflectionSessionId = ['pending', 'complete'].includes(closeResult?.reflectionStatus)
@@ -200,30 +232,29 @@ class AtlasInterface extends EventEmitter {
         console.log(`[AtlasInterface] New conversation started | session=${this.sessionId}`);
         this.emit('atlas.status', { phase: 'new_conversation', sessionId: this.sessionId });
 
-        if (outgoingSessionId) {
-            if (closeResult?.lifecycleEnabled) {
-                if (closeResult.reflectionStatus === 'pending') {
-                    const result = await reflectionWorker.processSession(outgoingSessionId);
-                    if (!['complete', 'not_pending'].includes(result.status)) {
-                        console.warn(
-                            `[ReflectionWorker] Session ${outgoingSessionId} was not ready at conversation close ` +
-                            `(status=${result.status}).`
-                        );
-                    }
-                } else {
-                    console.log(
-                        `[ReflectionWorker] Session ${outgoingSessionId} does not require a reflection ` +
-                        `(status=${closeResult.reflectionStatus}).`
-                    );
-                }
-            } else {
-                // Backward-compatible path until migration 004 is applied.
-                this._reflectOnSession(outgoingSessionId).catch(error => {
-                    console.error('[ReflectionEngine] Legacy reflection failed:', error.message);
-                });
-            }
+        return String(this.sessionId);
+    }
+
+    async resumeConversation(sessionId) {
+        if (!sessionId) throw new Error('A conversation id is required.');
+        if (this.sessionId != null && String(this.sessionId) === String(sessionId)) {
+            return String(this.sessionId);
         }
 
+        const outgoingSessionId = this.sessionId;
+        console.log(
+            `[AtlasInterface] Resume conversation requested | outgoing=${outgoingSessionId || 'none'} | target=${sessionId}`
+        );
+        const transition = await this._closeCurrentConversation();
+        const closeResult = transition.closeResult;
+
+        this.sessionId = await sessionManager.resumeSession(sessionId);
+        const previousReflectionSessionId = ['pending', 'complete'].includes(closeResult?.reflectionStatus)
+            ? outgoingSessionId
+            : null;
+        contextManager.registerPreviousSession(this.sessionId, previousReflectionSessionId);
+        this.emit('atlas.status', { phase: 'conversation_resumed', sessionId: this.sessionId });
+        console.log(`[AtlasInterface] Conversation resumed | session=${this.sessionId}`);
         return String(this.sessionId);
     }
 
@@ -340,8 +371,10 @@ class AtlasInterface extends EventEmitter {
                     // Electron no longer has to keep the process alive for it.
                     await sessionManager.endSession(sessionId);
                 } else {
-                    await this._reflectOnSession(sessionId);
-                    await sessionManager.endSession(sessionId);
+                    const closeResult = await sessionManager.endSession(sessionId);
+                    if (!closeResult.deleted) {
+                        await this._reflectOnSession(sessionId);
+                    }
                 }
             }
             reflectionWorker.shutdown();

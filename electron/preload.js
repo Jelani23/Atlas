@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('atlasBridge', {
     listConversations: () => ipcRenderer.invoke('atlas:listConversations'),
     getConversation: (sessionId) => ipcRenderer.invoke('atlas:getConversation', sessionId),
     newConversation: () => ipcRenderer.invoke('atlas:newConversation'),
+    resumeConversation: (sessionId) => ipcRenderer.invoke('atlas:resumeConversation', sessionId),
     deleteConversation: (sessionId) => ipcRenderer.invoke('atlas:deleteConversation', sessionId),
     renameConversation: (sessionId, title) => ipcRenderer.invoke('atlas:renameConversation', sessionId, title),
     transcribeAudio: (base64Audio) => ipcRenderer.invoke('atlas:transcribeAudio', base64Audio),

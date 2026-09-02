@@ -23,7 +23,7 @@ const { stripThinking } = require('../utils/jsonExtractor');
 const memoryCache = require('../core/memoryCache');
 
 const reflectionModelAdapter = createModelAdapter();
-const REFLECTION_SCHEMA_VERSION = 3;
+const REFLECTION_SCHEMA_VERSION = 4;
 
 const REFLECTION_SCHEMA = {
     type: 'object',
@@ -86,7 +86,7 @@ const REFLECTION_SYSTEM_PROMPT =
     '\'bindex\', \'subsynq\', or \'general\' if it wasn\'t project-specific",\n' +
     '  "topics": ["short", "lowercase", "keyword", "tags", "for", "retrieval"],\n' +
     '  "anchors": ["test_label: Exact Value", "session_theme: Exact Value"],\n' +
-    '  "decisions": ["Explicit choices the user made; include a reason only when stated"],\n' +
+    '  "decisions": ["Explicit user choices, priorities, preferences, constraints, or policies; include a reason only when stated"],\n' +
     '  "comparisons": ["Exact A versus B distinctions discussed in the session"],\n' +
     '  "open_loops": ["Unresolved tasks, questions, or promised follow-up work"]\n' +
     '}\n' +
@@ -98,6 +98,8 @@ const REFLECTION_SYSTEM_PROMPT =
     'the user and assistant describe something differently. Preserve exact spelling and casing for ' +
     'named labels and themes. Anchor entries must include their role and value, not a bare value. ' +
     'Do not replace an explicit comparison with the assistant\'s interpretation. ' +
+    'Keep attribution exact: assistant suggestions, examples, and retrieved context are not things the user said. ' +
+    'When the summary mentions assistant-added material, identify it as Alice\'s contribution. ' +
     'Open loops must come from an unresolved user request or agreed follow-up. Do not treat assistant ' +
     'confusion, clarification requests, offers, or failed answers as user intent. ' +
     'Omit passwords, tokens, temporary ' +
@@ -172,8 +174,13 @@ function extractUserCommitments(history) {
         }
 
         for (const sentence of content.split(/(?<=[.!?])\s+/)) {
-            if (/\b(?:we|i)\s+(?:selected|chose|decided)\b/i.test(sentence) ||
-                /\bour\s+(?:decision|conclusion)\b/i.test(sentence)) {
+            const isUserPosition =
+                /\b(?:we|i)\s+(?:selected|chose|decided|prefer(?:red)?|want(?:ed)?|plan(?:ned)?|prioriti[sz](?:e|ed))\b/i.test(sentence) ||
+                /\bour\s+(?:decision|conclusion|priority|preference)\b/i.test(sentence) ||
+                /\b(?:we|i|our\s+[^.!?]{0,60})\s+(?:should|shouldn['’]?t|must|mustn['’]?t)\b/i.test(sentence) ||
+                /\b(?:should|shouldn['’]?t|must|mustn['’]?t)\b/i.test(sentence) ||
+                /\b(?:my|our)\s+(?:main\s+)?concern\b/i.test(sentence);
+            if (isUserPosition && !sentence.trim().endsWith('?')) {
                 decisions.push(sentence.replace(/[.!?]+$/, '').trim());
             }
             if (/\b(?:we|i)\s+(?:still\s+)?need to\b/i.test(sentence) ||
@@ -402,6 +409,7 @@ async function generateReflection(sessionId, history, options = {}) {
     if (
         existing &&
         Number(existing.schema_version || 1) >= REFLECTION_SCHEMA_VERSION &&
+        Number(existing.source_message_count || 0) === history.length &&
         options.force !== true
     ) {
         return { status: 'exists' };

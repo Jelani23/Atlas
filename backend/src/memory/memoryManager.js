@@ -207,7 +207,7 @@ async function handleMemoryAction(extractedMemories) {
                         confidence: memory.confidence ?? 1.0,
                         source: memory.source,
                         source_type: memory.source_type
-                    });
+                    }, { preserveVerification: true });
 
                     memoryCache.invalidate('knowledge_library');
                 }

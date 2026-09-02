@@ -4,7 +4,11 @@ const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
 
 class ReflectionWorker {
-    constructor({ sessions = sessionManager, engine = reflectionEngine } = {}) {
+    constructor({
+        sessions = sessionManager,
+        engine = reflectionEngine,
+        enabled = process.env.REFLECTION_WORKER_ENABLED !== 'false'
+    } = {}) {
         this.sessions = sessions;
         this.engine = engine;
         this.timer = null;
@@ -12,7 +16,7 @@ class ReflectionWorker {
         this.activeRun = null;
         this.foregroundActive = false;
         this.initialized = false;
-        this.enabled = process.env.REFLECTION_WORKER_ENABLED !== 'false';
+        this.enabled = enabled;
         this.idleDelayMs = Math.max(
             1_000,
             Number(process.env.REFLECTION_IDLE_DELAY_MS) || 60_000
@@ -90,8 +94,22 @@ class ReflectionWorker {
         return this._startRun(() => this.sessions.claimReflectionSession(sessionId), sessionId);
     }
 
-    async _startRun(claim, requestedSessionId = null) {
-        const run = this._run(claim, requestedSessionId);
+    async processBackfillSession(sessionId) {
+        if (!this.enabled || !sessionId) {
+            return { status: 'deferred', sessionId: sessionId || null };
+        }
+
+        this.cancelScheduledRun();
+        if (this.activeRun) await this.activeRun;
+        return this._startRun(
+            () => this.sessions.claimReflectionBackfillSession(sessionId),
+            sessionId,
+            { backfill: true }
+        );
+    }
+
+    async _startRun(claim, requestedSessionId = null, options = {}) {
+        const run = this._run(claim, requestedSessionId, options);
         this.activeRun = run;
         try {
             return await run;
@@ -100,7 +118,7 @@ class ReflectionWorker {
         }
     }
 
-    async _run(claim, requestedSessionId) {
+    async _run(claim, requestedSessionId, options = {}) {
 
         this.running = true;
         let claimed = null;
@@ -121,6 +139,11 @@ class ReflectionWorker {
                 `(attempt ${claimed.reflection_attempts}).`
             );
 
+            if (claimed.skipReason) {
+                console.log(`[ReflectionWorker] Session ${claimed.id} skipped (${claimed.skipReason}).`);
+                return { status: 'skipped', sessionId: claimed.id, reason: claimed.skipReason };
+            }
+
             const history = await this.sessions.getSessionMessages(claimed.id);
             const result = await this.engine.generateReflection(claimed.id, history);
 
@@ -134,11 +157,15 @@ class ReflectionWorker {
         } catch (error) {
             if (claimed?.id) {
                 try {
-                    await this.sessions.markReflectionFailed(
-                        claimed.id,
-                        error.message,
-                        claimed.reflection_attempts
-                    );
+                    if (options.backfill) {
+                        await this.sessions.markReflectionBackfillFailed(claimed.id, error.message);
+                    } else {
+                        await this.sessions.markReflectionFailed(
+                            claimed.id,
+                            error.message,
+                            claimed.reflection_attempts
+                        );
+                    }
                 } catch (statusError) {
                     console.error('[ReflectionWorker] Failed to persist job failure:', statusError.message);
                 }

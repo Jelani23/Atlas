@@ -3,7 +3,23 @@ const memoryCache = require('./memoryCache');
 const hotSwapManager = require('./hotSwapManager');
 const projectRegistry = require('../memory/projectRegistry');
 const workingMemory = require('../memory/workingMemory');
+const sessionManager = require('../memory/sessionManager');
+const {
+    looksLikeTitleReference,
+    resolveSessionTitleReference
+} = require('../memory/sessionTitleResolver');
 const { extractKeywords } = require('../utils/keywordExtractor');
+const {
+    classifyUserNote,
+    isImplementationQuestion,
+    isTrustedKnowledgeQuestion
+} = require('../utils/turnGrounding');
+const { isKnowledgeRetrievable } = require('../memory/knowledgeAudit');
+const {
+    getKnowledgeSearchTerms,
+    getKnowledgeAnchorTerms,
+    isKnowledgeRowRelevant
+} = require('../memory/knowledgeRelevance');
 
 // --- 1. TOKEN ESTIMATOR ---
 function estimateTokens(text) {
@@ -205,8 +221,9 @@ function isReflectionFollowUp(text, history = []) {
     const input = String(text || '').toLowerCase().trim();
     if (!input.includes('?') && !/^(list|show|give)\b/.test(input)) return false;
 
-    const hasBackReference = /\b(that|those|same|it|they|did we|do we|was left|were left|remained|remains|to be verified)\b/.test(input);
-    const hasReflectionField = /\b(label|theme|anchor|comparison|approach|decision|path|open loop|unresolved|left over|preferred)\b/.test(input);
+    const hasBackReference = /\b(that|those|same|it|they|did we|do we|did i|do i|i say|i mention|was left|were left|remained|remains|to be verified)\b/.test(input) ||
+        /\bmy\s+(?:main\s+)?(?:concern|priority|constraint|preference|decision)s?\b/.test(input);
+    const hasReflectionField = /\b(label|theme|anchor|comparison|approach|decision|path|open loop|unresolved|left over|preferred|priority|prioritize|concern|constraint|said|mention)\b/.test(input);
     const recentContext = (history || []).slice(-4).map(message => String(message.content || '')).join(' ').toLowerCase();
     const followsRecallTurn = /\b(previous|last|latest|most recent|session\s+#?\d+|reflection)\b/.test(recentContext);
 
@@ -223,7 +240,8 @@ function isReflectionLookupRequest(text) {
     if (!question) return false;
 
     return /\b(?:remember|recall|previously|earlier|last time|reflection for)\b/.test(input) ||
-        /\bwhat did we\b/.test(input);
+        /\bwhat did (?:we|i)\b/.test(input) ||
+        /\bwhat (?:was|were) my\b/.test(input);
 }
 
 function resolveReflectionScope(userInput, history = [], sessionId = null) {
@@ -262,9 +280,72 @@ function resolveReflectionScope(userInput, history = [], sessionId = null) {
     };
 }
 
+function applyTitleReflectionScope(scope, titleResolution, sessionId = null) {
+    if (!titleResolution?.attempted) return scope;
+
+    const state = sessionId ? reflectionScopes.get(String(sessionId)) : null;
+    if (titleResolution.match) {
+        if (state) state.activeSessionId = titleResolution.match.sessionId;
+        return {
+            ...scope,
+            sessionIds: [titleResolution.match.sessionId],
+            reason: 'title',
+            recentReference: false,
+            enabled: true,
+            title: titleResolution.match.title,
+            titleLookupAttempted: true,
+            ambiguousTitles: []
+        };
+    }
+
+    if (state) state.activeSessionId = null;
+    return {
+        ...scope,
+        sessionIds: [],
+        reason: titleResolution.ambiguous?.length ? 'title_ambiguous' : 'title_missing',
+        recentReference: false,
+        enabled: true,
+        title: titleResolution.hint || null,
+        titleLookupAttempted: true,
+        ambiguousTitles: titleResolution.ambiguous || []
+    };
+}
+
 async function getRelevantContext(userInput, history, intent, options = {}) {
     console.time("[ContextManager] Total Processing");
-    const reflectionScope = resolveReflectionScope(userInput, history, options.sessionId);
+    let reflectionScope = resolveReflectionScope(userInput, history, options.sessionId);
+    const shouldResolveTitle = reflectionScope.reason !== 'explicit' &&
+        !reflectionScope.recentReference &&
+        looksLikeTitleReference(userInput);
+    const sessionStore = options.sessionStore || sessionManager;
+
+    const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx, titledSessions] = await Promise.all([
+        memoryCache.getMemory('user_profile'),
+        memoryCache.getMemory('project_memory'),
+        memoryCache.getMemory('knowledge_library'),
+        memoryCache.getMemory('dev_state'),
+        memoryCache.getMemory('procedural_memory'),
+        memoryCache.getMemory('reflections'),
+        shouldResolveTitle ? sessionStore.listTitledSessions() : Promise.resolve([])
+    ]);
+
+    if (shouldResolveTitle) {
+        const reflectedSessionIds = new Set(
+            reflectionsIdx.map(item => String((item.data || item).session_id))
+        );
+        reflectionScope = applyTitleReflectionScope(
+            reflectionScope,
+            resolveSessionTitleReference(
+                userInput,
+                titledSessions.map(session => ({
+                    ...session,
+                    hasReflection: reflectedSessionIds.has(String(session.id))
+                }))
+            ),
+            options.sessionId
+        );
+    }
+
     const referencedSessionIds = reflectionScope.sessionIds;
     const recentHistoryStr = history.slice(-5).map(m => m.content).join(' ');
     const keywordSource = referencedSessionIds.length > 0
@@ -272,16 +353,10 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         : `${userInput} ${recentHistoryStr}`;
     const keywords = extractKeywords(keywordSource);
 
-    const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx] = await Promise.all([
-        memoryCache.getMemory('user_profile'),
-        memoryCache.getMemory('project_memory'),
-        memoryCache.getMemory('knowledge_library'),
-        memoryCache.getMemory('dev_state'),
-        memoryCache.getMemory('procedural_memory'),
-        memoryCache.getMemory('reflections')
-    ]);
-
     const lowerInput = userInput.toLowerCase();
+    const userNoteType = classifyUserNote(userInput);
+    const implementationQuestion = isImplementationQuestion(userInput);
+    const trustedKnowledgeQuestion = isTrustedKnowledgeQuestion(userInput);
     const isAskingAboutSelf = lowerInput.includes('know about me') || lowerInput.includes('what do you remember') || lowerInput.includes('who am i');
     const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas') ;
 
@@ -440,8 +515,26 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         allowedProjectKeys.has(m.project_key?.toLowerCase()) && m._relevanceScore > 0
     );
         
-    let knowledgeScored = knowledgeIdx.map(item => scoreAndBoost('knowledge_library', item, keywords))
-        .filter(k => k._relevanceScore > 0 || knowledgeIdx.length <= 3);
+    const knowledgeTerms = getKnowledgeSearchTerms(userInput);
+    const knowledgeAnchors = getKnowledgeAnchorTerms(knowledgeTerms);
+    const relevantKnowledgeIdx = knowledgeIdx.filter(item =>
+        isKnowledgeRowRelevant(item.data, knowledgeTerms, knowledgeAnchors)
+    );
+    const trustedKnowledgeIdx = relevantKnowledgeIdx.filter(item => isKnowledgeRetrievable(item.data));
+    const quarantinedKnowledgeIdx = relevantKnowledgeIdx.filter(item => !isKnowledgeRetrievable(item.data));
+    const quarantinedKnowledgeCount = knowledgeIdx.length - trustedKnowledgeIdx.length;
+    if (quarantinedKnowledgeCount > 0) {
+        console.log(`[ContextManager] Knowledge quarantine: suppressed ${quarantinedKnowledgeCount} unverified record${quarantinedKnowledgeCount === 1 ? '' : 's'}.`);
+    }
+
+    let knowledgeScored = trustedKnowledgeIdx
+        .map(item => scoreAndBoost('knowledge_library', item, keywords))
+        .filter(k => k._relevanceScore > 0 || trustedKnowledgeIdx.length <= 3);
+    const quarantinedKnowledgeScored = trustedKnowledgeQuestion
+        ? quarantinedKnowledgeIdx
+            .map(item => scoreAndBoost('knowledge_library', item, keywords))
+            .filter(item => item._relevanceScore > 0)
+        : [];
         
     let proceduresScored = proceduresIdx.map(item => scoreAndBoost('procedural_memory', item, keywords))
         .filter(p => p._relevanceScore > 0 || proceduresIdx.length <= 5);
@@ -456,11 +549,14 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     // shouldn't casually dump many of them into every turn.
     const exactSessionReference = referencedSessionIds.length > 0;
     const recentSessionReference = reflectionScope.recentReference;
-    const strictReflectionScope = exactSessionReference || recentSessionReference;
+    const strictReflectionScope = exactSessionReference || recentSessionReference || reflectionScope.titleLookupAttempted;
+    const unresolvedTitleReference = reflectionScope.titleLookupAttempted && !exactSessionReference;
     const latestReflectionId = recentSessionReference && !exactSessionReference
         ? newestReflectionId(reflectionsIdx)
         : null;
-    const reflectionCandidates = exactSessionReference
+    const reflectionCandidates = unresolvedTitleReference
+        ? []
+        : exactSessionReference
         ? scopeReflectionsToSessions(reflectionsIdx, referencedSessionIds)
         : reflectionsIdx;
     let reflectionsScored = reflectionCandidates
@@ -469,12 +565,22 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     if (exactSessionReference) {
         reflectionsScored = reflectionsScored.map(reflection => ({
             ...reflection,
+            session_title: reflectionScope.reason === 'title' ? reflectionScope.title : reflection.session_title,
             _finalScore: reflection._finalScore + 10_000
         }));
+        const titleLabel = reflectionScope.reason === 'title'
+            ? `title "${reflectionScope.title}" -> session ${referencedSessionIds.join(', ')}`
+            : `session ${referencedSessionIds.join(', ')}`;
         console.log(
-            `[ContextManager] Reflection scope: session ${referencedSessionIds.join(', ')} ` +
+            `[ContextManager] Reflection scope: ${titleLabel} ` +
             `(${reflectionsScored.length} match${reflectionsScored.length === 1 ? '' : 'es'})`
         );
+    } else if (reflectionScope.reason === 'title_ambiguous') {
+        console.log(
+            `[ContextManager] Reflection scope: title is ambiguous (${reflectionScope.ambiguousTitles.join(', ')})`
+        );
+    } else if (reflectionScope.reason === 'title_missing') {
+        console.log(`[ContextManager] Reflection scope: no titled session matched "${reflectionScope.title || ''}"`);
     } else if (reflectionScope.enabled) {
         reflectionsScored = reflectionsScored.filter(r =>
             r._relevanceScore > 0 ||
@@ -507,6 +613,28 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         devScored = [];
     }
 
+    // A new design note is the evidence for this turn. Old memories can
+    // provide continuity later, but should not turn the note into a claim
+    // that the feature already exists.
+    if (userNoteType) {
+        dynamicPersonalScored = [];
+        filteredProjects = [];
+        knowledgeScored = [];
+        proceduresScored = [];
+        devScored = [];
+        reflectionsScored = [];
+        console.log(`[ContextManager] Grounding scope: user ${userNoteType} (retrieved claims suppressed)`);
+    }
+
+    if (implementationQuestion) {
+        dynamicPersonalScored = [];
+        filteredProjects = [];
+        knowledgeScored = [];
+        proceduresScored = [];
+        reflectionsScored = [];
+        console.log('[ContextManager] Grounding scope: implementation question (memory claims suppressed)');
+    }
+
     // Reach beyond the last-N chat window only when this intent has a
     // conversation-history budget. This stays scoped to the live session:
     // reflections are the compact cross-session continuity layer, while raw
@@ -517,7 +645,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     let conversationHistoryScored = [];
     const sessionId = options.sessionId || null;
     const conversationStore = options.workingMemory || workingMemory;
-    if (budgetProfile.conversationHistory > 0 && sessionId && keywords.size > 0) {
+    if (!userNoteType && !implementationQuestion && budgetProfile.conversationHistory > 0 && sessionId && keywords.size > 0) {
         try {
             const candidates = await conversationStore.getRelevant(keywords, {
                 sessionId,
@@ -543,6 +671,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
 
     const projectAlloc = allocateBudget(filteredProjects, budgetProfile.project, profileName === 'memory' ? 8 : 4);
     const knowledgeAlloc = allocateBudget(knowledgeScored, budgetProfile.knowledge, profileName === 'memory' ? 8 : 4);
+    const quarantinedKnowledgeAlloc = allocateBudget(quarantinedKnowledgeScored, 1200, 10);
     const proceduresAlloc = allocateBudget(proceduresScored, budgetProfile.procedures, 3);
     const devAlloc = allocateBudget(devScored, budgetProfile.devState, 4);
     const reflectionLimit = exactSessionReference
@@ -609,6 +738,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         projectNames,
         activeProjectKey: currentProjectKeyResolved,
         knowledge: knowledgeAlloc.selected,
+        quarantinedKnowledge: quarantinedKnowledgeAlloc.selected,
         procedures: proceduresAlloc.selected,
         features: devAlloc.selected,
         reflections: reflectionsAlloc.selected,
@@ -616,7 +746,9 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         reflectionScope: {
             reason: reflectionScope.reason,
             sessionIds: [...reflectionScope.sessionIds],
-            strict: strictReflectionScope
+            strict: strictReflectionScope,
+            title: reflectionScope.title || null,
+            ambiguousTitles: reflectionScope.ambiguousTitles || []
         },
         manifest
     };
@@ -634,5 +766,6 @@ module.exports = {
     registerPreviousSession,
     isReflectionFollowUp,
     isReflectionLookupRequest,
-    resolveReflectionScope
+    resolveReflectionScope,
+    applyTitleReflectionScope
 };

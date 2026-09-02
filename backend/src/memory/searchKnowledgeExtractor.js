@@ -31,11 +31,7 @@
 //      all behave identically regardless of where the knowledge came
 //      from.
 //
-// Every record this produces always carries a `type` (defaulted to
-// 'fact' if the model omits it - the field is mandatory going into
-// storage, never silently dropped) and source_type='web_search' with
-// source set to the query that surfaced it, so Alice can later answer
-// "where did I learn this" honestly.
+// Every saved record keeps a source URL from the raw search evidence.
 // ============================================================
 
 const { createModelAdapter } = require('../models/modelAdapter');
@@ -44,6 +40,7 @@ const llmQueue = require('./llmQueue');
 const memoryManager = require('./memoryManager');
 const { KNOWN_KNOWLEDGE_TYPES } = require('./knowledgeLibrary');
 const { hasVerifiedSearchEvidence } = require('../utils/searchEvidence');
+const { extractSourceUrls } = require('./knowledgeVerificationPolicy');
 
 const modelAdapter = createModelAdapter();
 
@@ -71,9 +68,13 @@ const EXTRACTION_SCHEMA = {
                     type: { type: 'string' },
                     key: { type: 'string' },
                     value: { type: 'string' },
-                    confidence: { type: 'number' }
+                    confidence: { type: 'number' },
+                    supporting_urls: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 4 }
                 },
-                required: ['subject', 'topics', 'key', 'value']
+                required: [
+                    'subject', 'topics', 'knowledge_category', 'type',
+                    'key', 'value', 'confidence', 'supporting_urls'
+                ]
             }
         }
     },
@@ -103,6 +104,7 @@ conversation, not the user's question, not anything tied only to this
 moment.
 
 SEARCH QUERY: "${query}"
+RUNTIME DATE: ${new Date().toISOString().slice(0, 10)}
 
 SYNTHESIZED ANSWER ALICE GAVE (already comprehended and coherent):
 """
@@ -135,6 +137,8 @@ WHAT COUNTS AS KNOWLEDGE
   answer was purely conversational/time-sensitive with no lasting
   fact), return an empty memories array. Do not invent a fact to fill
   the array.
+- For latest/current claims, ignore model prior knowledge and use only
+  dated facts supported by the raw source material.
 
 FIELDS (all required except topics/confidence)
 - subject: the specific entity/concept this fact is about, snake_case
@@ -153,6 +157,8 @@ FIELDS (all required except topics/confidence)
 - confidence: 0-1, how well-supported this fact is by the source
   material (a single vague snippet should score lower than a fact
   stated plainly and consistently across sources).
+- supporting_urls: 1-4 exact Source URL values from the raw material
+  that directly support this fact. Never invent or reconstruct a URL.
 
 Return ONLY valid JSON:
 
@@ -165,7 +171,8 @@ Return ONLY valid JSON:
             "key": "snake_case_key",
             "value": "the concrete fact",
             "topics": ["topic_1", "topic_2"],
-            "confidence": 0.9
+            "confidence": 0.9,
+            "supporting_urls": ["https://example.com/source"]
         }
     ]
 }
@@ -187,6 +194,32 @@ function deriveFallbackTopics(m) {
         .map(t => String(t).trim().toLowerCase().replace(/\s+/g, '_'))
         .filter(Boolean);
     return [...new Set(candidates)];
+}
+
+function prepareExtractedMemories(memories, rawResults) {
+    const evidenceUrls = new Set(extractSourceUrls(rawResults));
+    return (memories || [])
+        .filter(m => m && m.key && m.value && m.subject)
+        .map(m => {
+            const supportingUrls = [...new Set(m.supporting_urls || [])]
+                .filter(url => evidenceUrls.has(url));
+            if (supportingUrls.length === 0) return null;
+            return {
+                category: 'knowledge',
+                subject: m.subject,
+                topics: Array.isArray(m.topics) && m.topics.length > 0
+                    ? m.topics
+                    : deriveFallbackTopics(m),
+                knowledge_category: m.knowledge_category || 'general',
+                type: m.type || 'fact',
+                key: m.key,
+                value: m.value,
+                confidence: typeof m.confidence === 'number' ? m.confidence : 0.8,
+                source: supportingUrls[0],
+                source_type: 'web_search'
+            };
+        })
+        .filter(Boolean);
 }
 
 async function extractAndSaveFromSearch({ query, summary, rawResults }) {
@@ -229,27 +262,7 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
             return { saved: 0, reason: 'no_memories_returned' };
         }
 
-        const memories = parsed.memories
-            .filter(m => m && m.key && m.value && m.subject)
-            .map(m => ({
-                category: 'knowledge',
-                subject: m.subject,
-                topics: Array.isArray(m.topics) && m.topics.length > 0
-                    ? m.topics
-                    : deriveFallbackTopics(m),
-                // Same deterministic defaulting memoryExtractor.js applies
-                // for conversational knowledge - never leave `type` unset,
-                // knowledgeLibrary.js's buildRow() would default it anyway
-                // on write, but filling it in here keeps the object itself
-                // accurate for logging/dedup inspection before it gets there.
-                knowledge_category: m.knowledge_category || 'general',
-                type: m.type || 'fact',
-                key: m.key,
-                value: m.value,
-                confidence: typeof m.confidence === 'number' ? m.confidence : 0.8,
-                source: `web_search: ${query}`,
-                source_type: 'web_search'
-            }));
+        const memories = prepareExtractedMemories(parsed.memories, rawResults);
 
         if (memories.length === 0) {
             return { saved: 0, reason: 'no_valid_memories' };
@@ -274,5 +287,6 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
 module.exports = {
     extractAndSaveFromSearch,
     EXTRACTION_SCHEMA,
-    hasExtractableContent
+    hasExtractableContent,
+    prepareExtractedMemories
 };

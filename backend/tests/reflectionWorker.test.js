@@ -94,10 +94,37 @@ async function testSpecificSessionDoesNotClaimOlderWork() {
     ]);
 }
 
+async function testFailedBackfillReturnsToBackfillQueue() {
+    const calls = [];
+    const sessions = {
+        claimReflectionBackfillSession: async id => ({ id, reflection_attempts: 1 }),
+        getSessionMessages: async () => [
+            { role: 'user', content: 'Historical topic' },
+            { role: 'assistant', content: 'Reply' },
+            { role: 'user', content: 'Decision' }
+        ],
+        markReflectionComplete: async () => {},
+        markReflectionBackfillFailed: async (id, error) => calls.push(['backfill_failed', id, error]),
+        markReflectionFailed: async () => calls.push(['live_failed'])
+    };
+    const engine = {
+        generateReflection: async () => {
+            throw new Error('bad historical output');
+        }
+    };
+    const worker = new ReflectionWorker({ sessions, engine });
+    const result = await worker.processBackfillSession(90);
+    worker.shutdown();
+
+    assert.strictEqual(result.status, 'failed');
+    assert.deepStrictEqual(calls, [['backfill_failed', 90, 'bad historical output']]);
+}
+
 async function run() {
     await testSuccessfulJobCompletes();
     await testFailedJobRemainsRetryable();
     await testSpecificSessionDoesNotClaimOlderWork();
+    await testFailedBackfillReturnsToBackfillQueue();
     console.log('reflectionWorker.test.js: all assertions passed');
 }
 

@@ -67,7 +67,9 @@ async function webSearch(query) {
                         .map(r => {
                             const body = r.snippet || '';
                             if (!body) return null;
-                            return r.title ? `${r.title}: ${body}` : body;
+                            const title = r.title ? `${r.title}\n` : '';
+                            const source = r.link ? `Source URL: ${r.link}\n` : '';
+                            return `${title}${source}${body}`;
                         })
                         .filter(Boolean);
                     if (data.answerBox && (data.answerBox.answer || data.answerBox.snippet)) {
@@ -93,7 +95,9 @@ async function webSearch(query) {
                 // for genuine comprehension, only enough for a shortened
                 // rehash of whatever happened to survive the cutoff. Raised to
                 // give the synthesis step full articles to actually read.
-                if (text.length > 100) return resolve(text.substring(0, 8000));
+                if (text.length > 100) {
+                    return resolve(`Source URL: ${firstLink}\n${text.substring(0, 8000)}`);
+                }
             }
             resolve(null);
         } catch (e) { resolve(null); }
@@ -104,7 +108,10 @@ async function webSearch(query) {
         const wikiResponse = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}?redirect=true`);
         if (wikiResponse.ok) {
             const wikiData = await wikiResponse.json();
-            if (wikiData.type === 'standard' && wikiData.extract) return `Wikipedia Summary:\n${wikiData.extract}`;
+            if (wikiData.type === 'standard' && wikiData.extract) {
+                const sourceUrl = wikiData.content_urls?.desktop?.page;
+                return `Wikipedia Summary:\n${sourceUrl ? `Source URL: ${sourceUrl}\n` : ''}${wikiData.extract}`;
+            }
         }
     } catch (e) {}
     return "No direct results found across all search providers.";

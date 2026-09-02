@@ -8,6 +8,7 @@ function normalizeSearchRequest(message) {
         .replace(/^(?:please\s+)?(?:search|look up|find)(?:\s+the)?\s+(?:web|internet|online)\s+(?:for\s+)?/i, '')
         .replace(/^(?:please\s+)?(?:search|look up|find)\s+(?:for\s+)?/i, '')
         .replace(/\s+and\s+(?:briefly\s+)?summarize\b[\s\S]*$/i, '')
+        .replace(/[.!?]\s*(?:prefer|use|prioritize)\s+(?:official|primary|first-party)(?:\s+sources?)?[\s\S]*$/i, '')
         .replace(/\s+(?:and\s+)?(?:briefly\s+)?(?:summarize|explain|tell me)(?:\s+what)?\s+(?:changed|you find|it)?[.!?]*$/i, '')
         .replace(/^['"]|['"]$/g, '')
         .trim();

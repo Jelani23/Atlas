@@ -92,6 +92,34 @@ function testUserOpenLoopsStayExact() {
     assert.deepStrictEqual(grounded.open_loops, commitments.openLoops);
 }
 
+function testAssistantDetailsDoNotBecomeUserPositions() {
+    const commitments = extractUserCommitments([
+        {
+            role: 'user',
+            content: 'I think our next priority should be cleaning the knowledge library. I want to validate provenance first because old search memories may be unreliable.'
+        },
+        {
+            role: 'assistant',
+            content: 'We should validate the Ollama Qwen3.8 benchmark v0.33.2 first.'
+        },
+        {
+            role: 'user',
+            content: 'Time-sensitive facts should expire or require reverification. We shouldn\'t change the database schema yet.'
+        }
+    ]);
+
+    assert.deepStrictEqual(commitments.decisions, [
+        'I think our next priority should be cleaning the knowledge library',
+        'I want to validate provenance first because old search memories may be unreliable',
+        'Time-sensitive facts should expire or require reverification',
+        'We shouldn\'t change the database schema yet'
+    ]);
+    assert.strictEqual(
+        commitments.decisions.some(value => value.includes('Qwen3.8')),
+        false
+    );
+}
+
 function testStrictParsingAndNormalization() {
     const parsed = parseReflection(validReflection());
     assert(parsed);
@@ -151,6 +179,46 @@ async function testLegacyReflectionCanBeRegenerated() {
     }
 }
 
+async function testResumedReflectionRegeneratesAfterNewMessages() {
+    const originalGet = reflectionJournal.getForSession;
+    const originalReplace = reflectionJournal.replace;
+    let replacement = null;
+    const history = [
+        { role: 'user', content: 'We selected the first path.' },
+        { role: 'assistant', content: 'Understood.' },
+        { role: 'user', content: 'The first session ended here.' },
+        { role: 'assistant', content: 'The conversation was resumed.' },
+        { role: 'user', content: 'We should now validate resumed-session reflection updates.' }
+    ];
+
+    reflectionJournal.getForSession = async () => ({
+        session_id: 1211,
+        schema_version: REFLECTION_SCHEMA_VERSION,
+        source_message_count: 3,
+        summary: 'The original reflection.'
+    });
+    reflectionJournal.replace = async entry => {
+        replacement = entry;
+        return true;
+    };
+
+    try {
+        const result = await generateReflection(1211, history, {
+            complete: async () => validReflection('The resumed conversation added a new validation step.')
+        });
+        assert.strictEqual(result.status, 'updated');
+        assert(replacement);
+        assert.strictEqual(replacement.sourceMessageCount, 5);
+        assert.deepStrictEqual(
+            replacement.decisions,
+            ['We selected the first path', 'We should now validate resumed-session reflection updates']
+        );
+    } finally {
+        reflectionJournal.getForSession = originalGet;
+        reflectionJournal.replace = originalReplace;
+    }
+}
+
 function testChunkingPreservesLongTranscript() {
     const history = [
         { role: 'user', content: `EARLY-${'a'.repeat(3100)}` },
@@ -202,9 +270,11 @@ async function run() {
     testNamedAnchorsKeepTheirRole();
     testUserComparisonsAndDecisionsStayExact();
     testUserOpenLoopsStayExact();
+    testAssistantDetailsDoNotBecomeUserPositions();
     testChunkingPreservesLongTranscript();
     await testLongHistoryUsesChunkThenMerge();
     await testLegacyReflectionCanBeRegenerated();
+    await testResumedReflectionRegeneratesAfterNewMessages();
     console.log('reflectionEngine.test.js: all assertions passed');
 }
 

@@ -566,11 +566,11 @@ export function AtlasApp() {
     setTab(id)
   }
 
-  const resetLiveSession = useCallback((newSessionId: string) => {
+  const resetLiveSession = useCallback((newSessionId: string, history: Message[] = []) => {
     clearTimeout(settleTimer.current)
     stopAudioPlayback()
     setSessionId(newSessionId)
-    setMessages([])
+    setMessages(history)
     setSteps([])
     setState("idle")
     setFocusMessageId(null)
@@ -582,6 +582,23 @@ export function AtlasApp() {
     const result = await bridge.newConversation()
     resetLiveSession(result.sessionId)
   }, [resetLiveSession])
+
+  const handleResumeConversation = useCallback(async (targetSessionId: string) => {
+    const bridge = window.atlasBridge
+    if (!bridge) return
+    clearTimeout(settleTimer.current)
+    stopAudioPlayback()
+    const result = await bridge.resumeConversation(targetSessionId)
+    const history = await bridge.getConversation(result.sessionId)
+    resetLiveSession(
+      result.sessionId,
+      history.map((message, index) => ({
+        id: `resumed-${result.sessionId}-${index}`,
+        role: message.role === "assistant" ? "atlas" : "user",
+        text: message.content,
+      })),
+    )
+  }, [resetLiveSession, stopAudioPlayback])
 
   const handleConversationDeleted = useCallback(
     (newSessionId: string | null) => {
@@ -646,6 +663,7 @@ export function AtlasApp() {
           onSend={runFlow}
           onToggleMic={handleMic}
           onNewConversation={handleNewConversation}
+          onResumeConversation={handleResumeConversation}
           onConversationDeleted={handleConversationDeleted}
         />
       )}

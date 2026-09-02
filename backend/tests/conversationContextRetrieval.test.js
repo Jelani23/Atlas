@@ -20,6 +20,85 @@ const {
 } = require('../src/core/contextManager');
 const { extractKeywords } = require('../src/utils/keywordExtractor');
 const { compactSearchEvidence } = require('../src/core/contextBuilder');
+const {
+    classifyUserNote,
+    isImplementationQuestion,
+    hasImplementationEvidence,
+    resolveUserNoteReply,
+    resolveImplementationBoundaryReply,
+    isTrustedKnowledgeQuestion,
+    resolveTrustedKnowledgeBoundaryReply
+} = require('../src/utils/turnGrounding');
+
+function testUserNoteClassification() {
+    assert.strictEqual(
+        classifyUserNote('We decided that knowledge entries should preserve their source.'),
+        'decision'
+    );
+    assert.strictEqual(
+        classifyUserNote('Unverified search results should not be treated as established facts.'),
+        'policy'
+    );
+    assert.strictEqual(
+        classifyUserNote('We still need to determine how stale knowledge should expire.'),
+        'open_loop'
+    );
+    assert.strictEqual(classifyUserNote('Should we expire stale knowledge?'), null);
+    assert.strictEqual(classifyUserNote('I want to know what model handles chat.'), null);
+    assert.strictEqual(
+        resolveUserNoteReply('Knowledge without provenance should remain quarantined.'),
+        "Understood. I'll treat that as a policy requirement, not as something already implemented."
+    );
+    assert.strictEqual(
+        isImplementationQuestion('Does the current database already store verification status?'),
+        true
+    );
+    assert.strictEqual(isImplementationQuestion('What model handles general conversation?'), false);
+    assert(resolveImplementationBoundaryReply('Does the current database already store verification status?'));
+    assert.strictEqual(
+        resolveImplementationBoundaryReply(
+            'Does the current database already store verification status?',
+            { toolName: 'read_code', toolResult: 'knowledge_library columns: id, source, source_type' }
+        ),
+        null
+    );
+    assert.strictEqual(
+        hasImplementationEvidence({ toolName: 'append_note', toolResult: 'Successfully updated the note.' }),
+        false
+    );
+    assert.strictEqual(
+        isTrustedKnowledgeQuestion('Without searching the web, what does your trusted knowledge say is current?'),
+        true
+    );
+    assert.strictEqual(
+        resolveTrustedKnowledgeBoundaryReply(
+            'Without searching the web, what does your trusted knowledge say is current?',
+            { knowledge: [] }
+        ),
+        "I don't have verified stored knowledge for that request. Since you asked me not to search the web, I can't verify a current answer."
+    );
+    const provisionalReply = resolveTrustedKnowledgeBoundaryReply(
+        'Without searching the web, what does your trusted knowledge say is the latest stable Ollama release?',
+        {
+            knowledge: [],
+            quarantinedKnowledge: [
+                { id: 10, subject: 'ollama_release', key: 'latest_stable_version', value: 'v0.1.35', source: 'web_search: latest Ollama release' },
+                { id: 11, subject: 'ollama_version', key: 'latest_stable_version', value: 'v0.33.2', source: 'web_search: latest Ollama release' }
+            ]
+        }
+    );
+    assert(provisionalReply.includes('matching provisional knowledge records'));
+    assert(provisionalReply.includes('[record 10] "v0.1.35"'));
+    assert(provisionalReply.includes('[record 11] "v0.33.2"'));
+    assert(provisionalReply.includes("can't present it as verified or current"));
+    assert.strictEqual(
+        resolveTrustedKnowledgeBoundaryReply(
+            'What does your trusted knowledge say about JavaScript?',
+            { knowledge: [{ subject: 'javascript' }] }
+        ),
+        "I don't have verified stored knowledge for that request."
+    );
+}
 
 function testRecentTurnsAreRemovedByExactRowIdentity() {
     const history = [
@@ -155,6 +234,30 @@ function testReflectionScopeCarriesAcrossFollowUps() {
     assert.deepStrictEqual(unresolved.sessionIds, ['1187']);
 }
 
+function testUserAttributedQuestionsKeepReflectionScope() {
+    registerPreviousSession(1212, 1211);
+    resolveReflectionScope(
+        'What were my main concerns in session 1211?',
+        [],
+        1212
+    );
+
+    const history = [
+        { role: 'user', content: 'What were my main concerns in our Knowledge Library Planning chat?' },
+        { role: 'assistant', content: 'You wanted to clean the knowledge library first.' }
+    ];
+    const priority = resolveReflectionScope('What did I want to prioritize first, and why?', history, 1212);
+    const constraint = resolveReflectionScope(
+        'What did I explicitly say not to do yet?',
+        [...history, { role: 'user', content: 'What did I want to prioritize first, and why?' }],
+        1212
+    );
+
+    assert.deepStrictEqual(priority.sessionIds, ['1211']);
+    assert.strictEqual(priority.reason, 'follow_up');
+    assert.deepStrictEqual(constraint.sessionIds, ['1211']);
+}
+
 function testOrdinaryStatementsDoNotActivateOldReflections() {
     assert.strictEqual(
         isReflectionLookupRequest('This conversation\'s reflection test label is Juniper.'),
@@ -267,6 +370,129 @@ async function testScopedReflectionLookupExcludesCompetingMemoryStores() {
         memoryCache.getMemory = originalGetMemory;
         projectRegistry.getAllProjects = originalGetAllProjects;
         memoryCache.setHotState('activeProject', null);
+    }
+}
+
+async function testConversationTitleSelectsAndCarriesOneReflection() {
+    const memoryCache = require('../src/core/memoryCache');
+    const projectRegistry = require('../src/memory/projectRegistry');
+    const originalGetMemory = memoryCache.getMemory;
+    const originalGetAllProjects = projectRegistry.getAllProjects;
+
+    memoryCache.getMemory = async store => {
+        if (store === 'reflections') {
+            return [
+                {
+                    id: 1,
+                    score: 0,
+                    data: {
+                        id: 1,
+                        session_id: 1194,
+                        summary: 'Magnolia tested reflection timing.',
+                        anchors: ['test_label: Magnolia'],
+                        comparisons: ['immediate vs delayed processing']
+                    }
+                },
+                {
+                    id: 2,
+                    score: 0,
+                    data: {
+                        id: 2,
+                        session_id: 1201,
+                        summary: 'Redwood tested durable retrieval.',
+                        anchors: ['test_label: Redwood']
+                    }
+                }
+            ];
+        }
+        if (store === 'project_memory') {
+            return [{ id: 3, score: 0, data: { project_key: 'atlas', key: 'noise', value: 'Magnolia' } }];
+        }
+        return [];
+    };
+    projectRegistry.getAllProjects = async () => [{ project_key: 'atlas', name: 'Atlas', aliases: [] }];
+    memoryCache.setHotState('activeProject', 'atlas');
+    registerPreviousSession(1210, 1201);
+
+    const sessionStore = {
+        listTitledSessions: async () => [
+            { id: 1194, title: 'Magnolia Reflection Timing', ended_at: '2026-09-01T17:00:00Z' },
+            { id: 1201, title: 'Redwood Retrieval', ended_at: '2026-09-01T18:00:00Z' }
+        ]
+    };
+
+    try {
+        const result = await getRelevantContext(
+            'In our chat about Magnolia Reflection Timing, what did we discuss?',
+            [],
+            { intent: 'conversation' },
+            {
+                sessionId: 1210,
+                sessionStore,
+                workingMemory: { getRelevant: async () => [] }
+            }
+        );
+        const followUp = resolveReflectionScope(
+            'Which approach did we select?',
+            [
+                { role: 'user', content: 'In our chat about Magnolia Reflection Timing, what did we discuss?' },
+                { role: 'assistant', content: 'Magnolia tested reflection timing.' }
+            ],
+            1210
+        );
+
+        assert.deepStrictEqual(result.reflections.map(row => row.session_id), [1194]);
+        assert.strictEqual(result.reflectionScope.reason, 'title');
+        assert.strictEqual(result.reflectionScope.title, 'Magnolia Reflection Timing');
+        assert.deepStrictEqual(result.projects, []);
+        assert.deepStrictEqual(followUp.sessionIds, ['1194']);
+        assert.strictEqual(followUp.reason, 'follow_up');
+    } finally {
+        memoryCache.getMemory = originalGetMemory;
+        projectRegistry.getAllProjects = originalGetAllProjects;
+        memoryCache.setHotState('activeProject', null);
+    }
+}
+
+async function testMissingConversationTitleDoesNotUseAnotherReflection() {
+    const memoryCache = require('../src/core/memoryCache');
+    const projectRegistry = require('../src/memory/projectRegistry');
+    const originalGetMemory = memoryCache.getMemory;
+    const originalGetAllProjects = projectRegistry.getAllProjects;
+
+    memoryCache.getMemory = async store => store === 'reflections'
+        ? [{
+            id: 1,
+            score: 0,
+            data: {
+                id: 1,
+                session_id: 1194,
+                summary: 'An unrelated Magnolia reflection.',
+                anchors: ['test_label: Magnolia']
+            }
+        }]
+        : [];
+    projectRegistry.getAllProjects = async () => [];
+    registerPreviousSession(1212, 1194);
+
+    try {
+        const result = await getRelevantContext(
+            'In our chat about Missing Conversation, what did we discuss?',
+            [],
+            { intent: 'conversation' },
+            {
+                sessionId: 1212,
+                sessionStore: { listTitledSessions: async () => [] },
+                workingMemory: { getRelevant: async () => [] }
+            }
+        );
+
+        assert.deepStrictEqual(result.reflections, []);
+        assert.strictEqual(result.reflectionScope.reason, 'title_missing');
+        assert.strictEqual(result.reflectionScope.strict, true);
+    } finally {
+        memoryCache.getMemory = originalGetMemory;
+        projectRegistry.getAllProjects = originalGetAllProjects;
     }
 }
 
@@ -422,7 +648,147 @@ async function testFailedCurrentSearchGetsHardEvidenceDirective() {
     }
 }
 
+async function testUserDesignNoteSuppressesRetrievedClaims() {
+    const memoryCache = require('../src/core/memoryCache');
+    const projectRegistry = require('../src/memory/projectRegistry');
+    const originalGetMemory = memoryCache.getMemory;
+    const originalGetAllProjects = projectRegistry.getAllProjects;
+
+    memoryCache.getMemory = async store => {
+        if (store === 'user_profile') return [];
+        if (store === 'project_memory') return [{ id: 1, score: 0,
+            data: { project_key: 'atlas', subject: 'memory', key: 'legacy_rule', value: 'Already implemented' }
+        }];
+        if (store === 'knowledge_library') return [{ id: 2, score: 0,
+            data: { subject: 'knowledge', key: 'old_claim', value: 'Auto-expires after 7 days' }
+        }];
+        if (store === 'procedural_memory') return [{ id: 3, score: 0,
+            data: { trigger: 'knowledge is stale', action: 'expire it after 7 days' }
+        }];
+        return [];
+    };
+    projectRegistry.getAllProjects = async () => [{
+        project_key: 'atlas', name: 'Atlas', aliases: []
+    }];
+
+    try {
+        const result = await getRelevantContext(
+            'We still need to determine how stale knowledge should be expired, superseded, or reverified.',
+            [],
+            { intent: 'conversation' },
+            { sessionId: 1211, workingMemory: { getRelevant: async () => [] } }
+        );
+
+        assert.deepStrictEqual(result.projects, []);
+        assert.deepStrictEqual(result.knowledge, []);
+        assert.deepStrictEqual(result.procedures, []);
+        assert.deepStrictEqual(result.features, []);
+        assert.deepStrictEqual(result.reflections, []);
+        assert.deepStrictEqual(result.conversationHistory, []);
+    } finally {
+        memoryCache.getMemory = originalGetMemory;
+        projectRegistry.getAllProjects = originalGetAllProjects;
+    }
+}
+
+async function testUserDesignNoteGetsGroundingDirective() {
+    const worldModel = require('../src/memory/worldModel');
+    const originalGetAll = worldModel.getAll;
+    worldModel.getAll = async () => [];
+
+    try {
+        const { buildContext } = require('../src/core/contextBuilder');
+        const prompt = await buildContext({
+            mode: 'casual',
+            intent: { intent: 'conversation' },
+            responseStyle: null,
+            memoryResult: null,
+            toolResult: { needsTool: false },
+            userInput: 'Unverified search results should not be treated as established facts.',
+            history: [],
+            policy: 'NONE',
+            workingContext: {},
+            preprocessed: {
+                relevantMemory: {
+                    hotState: { activeProject: null, activeFiles: [], currentTask: null },
+                    state: [], personal: [], projects: [], projectNames: {},
+                    activeProjectKey: null, knowledge: [], procedures: [],
+                    features: [], reflections: [], conversationHistory: []
+                }
+            }
+        });
+
+        assert(prompt.includes('CURRENT USER NOTE:'));
+        assert(prompt.includes('new policy'));
+        assert(prompt.includes('Do not say ATLAS already implements it'));
+        assert(prompt.includes('cannot prove implementation'));
+    } finally {
+        worldModel.getAll = originalGetAll;
+    }
+}
+
+async function testKnowledgeRetrievalQuarantinesUnverifiedRows() {
+    const memoryCache = require('../src/core/memoryCache');
+    const projectRegistry = require('../src/memory/projectRegistry');
+    const originalGetMemory = memoryCache.getMemory;
+    const originalGetAllProjects = projectRegistry.getAllProjects;
+
+    memoryCache.getMemory = async store => {
+        if (store !== 'knowledge_library') return [];
+        return [
+            {
+                id: 1,
+                score: 0,
+                data: {
+                    id: 1,
+                    category: 'technology',
+                    subject: 'ollama',
+                    key: 'latest_stable_version',
+                    value: '195.6',
+                    topics: ['ollama'],
+                    type: 'fact',
+                    confidence: 0.9,
+                    source: 'web_search: latest stable Ollama release',
+                    source_type: 'web_search'
+                }
+            },
+            {
+                id: 2,
+                score: 0,
+                data: {
+                    id: 2,
+                    category: 'programming',
+                    subject: 'javascript',
+                    key: 'runtime_model',
+                    value: 'JavaScript uses an event loop.',
+                    topics: ['javascript', 'event_loop'],
+                    type: 'fact',
+                    confidence: 0.95,
+                    source: 'MDN event loop guide',
+                    source_type: 'document'
+                }
+            }
+        ];
+    };
+    projectRegistry.getAllProjects = async () => [];
+
+    try {
+        const result = await getRelevantContext(
+            'How does the JavaScript runtime model work?',
+            [],
+            { intent: 'conversation' },
+            { sessionId: 1300, workingMemory: { getRelevant: async () => [] } }
+        );
+
+        assert.deepStrictEqual(result.knowledge.map(row => row.id), [2]);
+    } finally {
+        memoryCache.getMemory = originalGetMemory;
+        projectRegistry.getAllProjects = originalGetAllProjects;
+    }
+}
+
 async function run() {
+    testUserNoteClassification();
     testRecentTurnsAreRemovedByExactRowIdentity();
     testConversationScoringUsesTopicsAndImportance();
     testInvalidationClearsBothCacheLayers();
@@ -430,13 +796,19 @@ async function run() {
     testExactSessionReferenceHasOneScope();
     testPreviousConversationUsesTheActualOutgoingSession();
     testReflectionScopeCarriesAcrossFollowUps();
+    testUserAttributedQuestionsKeepReflectionScope();
     testOrdinaryStatementsDoNotActivateOldReflections();
     await testRestartFallbackBecomesTheFollowUpScope();
     await testScopedReflectionLookupExcludesCompetingMemoryStores();
+    await testConversationTitleSelectsAndCarriesOneReflection();
+    await testMissingConversationTitleDoesNotUseAnotherReflection();
     testSearchCompactionPreservesEverySource();
     await testEarlierConversationIsRenderedAsDialogueNotFact();
     await testStructuredReflectionEvidenceIsRendered();
     await testFailedCurrentSearchGetsHardEvidenceDirective();
+    await testUserDesignNoteSuppressesRetrievedClaims();
+    await testUserDesignNoteGetsGroundingDirective();
+    await testKnowledgeRetrievalQuarantinesUnverifiedRows();
     console.log('conversationContextRetrieval.test.js: all assertions passed');
 }
 

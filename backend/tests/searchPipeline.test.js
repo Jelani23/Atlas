@@ -9,8 +9,11 @@ const {
     hasVerifiedSearchEvidence
 } = require('../src/utils/searchEvidence');
 const {
-    hasExtractableContent
+    hasExtractableContent,
+    EXTRACTION_SCHEMA,
+    prepareExtractedMemories
 } = require('../src/memory/searchKnowledgeExtractor');
+const { isSearchKnowledgePersistenceEnabled } = require('../src/memory/knowledgePersistencePolicy');
 
 async function run() {
     const year = String(new Date().getFullYear());
@@ -28,6 +31,12 @@ async function run() {
         'Search the web for the latest stable Ollama release and summarize the important changes.'
     );
     assert.strictEqual(summaryQueries[0], 'the latest stable Ollama release');
+
+    const officialQueries = await searchPipeline.generateQueries(
+        'Search the web for the latest stable Ollama release. Prefer official sources and summarize the important changes.'
+    );
+    assert.strictEqual(officialQueries[0], 'the latest stable Ollama release');
+    assert(!officialQueries.some(query => /official sources official/i.test(query)));
 
     let calls = 0;
     const noResults = await searchPipeline.executeSearch(queries, {
@@ -53,10 +62,37 @@ async function run() {
     assert(results.startsWith(SEARCH_STATUS.RESULTS_FOUND));
     assert.strictEqual(hasVerifiedSearchEvidence(results), true);
     assert.strictEqual(hasExtractableContent('A supported summary.', results), true);
+    assert.strictEqual(isSearchKnowledgePersistenceEnabled(undefined), true);
+    assert.strictEqual(isSearchKnowledgePersistenceEnabled('true'), true);
+    assert.strictEqual(isSearchKnowledgePersistenceEnabled('false'), false);
+
+    const extractionItem = EXTRACTION_SCHEMA.properties.memories.items;
+    assert(extractionItem.required.includes('supporting_urls'));
+    const prepared = prepareExtractedMemories([{
+        subject: 'ollama',
+        topics: ['ollama', 'release'],
+        knowledge_category: 'technology',
+        type: 'fact',
+        key: 'latest_stable_version',
+        value: 'v1.2.3',
+        confidence: 0.9,
+        supporting_urls: ['https://ollama.com/download', 'https://invented.example/source']
+    }], 'Source URL: https://ollama.com/download\nOllama v1.2.3 is available.');
+    assert.strictEqual(prepared.length, 1);
+    assert.strictEqual(prepared[0].source, 'https://ollama.com/download');
+    assert.strictEqual(
+        prepareExtractedMemories([{
+            ...prepared[0],
+            supporting_urls: ['https://invented.example/source']
+        }], 'Source URL: https://ollama.com/download\nOllama v1.2.3 is available.').length,
+        0
+    );
 
     console.log('✓ deterministic query generation uses runtime time context without an LLM');
     console.log('✓ failed searches carry NO_RESULTS and cannot become knowledge');
     console.log('✓ verified source material remains eligible for synthesis/extraction');
+    console.log('✓ extracted knowledge preserves only source URLs present in evidence');
+    console.log('✓ source-backed search persistence defaults on with an explicit opt-out');
 }
 
 run().catch(error => {
