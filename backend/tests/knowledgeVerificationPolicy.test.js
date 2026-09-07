@@ -23,6 +23,14 @@ assert.deepStrictEqual(buildVerificationQueries(record), [
     'ollama official latest stable version',
     'ollama official releases'
 ]);
+assert.deepStrictEqual(buildVerificationQueries({
+    ...record,
+    topics: ['qwen', 'dark_mode', 'macos_compatibility']
+}), [
+    `ollama latest stable version ${new Date().getFullYear()}`,
+    'ollama official latest stable version',
+    'ollama official releases'
+]);
 assert(getExpiry(record, new Date('2026-09-01T00:00:00Z')));
 assert.strictEqual(
     getExpiry({ subject: 'javascript', key: 'runtime_model', value: 'event loop', topics: [] }),

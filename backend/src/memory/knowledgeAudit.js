@@ -77,6 +77,11 @@ function isKnowledgeRetrievable(row) {
     return !auditKnowledgeRow(row).retrieval_blocked;
 }
 
+function isKnowledgeActive(row) {
+    const status = String(row?.verification_status || '').trim().toLowerCase();
+    return !['superseded', 'contradicted'].includes(status) && !row?.superseded_by;
+}
+
 function auditKnowledgeRows(rows = []) {
     const records = rows.map(auditKnowledgeRow);
     const issueCounts = {};
@@ -104,6 +109,7 @@ module.exports = {
     auditKnowledgeRow,
     auditKnowledgeRows,
     isKnowledgeRetrievable,
+    isKnowledgeActive,
     RETRIEVAL_BLOCKING_ISSUES,
     TIME_SENSITIVE_PATTERN
 };

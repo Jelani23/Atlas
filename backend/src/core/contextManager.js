@@ -14,7 +14,7 @@ const {
     isImplementationQuestion,
     isTrustedKnowledgeQuestion
 } = require('../utils/turnGrounding');
-const { isKnowledgeRetrievable } = require('../memory/knowledgeAudit');
+const { isKnowledgeActive, isKnowledgeRetrievable } = require('../memory/knowledgeAudit');
 const {
     getKnowledgeSearchTerms,
     getKnowledgeAnchorTerms,
@@ -517,12 +517,15 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         
     const knowledgeTerms = getKnowledgeSearchTerms(userInput);
     const knowledgeAnchors = getKnowledgeAnchorTerms(knowledgeTerms);
-    const relevantKnowledgeIdx = knowledgeIdx.filter(item =>
+    const activeKnowledgeIdx = knowledgeIdx.filter(item => isKnowledgeActive(item.data));
+    const relevantKnowledgeIdx = activeKnowledgeIdx.filter(item =>
         isKnowledgeRowRelevant(item.data, knowledgeTerms, knowledgeAnchors)
     );
     const trustedKnowledgeIdx = relevantKnowledgeIdx.filter(item => isKnowledgeRetrievable(item.data));
     const quarantinedKnowledgeIdx = relevantKnowledgeIdx.filter(item => !isKnowledgeRetrievable(item.data));
-    const quarantinedKnowledgeCount = knowledgeIdx.length - trustedKnowledgeIdx.length;
+    const quarantinedKnowledgeCount = activeKnowledgeIdx.filter(item =>
+        !isKnowledgeRetrievable(item.data)
+    ).length;
     if (quarantinedKnowledgeCount > 0) {
         console.log(`[ContextManager] Knowledge quarantine: suppressed ${quarantinedKnowledgeCount} unverified record${quarantinedKnowledgeCount === 1 ? '' : 's'}.`);
     }

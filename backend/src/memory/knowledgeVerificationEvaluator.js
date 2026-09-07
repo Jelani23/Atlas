@@ -14,9 +14,12 @@ const VERIFICATION_SCHEMA = {
     required: ['verdict', 'proposed_value', 'confidence', 'reason', 'supporting_urls']
 };
 
-async function evaluateKnowledge(record, evidence, options = {}) {
-    const adapter = options.adapter || createModelAdapter();
-    const prompt = `Evaluate one stored knowledge claim against fresh web evidence.
+function buildVerificationPrompt(record, evidence, now = new Date()) {
+    const currentDate = now.toISOString().slice(0, 10);
+    return `Evaluate one stored knowledge claim against fresh web evidence.
+
+Runtime current date: ${currentDate}
+Treat this as authoritative. A date on or before ${currentDate} is not in the future. For latest/current claims, judge freshness relative to this runtime date rather than the model's training cutoff.
 
 Stored claim:
 - category: ${record.category}
@@ -28,6 +31,11 @@ Fresh evidence:
 ${String(evidence || '').slice(0, 12000)}
 
 Use only the fresh evidence. Choose confirmed only when it supports the stored value. Choose updated when it supports a clear replacement value, contradicted when it refutes the claim without a supported replacement, or insufficient when the evidence cannot decide. Every supporting URL must appear verbatim in the evidence. Return JSON only. /no_think`;
+}
+
+async function evaluateKnowledge(record, evidence, options = {}) {
+    const adapter = options.adapter || createModelAdapter();
+    const prompt = buildVerificationPrompt(record, evidence, options.now || new Date());
 
     const messages = [
         { role: 'system', content: 'You are a strict evidence comparison API. Return only valid JSON.' },
@@ -48,5 +56,6 @@ Use only the fresh evidence. Choose confirmed only when it supports the stored v
 
 module.exports = {
     evaluateKnowledge,
+    buildVerificationPrompt,
     VERIFICATION_SCHEMA
 };

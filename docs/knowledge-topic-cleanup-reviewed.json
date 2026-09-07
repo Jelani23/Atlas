@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "changes": [
+    {
+      "id": 63,
+      "expected": {
+        "subject": "ollama_release",
+        "key": "latest_stable_version",
+        "value": "v0.33.1",
+        "updated_at": "2026-09-02T20:30:09.419325+00:00",
+        "topics": [
+          "ollama",
+          "release",
+          "qwen"
+        ]
+      },
+      "topics": [
+        "ollama",
+        "release"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    },
+    {
+      "id": 66,
+      "expected": {
+        "subject": "ollama_release",
+        "key": "qwen3_8_support",
+        "value": "Ollama supports Qwen 3.8 27B, which delivers substantial gains across coding, professional work, research, and long-horizon agentic tasks",
+        "updated_at": "2026-09-02T13:40:31.980626+00:00",
+        "topics": [
+          "ollama",
+          "qwen3_8",
+          "nvidia_nemotron_3_5_lightning"
+        ]
+      },
+      "topics": [
+        "ollama",
+        "qwen3_8"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    },
+    {
+      "id": 69,
+      "expected": {
+        "subject": "ollama_release_195_6",
+        "key": "release_version",
+        "value": "195.6",
+        "updated_at": "2026-09-02T20:30:28.662533+00:00",
+        "topics": [
+          "ollama",
+          "release",
+          "dark_mode",
+          "macos_compatibility",
+          "qwen_3_8_27b"
+        ]
+      },
+      "topics": [
+        "ollama",
+        "release"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    },
+    {
+      "id": 74,
+      "expected": {
+        "subject": "ollama_release",
+        "key": "dark_mode_support_restored",
+        "value": "Restored dark mode support across operating systems",
+        "updated_at": "2026-09-03T19:25:49.700686+00:00",
+        "topics": [
+          "dark_mode",
+          "macos",
+          "macos_compatibility",
+          "ollama",
+          "qwen_3_8_27b",
+          "release"
+        ]
+      },
+      "topics": [
+        "dark_mode",
+        "ollama",
+        "release"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    },
+    {
+      "id": 75,
+      "expected": {
+        "subject": "ollama_release",
+        "key": "qwen_3_8_27b_model_added",
+        "value": "Added Qwen 3.8 27B model support",
+        "updated_at": "2026-09-02T19:59:40.695908+00:00",
+        "topics": [
+          "dark_mode",
+          "macos_compatibility",
+          "ollama",
+          "qwen",
+          "qwen_3_8_27b",
+          "release"
+        ]
+      },
+      "topics": [
+        "ollama",
+        "qwen",
+        "qwen_3_8_27b",
+        "release"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    },
+    {
+      "id": 76,
+      "expected": {
+        "subject": "ollama_release",
+        "key": "macos_instance_handling_fixed",
+        "value": "Fixed macOS app to properly handle existing instances",
+        "updated_at": "2026-09-03T19:25:59.198792+00:00",
+        "topics": [
+          "dark_mode",
+          "macos",
+          "macos_compatibility",
+          "ollama",
+          "qwen_3_8_27b",
+          "release"
+        ]
+      },
+      "topics": [
+        "macos",
+        "macos_compatibility",
+        "ollama",
+        "release"
+      ],
+      "reason": "Reviewed unrelated entity or feature tags carried over from other claims; retain other tags for separate semantic review."
+    }
+  ]
+}

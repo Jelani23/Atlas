@@ -1,7 +1,9 @@
 const { reverifyKnowledgeRecord } = require('../../memory/knowledgeVerificationService');
 
 function extractRecordIds(message) {
-    const match = String(message || '').match(/knowledge records?\s+(.+)/i);
+    const match = String(message || '').match(
+        /\b(?:reverify|verify|recheck)\s+(?:knowledge\s+)?records?\s+(.+)/i
+    );
     if (!match) return [];
 
     const ids = [];
@@ -38,7 +40,20 @@ module.exports = {
     intentSchema: {
         name: 'reverifyKnowledge',
         domain: 'MEMORY',
-        triggers: ['reverify knowledge record', 'verify knowledge record', 'recheck knowledge record'],
+        triggers: [
+            'reverify knowledge record',
+            'reverify knowledge records',
+            'verify knowledge record',
+            'verify knowledge records',
+            'recheck knowledge record',
+            'recheck knowledge records',
+            'reverify record',
+            'reverify records',
+            'verify record',
+            'verify records',
+            'recheck record',
+            'recheck records'
+        ],
         requiredEntities: [],
         extractParams: message => {
             const ids = extractRecordIds(message);

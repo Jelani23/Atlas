@@ -1,4 +1,5 @@
 const supabase = require('../database/supabaseClient');
+const { groundedKnowledgeTopics } = require('./knowledgeTopicPolicy');
 const {
     getKnowledgeSearchTerms,
     getKnowledgeAnchorTerms,
@@ -161,7 +162,7 @@ function buildRow(memoryData, { includeVerificationReset = true } = {}) {
     const row = {
         category: normalizeSlug(memoryData.category, 'general'),
         subject: normalizeSlug(memoryData.subject, 'general'),
-        topics: normalizeTopics(memoryData.topics),
+        topics: groundedKnowledgeTopics(memoryData, normalizeTopics(memoryData.topics)),
         type: normalizeSlug(memoryData.type, 'fact'),
         key: normalizeSlug(memoryData.key, memoryData.key),
         value: memoryData.value,
@@ -508,10 +509,16 @@ function getSearchTerms(query) {
 
 function rankSearchResults(rows, terms) {
     const anchors = getKnowledgeAnchorTerms(terms);
-    return (rows || [])
+    const scored = (rows || [])
         .filter(row => isKnowledgeRowRelevant(row, terms, anchors))
         .map(row => ({ row, score: scoreKnowledgeRow(row, terms) }))
-        .sort((a, b) => b.score - a.score)
+        .sort((a, b) => b.score - a.score);
+    if (scored.length === 0) return [];
+
+    const focused = anchors.length >= 2;
+    const scoreFloor = focused ? scored[0].score * 0.65 : 0;
+    return scored
+        .filter(result => result.score >= scoreFloor)
         .map(result => result.row);
 }
 

@@ -19,10 +19,16 @@ function extractSourceUrls(evidence) {
 }
 
 function getEntityTokens(record) {
-    return [...new Set([record.subject, ...(record.topics || [])]
+    const tokens = [record.subject]
         .filter(Boolean)
         .flatMap(value => String(value).toLowerCase().split(/[^a-z0-9]+/))
-        .filter(token => token.length >= 3 && !GENERIC_ENTITY_TOKENS.has(token)))];
+        .filter(token => token.length >= 3 && /^[a-z]/.test(token))
+        .flatMap(token => {
+            const alphaBase = token.match(/^([a-z]{3,})\d+$/)?.[1];
+            return alphaBase ? [token, alphaBase] : [token];
+        })
+        .filter(token => !GENERIC_ENTITY_TOKENS.has(token));
+    return [...new Set(tokens)];
 }
 
 function isPrimarySourceUrl(record, sourceUrl) {

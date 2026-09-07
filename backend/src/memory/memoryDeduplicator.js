@@ -122,7 +122,7 @@ function validateMemory(memory) {
  *             preservation rather than replacement.
  *   ignored   Invalid memory.
  */
-function determineAction(memory, existingMemory = null) {
+function determineAction(memory, existingMemory = null, semanticResolution = null) {
     const validation = validateMemory(memory);
 
     if (!validation.valid) {
@@ -145,6 +145,41 @@ function determineAction(memory, existingMemory = null) {
             identity,
             reason: 'No existing memory matches this identity.'
         };
+    }
+
+    if (semanticResolution?.matched) {
+        if (semanticResolution.relation === 'equivalent') {
+            return {
+                action: 'duplicate',
+                memory,
+                existing: existingMemory,
+                identity,
+                semantic: semanticResolution,
+                reason: 'Semantic canonicalization found an equivalent existing memory.'
+            };
+        }
+
+        if (semanticResolution.relation === 'conflict') {
+            return {
+                action: 'conflict',
+                memory,
+                existing: existingMemory,
+                identity,
+                semantic: semanticResolution,
+                reason: 'Semantic canonicalization found incompatible values for the same identity.'
+            };
+        }
+
+        if (semanticResolution.relation === 'update') {
+            return {
+                action: 'update',
+                memory,
+                existing: existingMemory,
+                identity,
+                semantic: semanticResolution,
+                reason: 'Semantic canonicalization matched an existing identity with a newer value.'
+            };
+        }
     }
 
     if (valuesEqual(existingMemory.value, memory.value)) {

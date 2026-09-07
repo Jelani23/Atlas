@@ -1,10 +1,19 @@
 const longTermProfile = require('./longTermProfile');
 const projectMemory = require('./projectMemory');
 const knowledgeLibrary = require('./knowledgeLibrary');
+const { groundedKnowledgeTopics } = require('./knowledgeTopicPolicy');
 const proceduralMemory = require('./proceduralMemory');
 const memoryCache = require('../core/memoryCache');
 const memoryDeduplicator = require('./memoryDeduplicator');
+const memoryCanonicalizer = require('./memoryCanonicalizer');
 const projectResolver = require('./projectResolver');
+
+function mergeTopics(existingTopics, incomingTopics) {
+    return [...new Set([
+        ...(Array.isArray(existingTopics) ? existingTopics : []),
+        ...(Array.isArray(incomingTopics) ? incomingTopics : [])
+    ])];
+}
 
 async function findExistingMemory(memory) {
     const category = memory.category;
@@ -77,7 +86,8 @@ async function handleMemoryAction(extractedMemories) {
     const conflicts = [];
     const ignored = [];
 
-    for (const memory of extractedMemories) {
+    for (const extractedMemory of extractedMemories) {
+        let memory = extractedMemory;
         if (!memory) {
             ignored.push({
                 memory,
@@ -165,10 +175,42 @@ async function handleMemoryAction(extractedMemories) {
                 memory.project_key = projectResult.project.project_key;
             }
 
-            const existingMemory = await findExistingMemory(memory);
+            let existingMemory = await findExistingMemory(memory);
+            let semanticResolution = null;
+
+            if (!existingMemory) {
+                semanticResolution = await memoryCanonicalizer.resolveMemory(memory);
+
+                if (semanticResolution.matched) {
+                    memory = semanticResolution.memory;
+                    existingMemory = semanticResolution.existing;
+                    console.log(
+                        `[MemoryCanonicalizer] ${extractedMemory.category}/${extractedMemory.key} ` +
+                        `→ ${memory.category}/${memory.key} (${semanticResolution.relation}, ` +
+                        `${semanticResolution.confidence.toFixed(2)})`
+                    );
+                }
+            }
+
+            if (
+                memory.category === 'knowledge' &&
+                existingMemory?.verification_status === 'verified' &&
+                !memoryDeduplicator.valuesEqual(existingMemory.value, memory.value) &&
+                semanticResolution?.relation !== 'equivalent'
+            ) {
+                semanticResolution = {
+                    ...(semanticResolution || {}),
+                    matched: true,
+                    relation: 'conflict',
+                    confidence: semanticResolution?.confidence || 1,
+                    reason: 'An unverified extraction cannot replace verified knowledge.'
+                };
+            }
+
             const decision = memoryDeduplicator.determineAction(
                 memory,
-                existingMemory
+                existingMemory,
+                semanticResolution
             );
 
             console.log(
@@ -197,13 +239,16 @@ async function handleMemoryAction(extractedMemories) {
                 // and project memories intentionally do NOT get this
                 // treatment - their duplicate semantics are unchanged.
                 if (memory.category === 'knowledge') {
+                    const canonicalValue = semanticResolution?.relation === 'equivalent'
+                        ? existingMemory.value
+                        : memory.value;
                     await knowledgeLibrary.upsertKnowledge({
                         category: memory.knowledge_category || 'general',
                         subject: memory.subject || 'general',
-                        topics: Array.isArray(memory.topics) ? memory.topics : [],
+                        topics: groundedKnowledgeTopics({ ...memory, value: canonicalValue }, mergeTopics(existingMemory?.topics, memory.topics)),
                         type: memory.type,
                         key: memory.key,
-                        value: memory.value,
+                        value: canonicalValue,
                         confidence: memory.confidence ?? 1.0,
                         source: memory.source,
                         source_type: memory.source_type
@@ -286,9 +331,7 @@ async function handleMemoryAction(extractedMemories) {
                     await knowledgeLibrary.upsertKnowledge({
                         category: memory.knowledge_category || 'general',
                         subject: memory.subject || 'general',
-                        topics: Array.isArray(memory.topics)
-                            ? memory.topics
-                            : [],
+                        topics: groundedKnowledgeTopics(memory, mergeTopics(existingMemory?.topics, memory.topics)),
                         type: memory.type,
                         key: memory.key,
                         value: memory.value,

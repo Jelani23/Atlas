@@ -2,5 +2,6 @@
 module.exports = {
     lastSearchQuery: null,
     lastFileAction: null,
-    pendingAction: null
+    pendingAction: null,
+    pendingPlan: null
 };

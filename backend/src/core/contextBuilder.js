@@ -296,8 +296,11 @@ Limitations:
 
     const systemPrompt = personalityEngine.getSystemPrompt(mode, policy, responseStyle);
 
-    const isWebSearchResult = toolResult && toolResult.needsTool &&
-        (toolResult.toolName === 'search_web' || toolResult.toolName === 'webSearch');
+    const isWebSearchResult = toolResult && toolResult.needsTool && (
+        toolResult.hasWebSearch === true ||
+        toolResult.toolName === 'search_web' ||
+        toolResult.toolName === 'webSearch'
+    );
     let toolContext = '';
     if (toolResult && toolResult.needsTool) {
         // Phase: prefer Gemini's condensed version of the raw tool result
@@ -317,7 +320,14 @@ Limitations:
         // deterministic ceiling on raw web material so one unusually large
         // result page cannot crowd the instructions and conversation out of
         // a small local model's context. Status and source ordering survive.
-        if (isWebSearchResult) {
+        if (Array.isArray(toolResult.toolResults)) {
+            resultData = toolResult.toolResults.map((step, index) => {
+                const stepResult = step.isWebSearch
+                    ? compactSearchEvidence(step.result)
+                    : step.result;
+                return `Task ${index + 1} — ${step.toolName}:\n${stepResult}`;
+            }).join('\n\n');
+        } else if (isWebSearchResult) {
             resultData = compactSearchEvidence(resultData);
         }
         toolContext = `Tool Executed: ${toolResult.toolName}\nResult Data:\n${resultData}`;
@@ -328,7 +338,9 @@ Limitations:
     // style ever actually engaging (see conversationEngine.js's
     // intent.intent fix) - putting the instruction here too means a
     // synthesized answer happens regardless of which style path executes.
-    const searchHasEvidence = isWebSearchResult && hasVerifiedSearchEvidence(toolResult.toolResult);
+    const searchHasEvidence = isWebSearchResult && hasVerifiedSearchEvidence(
+        toolResult.searchEvidence || toolResult.toolResult
+    );
     const searchGuideline = !isWebSearchResult
         ? ''
         : searchHasEvidence

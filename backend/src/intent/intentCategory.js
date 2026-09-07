@@ -74,6 +74,18 @@ function categoryFromToolName(toolName) {
     return DOMAIN_CATEGORY[domain] || null;
 }
 
+function categoryFromToolResult(toolResult) {
+    if (!toolResult || !toolResult.needsTool) return null;
+    const names = Array.isArray(toolResult.toolNames) && toolResult.toolNames.length > 0
+        ? toolResult.toolNames
+        : [toolResult.toolName];
+    const categories = names.map(categoryFromToolName).filter(Boolean);
+    for (const category of ['search', 'coding', 'memory', 'action']) {
+        if (categories.includes(category)) return category;
+    }
+    return null;
+}
+
 function categoryFromSemanticProfile(semanticProfile) {
     if (!semanticProfile || typeof semanticProfile.taskType !== 'string') return null;
     const taskType = semanticProfile.taskType.toLowerCase();
@@ -88,8 +100,7 @@ function categoryFromSemanticProfile(semanticProfile) {
  * @returns {string} one of VALID_CATEGORIES
  */
 function deriveIntentCategory({ toolResult, semanticProfile } = {}) {
-    const toolName = toolResult && toolResult.needsTool ? toolResult.toolName : null;
-    const fromTool = categoryFromToolName(toolName);
+    const fromTool = categoryFromToolResult(toolResult);
     if (fromTool) return fromTool;
 
     const fromSemantic = categoryFromSemanticProfile(semanticProfile);
@@ -98,4 +109,4 @@ function deriveIntentCategory({ toolResult, semanticProfile } = {}) {
     return 'conversation';
 }
 
-module.exports = { deriveIntentCategory, VALID_CATEGORIES };
+module.exports = { deriveIntentCategory, categoryFromToolResult, VALID_CATEGORIES };

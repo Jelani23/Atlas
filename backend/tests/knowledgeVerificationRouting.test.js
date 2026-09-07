@@ -18,6 +18,18 @@ assert.deepStrictEqual(rangeRoute.params, [77, 78, 79]);
 assert.deepStrictEqual(extractRecordIds('Reverify knowledge records 77, 79 and 81.'), [77, 79, 81]);
 assert.deepStrictEqual(extractRecordIds('Reverify knowledge records 79 through 77.'), [79, 78, 77]);
 
+const pluralRoute = resolve('Reverify knowledge records 74, 75, 76, and 65.');
+assert.strictEqual(pluralRoute.winner, 'reverifyKnowledge');
+assert.deepStrictEqual(pluralRoute.params, [74, 75, 76, 65]);
+
+const pluralRangeRoute = resolve('Reverify knowledge records 74-76.');
+assert.strictEqual(pluralRangeRoute.winner, 'reverifyKnowledge');
+assert.deepStrictEqual(pluralRangeRoute.params, [74, 75, 76]);
+
+const shortRoute = resolve('Reverify record 63.');
+assert.strictEqual(shortRoute.winner, 'reverifyKnowledge');
+assert.deepStrictEqual(shortRoute.params, [63]);
+
 const schemaQuestion = resolve('Does knowledge record 64 have a verification status?');
 assert.notStrictEqual(schemaQuestion.winner, 'reverifyKnowledge');
 

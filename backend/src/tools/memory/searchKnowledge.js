@@ -1,10 +1,10 @@
 // src/tools/memory/searchKnowledge.js
 const knowledgeLibrary = require('../../memory/knowledgeLibrary');
-const { isKnowledgeRetrievable } = require('../../memory/knowledgeAudit');
+const { isKnowledgeActive, isKnowledgeRetrievable } = require('../../memory/knowledgeAudit');
 const { formatProvisionalKnowledge } = require('../../memory/knowledgeRecall');
 
 async function searchKnowledge(query) {
-    const results = await knowledgeLibrary.search(query);
+    const results = (await knowledgeLibrary.search(query)).filter(isKnowledgeActive);
     const trustedResults = results.filter(isKnowledgeRetrievable);
     const provisionalResults = results.filter(result => !isKnowledgeRetrievable(result));
     const trustedSummary = trustedResults.map(r => {

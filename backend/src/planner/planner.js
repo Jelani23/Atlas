@@ -3,6 +3,29 @@ const { execute } = require('../tools/toolExecutor');
 const llmRouter = require('./routing/llmRouter');
 const permissionManager = require('../permissions/permissionManager');
 const state = require('./state');
+const { compileToolPlan } = require('./toolPlanning/toolPlanCompiler');
+const { executeToolPlan } = require('./toolPlanning/toolPlanExecutor');
+const {
+    createSemanticToolPlanner,
+    isSemanticPlanningEnabled
+} = require('./toolPlanning/semanticToolPlanner');
+
+const semanticToolPlanner = createSemanticToolPlanner();
+
+function planResult(execution) {
+    return {
+        needsTool: true,
+        toolName: 'multi_tool',
+        toolNames: execution.toolNames || [],
+        toolResults: execution.results || [],
+        toolResult: execution.toolResult,
+        searchEvidence: execution.searchEvidence || '',
+        searchQuery: execution.searchQuery || '',
+        hasWebSearch: execution.hasWebSearch === true,
+        failedCount: execution.failedCount || 0,
+        shortCircuit: execution.shortCircuit === true
+    };
+}
 
 async function route(intent, message, history = [], taskId, requestId) {
     // 0. Systemic Permission & Confirmation Boundary
@@ -20,6 +43,31 @@ async function route(intent, message, history = [], taskId, requestId) {
                 toolResult: "Permission resolved.", 
                 shortCircuit: true 
             };
+        }
+
+        if (state.pendingPlan) {
+            const pendingPlan = state.pendingPlan;
+            state.pendingPlan = null;
+            if (isNegative) {
+                return {
+                    needsTool: true,
+                    toolName: 'confirmation',
+                    toolResult: "Okay, I won't run that tool plan.",
+                    shortCircuit: true
+                };
+            }
+
+            console.log(`[Planner] User approved a ${pendingPlan.steps.length}-step tool plan.`);
+            try {
+                return planResult(await executeToolPlan(pendingPlan, { approved: true }));
+            } catch (err) {
+                return {
+                    needsTool: true,
+                    toolName: 'multi_tool',
+                    toolResult: `Tool plan failed: ${err.message}`,
+                    shortCircuit: true
+                };
+            }
         }
         
         // Check for pending deterministic tool confirmations
@@ -40,6 +88,36 @@ async function route(intent, message, history = [], taskId, requestId) {
                 return { needsTool: true, toolName: 'confirmation', toolResult: `Okay, I won't ${denied.replace(/([A-Z])/g, ' $1').toLowerCase()} that.`, shortCircuit: true };
             }
         }
+    }
+
+    const compiled = await compileToolPlan(message, {
+        semanticPlanner: isSemanticPlanningEnabled()
+            ? payload => semanticToolPlanner({ ...payload, requestId })
+            : null
+    });
+    if (compiled.status === 'ready') {
+        console.log(`[Planner] Executing ${compiled.plan.steps.length}-step tool plan.`);
+        const execution = await executeToolPlan(compiled.plan);
+        if (execution.status === 'approval_required') {
+            state.pendingPlan = compiled.plan;
+            return {
+                needsTool: true,
+                toolName: 'permission_request',
+                toolResult: execution.prompt,
+                shortCircuit: true
+            };
+        }
+        return planResult(execution);
+    }
+
+    if (compiled.status === 'blocked') {
+        console.log('[Planner] Multi-tool request was not safe to execute.');
+        return {
+            needsTool: true,
+            toolName: 'ask_clarification',
+            toolResult: "I can see multiple requested actions, but I couldn't map every step safely. Please separate or clarify the actions you want me to run.",
+            shortCircuit: true
+        };
     }
 
     // 1. Deterministic Fast-Path
@@ -110,4 +188,4 @@ async function route(intent, message, history = [], taskId, requestId) {
     return { needsTool: false };
 }
 
-module.exports = { route };
+module.exports = { route, planResult };

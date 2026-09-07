@@ -94,4 +94,29 @@ assert.deepStrictEqual(
     [90]
 );
 
+const darkModeTerms = getSearchTerms('Search the knowledge library for Ollama dark mode support');
+assert.deepStrictEqual(
+    rankSearchResults([
+        {
+            id: 74,
+            category: 'technology',
+            subject: 'ollama_release',
+            key: 'dark_mode_support_restored',
+            value: 'Restored dark mode support across operating systems',
+            topics: ['ollama', 'dark_mode'],
+            type: 'fact'
+        },
+        {
+            id: 65,
+            category: 'technology',
+            subject: 'ollama_version',
+            key: 'important_changes',
+            value: 'Restored dark mode support; fixed macOS handoff.',
+            topics: ['ollama', 'release', 'changes'],
+            type: 'fact'
+        }
+    ], darkModeTerms).map(row => row.id),
+    [74]
+);
+
 console.log('knowledgeAuditReport.test.js: all assertions passed');

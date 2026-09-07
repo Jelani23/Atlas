@@ -10,7 +10,14 @@
     "migrate:supabase": "node scripts/migrateToSupabase.js",
     "reflection:requeue": "node scripts/requeueReflection.js",
     "reflection:backfill": "node scripts/backfillReflections.js",
-    "knowledge:audit": "node scripts/auditKnowledge.js"
+    "knowledge:audit": "node scripts/auditKnowledge.js",
+    "memory:canonical-audit": "node scripts/auditMemoryCanonicalization.js",
+    "knowledge:cleanup-plan": "node scripts/planKnowledgeCleanup.js",
+    "knowledge:cleanup": "node scripts/applyKnowledgeCleanup.js",
+    "knowledge:atomic-plan": "node scripts/planKnowledgeAtomicity.js",
+    "knowledge:topic-audit": "node scripts/auditKnowledgeTopics.js",
+    "knowledge:topic-cleanup": "node scripts/cleanupKnowledgeTopics.js",
+    "knowledge:atomic": "node scripts/applyKnowledgeDecomposition.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

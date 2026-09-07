@@ -157,8 +157,11 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         const plannerDuration = Date.now() - plannerStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'planner', duration: plannerDuration, timestamp: Date.now() });
 
-        const ranWebSearch = toolResult.needsTool &&
-            (toolResult.toolName === 'search_web' || toolResult.toolName === 'webSearch');
+        const ranWebSearch = toolResult.needsTool && (
+            toolResult.hasWebSearch === true ||
+            toolResult.toolName === 'search_web' ||
+            toolResult.toolName === 'webSearch'
+        );
 
         // Coarse intent is derived from the route that actually won. Remote
         // Groq/Gemini preprocessing used to sit on every ambiguous turn's
@@ -177,9 +180,12 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         }
 
         if (toolResult.needsTool) {
-            const failed = typeof toolResult.toolResult === 'string' &&
-                (toolResult.toolResult.toLowerCase().includes('tool execution failed') ||
-                    (ranWebSearch && !hasVerifiedSearchEvidence(toolResult.toolResult)));
+            const failed = Number(toolResult.failedCount || 0) > 0 ||
+                (typeof toolResult.toolResult === 'string' &&
+                    (toolResult.toolResult.toLowerCase().includes('tool execution failed') ||
+                        (ranWebSearch && !hasVerifiedSearchEvidence(
+                            toolResult.searchEvidence || toolResult.toolResult
+                        ))));
             eventBus.emit(EventTypes.TOOL_COMPLETED, { taskId, requestId, tool: toolResult.toolName, success: !failed, timestamp: Date.now() });
         } else {
             eventBus.emit(EventTypes.TOOL_COMPLETED, { taskId, requestId, tool: null, success: true, timestamp: Date.now() });
@@ -193,7 +199,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             });
         }
 
-        const modelChoice = modelRouter.getModelForTask(toolResult.toolName);
+        const modelChoice = modelRouter.getModelForTask(ranWebSearch ? 'search_web' : toolResult.toolName);
         const reasoning = { ...reasoningDepth, ...modelChoice };
         if (modelChoice.supportsThinking === false) {
             reasoning.think = false;
@@ -494,9 +500,9 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                     const searchKnowledgeExtractor = require('../memory/searchKnowledgeExtractor');
 
                     const extractionResult = await searchKnowledgeExtractor.extractAndSaveFromSearch({
-                        query: userInput,
+                        query: toolResult.searchQuery || userInput,
                         summary: reply,
-                        rawResults: toolResult.toolResult
+                        rawResults: toolResult.searchEvidence || toolResult.toolResult
                     });
 
                     console.log(

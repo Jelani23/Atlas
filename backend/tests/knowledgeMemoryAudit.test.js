@@ -519,8 +519,8 @@ async function testPlanScenarios() {
 
     const afterE = await fakeKnowledgeLibrary.find('geography', 'pacific_ocean', 'size_rank');
     ok(
-        'Test E: topics on the existing record were refreshed to the latest set',
-        JSON.stringify(afterE.topics) === JSON.stringify(['records', 'superlatives']),
+        'Test E: duplicate refresh retains claim-supported topics and rejects unsupported additions',
+        JSON.stringify(afterE.topics) === JSON.stringify(['oceans', 'earth']),
         JSON.stringify(afterE)
     );
 
