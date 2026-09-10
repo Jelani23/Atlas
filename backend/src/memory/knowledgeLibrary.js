@@ -1,4 +1,6 @@
 const supabase = require('../database/supabaseClient');
+const ingestion = require('./knowledgeIngestionRepository').createRepository(supabase);
+const verificationWrites = require('./knowledgeVerificationWrites').createVerificationWrites(supabase);
 const { groundedKnowledgeTopics } = require('./knowledgeTopicPolicy');
 const {
     getKnowledgeSearchTerms,
@@ -247,40 +249,11 @@ async function updateKnowledge(memoryData) {
     return true;
 }
 
-/**
- * ------------------------------------------------------------
- * UPSERT KNOWLEDGE (insert OR refresh)
- * ------------------------------------------------------------
- * Native Postgres INSERT ... ON CONFLICT DO UPDATE on the
- * (category, subject, key) unique constraint, the same pattern
- * projectMemory.js already uses. This is the primary entry point
- * memoryManager.js calls for insert/update/duplicate-refresh alike:
- * a true duplicate (same value) still needs its confidence/source/
- * updated_at refreshed per the plan (§6 "DUPLICATE / REFRESH"), and
- * a changed value needs the row updated (§6 "UPDATE") - both are the
- * same SQL operation here, just with different resulting values, so
- * there's no reason to force two different code paths above this
- * for what is structurally one deterministic write.
- * ------------------------------------------------------------
- */
-async function upsertKnowledge(memoryData, { preserveVerification = false } = {}) {
-    const row = buildRow(memoryData, { includeVerificationReset: !preserveVerification });
-
-    const { error } = await supabase
-        .from('knowledge_library')
-        .upsert(
-            {
-                ...row,
-                updated_at: new Date().toISOString()
-            },
-            { onConflict: 'category,subject,key' }
-        );
-
-    if (error) {
-        throw new Error(`Failed to save knowledge: ${error.message}`);
-    }
-
-    return true;
+// Transactional ingestion: insert, safe refresh, or durable review. A stale
+// application-side comparison must never overwrite a changed canonical row.
+async function upsertKnowledge(memoryData, options = {}) {
+    const row = buildRow(memoryData, { includeVerificationReset: false });
+    return ingestion.ingest(row, options);
 }
 
 /**
@@ -326,42 +299,12 @@ async function getById(id) {
     return data || null;
 }
 
-async function beginVerification(id, currentAttempts = 0) {
-    const { error } = await supabase
-        .from('knowledge_library')
-        .update({
-            verification_status: 'pending',
-            verification_error: null,
-            verification_attempts: Number(currentAttempts || 0) + 1
-        })
-        .eq('id', id);
-
-    if (error) {
-        throw new Error(`Failed to start knowledge verification: ${error.message}`);
-    }
-
+async function beginVerification(id, expected) {
+    return verificationWrites.begin(id, expected);
 }
 
-async function applyVerification(id, update) {
-    const { data, error } = await supabase
-        .from('knowledge_library')
-        .update({
-            ...update,
-            updated_at: new Date().toISOString()
-        })
-        .eq('id', id)
-        .select(SELECT_COLUMNS)
-        .maybeSingle();
-
-    if (error) {
-        throw new Error(`Failed to update knowledge verification: ${error.message}`);
-    }
-
-    if (!data) {
-        throw new Error('Knowledge verification matched no record.');
-    }
-
-    return data;
+async function applyVerification(id, update, claimed) {
+    return verificationWrites.apply(id, update, claimed);
 }
 
 async function createVerificationRun(run) {

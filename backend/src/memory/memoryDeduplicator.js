@@ -18,7 +18,8 @@ function normalize(value) {
         .toLowerCase();
 }
 
-function valuesEqual(existingValue, newValue) {
+function valuesEqual(existingValue, newValue, { caseSensitive = false } = {}) {
+    if (caseSensitive) return String(existingValue ?? '').trim() === String(newValue ?? '').trim();
     return normalize(existingValue) === normalize(newValue);
 }
 
@@ -182,7 +183,7 @@ function determineAction(memory, existingMemory = null, semanticResolution = nul
         }
     }
 
-    if (valuesEqual(existingMemory.value, memory.value)) {
+    if (valuesEqual(existingMemory.value, memory.value, { caseSensitive: memory.category === 'knowledge' })) {
         return {
             action: 'duplicate',
             memory,

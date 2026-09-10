@@ -20,7 +20,7 @@ async function testUpdatedClaim() {
     const repository = {
         getById: async () => ({ ...record }),
         createVerificationRun: async run => { calls.push(['createRun', run]); return 9; },
-        beginVerification: async (...args) => calls.push(['begin', args]),
+        beginVerification: async (...args) => { calls.push(['begin', args]); return { ...record, verification_status: 'pending', verification_attempts: 1 }; },
         applyVerification: async (id, update) => {
             calls.push(['apply', id, update]);
             return { ...record, ...update };
@@ -67,7 +67,7 @@ async function testUnsupportedEvidenceStaysUnverified() {
     const repository = {
         getById: async () => ({ ...record }),
         createVerificationRun: async () => 10,
-        beginVerification: async () => {},
+        beginVerification: async () => ({ ...record, verification_status: 'pending', verification_attempts: 2 }),
         applyVerification: async (id, update) => {
             applied = update;
             return { ...record, ...update };

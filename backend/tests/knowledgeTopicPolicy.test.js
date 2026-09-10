@@ -21,6 +21,7 @@ assert.deepStrictEqual(groundedKnowledgeTopics({
 const writes = [];
 const clientPath = require.resolve('../src/database/supabaseClient');
 require.cache[clientPath] = { id: clientPath, filename: clientPath, loaded: true, exports: {
+    rpc: async (_name, args) => { writes.push(args.p_candidate); return { data: { action: 'refreshed', record_id: 1 }, error: null }; },
     from: () => ({
         insert: async row => { writes.push(row); return { error: null }; },
         upsert: async row => { writes.push(row); return { error: null }; }
@@ -29,7 +30,7 @@ require.cache[clientPath] = { id: clientPath, filename: clientPath, loaded: true
 const library = require('../src/memory/knowledgeLibrary');
 async function run() {
     await library.addKnowledge(darkMode);
-    await library.upsertKnowledge(darkMode, { preserveVerification: true });
+    await library.upsertKnowledge(darkMode);
     for (const row of writes) {
         assert.deepStrictEqual(row.topics, ['dark_mode', 'ollama', 'release']);
         assert.strictEqual(row.value, darkMode.value);

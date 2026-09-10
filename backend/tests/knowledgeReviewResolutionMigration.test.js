@@ -1,0 +1,15 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const sql = fs.readFileSync(path.join(__dirname, '../src/database/migrations/012_knowledge_review_resolution.sql'), 'utf8').trim();
+const schema = fs.readFileSync(path.join(__dirname, '../src/database/supabase_schema.sql'), 'utf8');
+assert.ok(schema.includes(sql), 'Migration must be included in fresh schema');
+assert.match(sql, /on conflict \(dedupe_key\) where status = 'pending' do update/);
+assert.match(sql, /resolution_before = before_row, resolution_after = after_row/);
+assert.match(sql, /jsonb_populate_record\(null::public.knowledge_library, p_expected_current\)/);
+assert.match(sql, /jsonb_populate_record\(null::public.knowledge_ingestion_reviews, p_expected_review\)/);
+assert.match(sql, /verification_sources = '\[\]'::jsonb/);
+assert.match(sql, /security invoker/);
+assert.match(sql, /revoke all on function public.resolve_knowledge_ingestion_review/);
+assert.doesNotMatch(sql, /delete from public.knowledge_library/i);
+console.log('knowledgeReviewResolutionMigration.test.js passed (structural only)');

@@ -36,7 +36,7 @@ const fakeKnowledge = {
     },
     async upsertKnowledge(row, options) {
         writes.push({ row, options });
-        return true;
+        return { action: 'refreshed', record_id: canonicalRow.id };
     }
 };
 
@@ -81,9 +81,10 @@ async function run() {
     assert.strictEqual(writes.length, 1);
     assert.strictEqual(writes[0].row.subject, canonicalRow.subject);
     assert.strictEqual(writes[0].row.key, canonicalRow.key);
-    assert.strictEqual(writes[0].row.value, canonicalRow.value);
+    assert.strictEqual(writes[0].row.value, 'The model has 2.4 trillion parameters.', 'Preserve the incoming claim for any queued review');
     assert.deepStrictEqual(writes[0].row.topics, ['qwen', 'parameters']);
-    assert.strictEqual(writes[0].options.preserveVerification, true);
+    assert.strictEqual(writes[0].options.equivalent, true);
+    assert.strictEqual(writes[0].options.expected, canonicalRow);
 
     console.log('memoryCanonicalizationManager.test.js passed');
 }

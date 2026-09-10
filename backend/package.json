@@ -12,11 +12,14 @@
     "reflection:backfill": "node scripts/backfillReflections.js",
     "knowledge:audit": "node scripts/auditKnowledge.js",
     "memory:canonical-audit": "node scripts/auditMemoryCanonicalization.js",
+    "memory:canonical-eval": "node scripts/evaluateMemoryCanonicalization.js",
     "knowledge:cleanup-plan": "node scripts/planKnowledgeCleanup.js",
     "knowledge:cleanup": "node scripts/applyKnowledgeCleanup.js",
     "knowledge:atomic-plan": "node scripts/planKnowledgeAtomicity.js",
     "knowledge:topic-audit": "node scripts/auditKnowledgeTopics.js",
     "knowledge:topic-cleanup": "node scripts/cleanupKnowledgeTopics.js",
+    "knowledge:ingestion-review": "node scripts/listKnowledgeIngestionReviews.js",
+    "knowledge:review-resolve": "node scripts/resolveKnowledgeReview.js",
     "knowledge:atomic": "node scripts/applyKnowledgeDecomposition.js"
   },
   "dependencies": {

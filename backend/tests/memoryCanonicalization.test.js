@@ -20,7 +20,7 @@ const existing = {
 const incoming = {
     category: 'knowledge',
     knowledge_category: 'technology',
-    subject: 'qwen_max_model_family',
+    subject: 'qwen_3_8_max_model_family',
     topics: ['qwen_models', 'parameters'],
     key: 'parameter_total',
     value: 'The model has 2.4 trillion parameters.'
@@ -87,14 +87,14 @@ async function run() {
         rows: [{
             id: 72,
             category: 'technology',
-            subject: 'ollama_release_195_6',
+            subject: 'ollama_release',
             topics: ['ollama', 'release'],
             key: 'qwen_3_8_27b_model_added',
             value: 'Added Qwen 3.8 27B model support'
         }],
         evaluate: async () => {
             evaluatorCalled = true;
-            return { candidate_index: -1, relation: 'distinct', confidence: 1, reason: '' };
+            return { candidate_index: 0, relation: 'equivalent', confidence: 0.97, reason: 'Same full claim after semantic review.' };
         }
     });
     assert.strictEqual(deterministicEquivalent.matched, true);
@@ -120,12 +120,12 @@ async function run() {
         }],
         evaluate: async () => {
             evaluatorCalled = true;
-            return { candidate_index: -1, relation: 'distinct', confidence: 1, reason: '' };
+            return { candidate_index: 0, relation: 'equivalent', confidence: 0.97, reason: 'Same full claim after semantic review.' };
         }
     });
     assert.strictEqual(anchoredParaphrase.matched, true);
     assert.strictEqual(anchoredParaphrase.relation, 'equivalent');
-    assert.strictEqual(evaluatorCalled, false, 'strong anchored paraphrases should be deterministic');
+    assert.strictEqual(evaluatorCalled, true, 'paraphrases require semantic review rather than word overlap');
 
     evaluatorCalled = false;
     const labelAgnosticEquivalent = await canonicalizer.resolveMemory({
@@ -146,12 +146,12 @@ async function run() {
         }],
         evaluate: async () => {
             evaluatorCalled = true;
-            return { candidate_index: -1, relation: 'distinct', confidence: 1, reason: '' };
+            return { candidate_index: 0, relation: 'equivalent', confidence: 0.97, reason: 'Same full claim after semantic review.' };
         }
     });
     assert.strictEqual(labelAgnosticEquivalent.relation, 'equivalent');
     assert.strictEqual(labelAgnosticEquivalent.existing.id, 74);
-    assert.strictEqual(evaluatorCalled, false, 'storage-label variants should match from grounded claim content');
+    assert.strictEqual(evaluatorCalled, true, 'storage-label variants require semantic review');
 
     evaluatorCalled = false;
     const differentModelVariant = await canonicalizer.resolveMemory({
@@ -240,7 +240,7 @@ async function run() {
         {
             id: 78,
             category: 'technology',
-            subject: 'qwen_max_model_family',
+            subject: 'qwen_3_8_max_model_family',
             topics: [],
             key: 'parameter_total',
             value: 'The model has 2.4 trillion parameters.',
@@ -262,7 +262,7 @@ async function run() {
             {
                 id: 78,
                 category: 'technology',
-                subject: 'qwen_max_model_family',
+                subject: 'qwen_3_8_max_model_family',
                 topics: ['qwen_models', 'parameters'],
                 key: 'parameter_total',
                 value: 'The model has 2.4 trillion parameters.'

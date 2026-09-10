@@ -1,19 +1,13 @@
 const longTermProfile = require('./longTermProfile');
 const projectMemory = require('./projectMemory');
 const knowledgeLibrary = require('./knowledgeLibrary');
-const { groundedKnowledgeTopics } = require('./knowledgeTopicPolicy');
+const { ingestDecision } = require('./knowledgeIngestion');
 const proceduralMemory = require('./proceduralMemory');
 const memoryCache = require('../core/memoryCache');
 const memoryDeduplicator = require('./memoryDeduplicator');
 const memoryCanonicalizer = require('./memoryCanonicalizer');
 const projectResolver = require('./projectResolver');
 
-function mergeTopics(existingTopics, incomingTopics) {
-    return [...new Set([
-        ...(Array.isArray(existingTopics) ? existingTopics : []),
-        ...(Array.isArray(incomingTopics) ? incomingTopics : [])
-    ])];
-}
 
 async function findExistingMemory(memory) {
     const category = memory.category;
@@ -195,7 +189,7 @@ async function handleMemoryAction(extractedMemories) {
             if (
                 memory.category === 'knowledge' &&
                 existingMemory?.verification_status === 'verified' &&
-                !memoryDeduplicator.valuesEqual(existingMemory.value, memory.value) &&
+                !memoryDeduplicator.valuesEqual(existingMemory.value, memory.value, { caseSensitive: true }) &&
                 semanticResolution?.relation !== 'equivalent'
             ) {
                 semanticResolution = {
@@ -224,38 +218,24 @@ async function handleMemoryAction(extractedMemories) {
                 continue;
             }
 
-            if (decision.action === 'duplicate') {
-                // Knowledge is the one memory type where a
-                // "duplicate" (same canonical identity, same value)
-                // still needs a write - the plan's §6 DUPLICATE /
-                // REFRESH case explicitly calls for confidence,
-                // source, and updated_at to be refreshed even when
-                // the value itself hasn't materially changed, so a
-                // second/third corroborating mention of the same
-                // fact isn't silently a no-op. upsertKnowledge is the
-                // same deterministic DB write used for insert/update
-                // below - see its header comment for why one
-                // operation covers all three cases here. Procedure
-                // and project memories intentionally do NOT get this
-                // treatment - their duplicate semantics are unchanged.
-                if (memory.category === 'knowledge') {
-                    const canonicalValue = semanticResolution?.relation === 'equivalent'
-                        ? existingMemory.value
-                        : memory.value;
-                    await knowledgeLibrary.upsertKnowledge({
-                        category: memory.knowledge_category || 'general',
-                        subject: memory.subject || 'general',
-                        topics: groundedKnowledgeTopics({ ...memory, value: canonicalValue }, mergeTopics(existingMemory?.topics, memory.topics)),
-                        type: memory.type,
-                        key: memory.key,
-                        value: canonicalValue,
-                        confidence: memory.confidence ?? 1.0,
-                        source: memory.source,
-                        source_type: memory.source_type
-                    }, { preserveVerification: true });
-
+            if (memory.category === 'knowledge') {
+                const write = await ingestDecision(decision, knowledgeLibrary);
+                if (write.action === 'review') {
+                    conflicts.push({ ...decision, action: 'conflict', review_id: write.review_id, reason: write.reason });
+                    console.log(`[KnowledgeIngestion] Queued review ${write.review_id}; canonical claim unchanged.`);
+                } else if (write.action === 'refreshed') {
+                    duplicates.push({ ...decision, action: 'duplicate' });
                     memoryCache.invalidate('knowledge_library');
+                } else if (write.action === 'inserted') {
+                    savedMemories.push(memory);
+                    memoryCache.invalidate('knowledge_library');
+                } else {
+                    throw new Error('Knowledge write did not confirm insertion, refresh, or review.');
                 }
+                continue;
+            }
+
+            if (decision.action === 'duplicate') {
 
                 duplicates.push(decision);
                 continue;
@@ -324,25 +304,6 @@ async function handleMemoryAction(extractedMemories) {
                     savedMemories.push(memory);
                 }
 
-                else if (memory.category === 'knowledge') {
-                    // insert and update both resolve to the same
-                    // deterministic upsert - see upsertKnowledge's
-                    // header comment in knowledgeLibrary.js.
-                    await knowledgeLibrary.upsertKnowledge({
-                        category: memory.knowledge_category || 'general',
-                        subject: memory.subject || 'general',
-                        topics: groundedKnowledgeTopics(memory, mergeTopics(existingMemory?.topics, memory.topics)),
-                        type: memory.type,
-                        key: memory.key,
-                        value: memory.value,
-                        confidence: memory.confidence ?? 1.0,
-                        source: memory.source,
-                        source_type: memory.source_type
-                    });
-
-                    memoryCache.invalidate('knowledge_library');
-                    savedMemories.push(memory);
-                }
 
                 else if (memory.category === 'procedure') {
                     const procedureData = {
@@ -393,7 +354,7 @@ async function handleMemoryAction(extractedMemories) {
 
     if (savedMemories.length > 0) {
         return {
-            action: "saved",
+            action: conflicts.length > 0 ? "saved_with_conflicts" : "saved",
             memories: savedMemories,
             duplicates,
             conflicts,

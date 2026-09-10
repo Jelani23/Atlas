@@ -6,7 +6,7 @@ const proceduralMemory = require('../memory/proceduralMemory');
 const devState = require('../memory/devState');
 const reflectionJournal = require('../memory/reflectionJournal');
 
-const warmIndex = {};
+const warmCache = require('./generationCache').createGenerationCache();
 const hotState = {
     activeProject: null,
     activeFiles: [],
@@ -36,46 +36,43 @@ function applyDecay(item, now) {
     return item;
 }
 
-async function getMemory(store) {
-    const now = Date.now();
-    
-    if (!warmIndex[store]) {
-        console.time(`[MemoryCache] Fetch ${store}`);
-        let data = [];
-        try {
-            switch(store) {
-                case 'user_profile': data = await longTermProfile.get(); break;
-                case 'project_memory': data = await projectMemory.get(); break;
-                case 'knowledge_library': data = await knowledgeLibrary.getAll(); break;
-                case 'procedural_memory': data = await proceduralMemory.getAll(); break;
-                case 'dev_state': data = await devState.getAll(); break;
-                case 'reflections': data = await reflectionJournal.getAll(); break;
-            }
-            
-            warmIndex[store] = data.map(d => ({
-                id:
-                    d.id ||
-                    `${store}_${d.project_key || d.subject || 'global'}_${d.key || 'unknown'}`,
-                data: d,
-                score: 0,
-                lastAccessed: now,
-                accessCount: 0,
-                activationReason: "Loaded from COLD storage"
-            }));
-            console.log(`[MemoryCache] ✅ Indexed ${warmIndex[store].length} items for ${store}`);
-        } catch (e) {
-            console.error(`[MemoryCache] Failed to fetch ${store} from COLD storage:`, e.message);
+async function loadMemoryIndex(store) {
+    const started = Date.now();
+    let data = [];
+    try {
+        switch(store) {
+            case 'user_profile': data = await longTermProfile.get(); break;
+            case 'project_memory': data = await projectMemory.get(); break;
+            case 'knowledge_library': data = await knowledgeLibrary.getAll(); break;
+            case 'procedural_memory': data = await proceduralMemory.getAll(); break;
+            case 'dev_state': data = await devState.getAll(); break;
+            case 'reflections': data = await reflectionJournal.getAll(); break;
         }
-        console.timeEnd(`[MemoryCache] Fetch ${store}`);
-    } else {
-        warmIndex[store].forEach(item => applyDecay(item, now));
+        const loadedAt = Date.now();
+        const indexed = data.map(d => ({
+            id: d.id || `${store}_${d.project_key || d.subject || 'global'}_${d.key || 'unknown'}`,
+            data: d, score: 0, lastAccessed: loadedAt, accessCount: 0,
+            activationReason: "Loaded from COLD storage"
+        }));
+        console.log(`[MemoryCache] Loaded ${indexed.length} items for ${store}`);
+        return indexed;
+    } catch (e) {
+        console.error(`[MemoryCache] Failed to fetch ${store} from COLD storage:`, e.message);
+        throw e;
+    } finally {
+        console.log(`[MemoryCache] Fetch ${store}: ${Date.now() - started}ms`);
     }
-    
-    return warmIndex[store];
+}
+
+async function getMemory(store) {
+    const cached = warmCache.peek(store);
+    if (!cached) return warmCache.get(store, () => loadMemoryIndex(store));
+    cached.forEach(item => applyDecay(item, Date.now()));
+    return cached;
 }
 
 function boostItem(store, itemId, amount, reason) {
-    const item = warmIndex[store]?.find(i => i.id === itemId);
+    const item = warmCache.peek(store)?.find(i => i.id === itemId);
     if (item) {
         item.score += amount;
         item.lastAccessed = Date.now();
@@ -87,9 +84,7 @@ function boostItem(store, itemId, amount, reason) {
 // Selective invalidation. When memoryManager saves new data, it calls this.
 // It wipes the RAM cache for that specific store so the next read gets the fresh DB data.
 function invalidate(store) {
-    if (warmIndex[store]) {
-        delete warmIndex[store];
-    }
+    warmCache.invalidate(store);
 
     // Warm and hot are two views of the same underlying store. Leaving the
     // previously selected hot rows in place after a write makes callers see
@@ -102,12 +97,12 @@ function invalidate(store) {
 
 function clearCache(store = null) {
     if (store) {
-        delete warmIndex[store];
+        warmCache.invalidate(store);
         if (Object.prototype.hasOwnProperty.call(hotState.memories, store)) {
             hotState.memories[store] = [];
         }
     } else {
-        for (const key in warmIndex) delete warmIndex[key];
+        warmCache.clear();
         for (const key of Object.keys(hotState.memories)) {
             hotState.memories[key] = [];
         }

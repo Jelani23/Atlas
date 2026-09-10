@@ -1,6 +1,8 @@
 const { createModelAdapter } = require('../models/modelAdapter');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const llmQueue = require('./llmQueue');
+const { equivalenceRisk, procedureScopeDiffers } = require('./memoryEquivalencePolicy');
+const { COMPARISON_SCHEMA, buildComparisonPrompt, comparisonToDecision } = require('./memoryIdentityComparison');
 
 const modelAdapter = createModelAdapter();
 
@@ -9,19 +11,6 @@ const MIN_CONFIDENCE = 0.9;
 const MAX_CANDIDATES = 10;
 const DISABLED_VALUES = new Set(['false', 'disabled', 'off', '0']);
 
-const DECISION_SCHEMA = {
-    type: 'object',
-    properties: {
-        candidate_index: { type: 'integer' },
-        relation: {
-            type: 'string',
-            enum: ['equivalent', 'update', 'conflict', 'distinct']
-        },
-        confidence: { type: 'number' },
-        reason: { type: 'string' }
-    },
-    required: ['candidate_index', 'relation', 'confidence', 'reason']
-};
 
 const COMMON_TOKENS = new Set([
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
@@ -164,40 +153,23 @@ function selectCandidates(memory, rows, limit = MAX_CANDIDATES) {
 
 function findStrongEquivalent(memory, candidates) {
     return candidates.find(candidate => {
+        if (!candidateScopeMatches(memory, candidate)) return false;
         if (hasConflictingSubjectQualifiers(memory.subject, candidate.subject)) return false;
         const sameKey = normalizeComparable(memory.key) === normalizeComparable(candidate.key);
-        const sameValue = normalizeComparable(memory.value) === normalizeComparable(candidate.value);
-        const subjectOverlap = overlap(tokenize(memory.subject), tokenize(candidate.subject));
-        const keyOverlap = overlap(tokenize(memory.key), tokenize(candidate.key));
-        const valueOverlap = overlap(tokenize(memory.value), tokenize(candidate.value));
-        const topicOverlap = overlap(tokenize((memory.topics || []).join(' ')), tokenize((candidate.topics || []).join(' ')));
-        const subjectCoreOverlap = containmentOverlap(
-            getSubjectCore(memory.subject),
-            getSubjectCore(candidate.subject)
-        );
-        const claimContainment = containmentOverlap(
-            tokenize(`${memory.key || ''} ${memory.value || ''}`),
-            tokenize(`${candidate.key || ''} ${candidate.value || ''}`)
-        );
-        const exactClaim = sameKey && sameValue && (subjectOverlap >= 0.5 || topicOverlap >= 0.5);
-        const anchoredParaphrase =
-            subjectOverlap >= 0.5 &&
-            keyOverlap >= 0.75 &&
-            valueOverlap >= 0.45 &&
-            !hasDifferentVersions(memory.value, candidate.value) &&
-            isCompositeValue(memory.value) === isCompositeValue(candidate.value);
-        const labelAgnosticParaphrase =
-            subjectCoreOverlap >= 0.75 &&
-            claimContainment >= 0.6 &&
-            !hasConflictingSubjectQualifiers(memory.subject, candidate.subject) &&
-            !hasDifferentVersions(memory.value, candidate.value) &&
-            isCompositeValue(memory.value) === isCompositeValue(candidate.value);
-        return exactClaim || anchoredParaphrase || labelAgnosticParaphrase;
+        // Similar words retrieve candidates; they do not prove semantic equality.
+        // Preserve punctuation, signs and casing in values (e.g. -5 vs 5, MB vs Mb).
+        const sameValue = String(memory.value ?? '').trim() === String(candidate.value ?? '').trim();
+        const sameSubject = normalizeComparable(memory.subject) === normalizeComparable(candidate.subject);
+        const sameProcedure = memory.category !== 'procedure' ||
+            ['trigger', 'action'].every(key => memory[key] === candidate[key]);
+        return sameKey && sameValue && sameSubject && sameProcedure;
     }) || null;
 }
 
 function findStrongConflict(memory, candidates) {
     return candidates.find(candidate => {
+        if (!candidateScopeMatches(memory, candidate) ||
+            hasConflictingSubjectQualifiers(memory.subject, candidate.subject)) return false;
         const subjectOverlap = overlap(tokenize(memory.subject), tokenize(candidate.subject));
         const sameKey = normalizeComparable(memory.key) === normalizeComparable(candidate.key);
         const keyOverlap = overlap(tokenize(memory.key), tokenize(candidate.key));
@@ -258,9 +230,11 @@ function isCompositeValue(value) {
 }
 
 function validateDecision(raw, candidates, memory = null) {
-    const index = Number(raw?.candidate_index);
+    const index = raw?.candidate_index;
     const relation = String(raw?.relation || 'distinct');
-    const confidence = Math.max(0, Math.min(1, Number(raw?.confidence) || 0));
+    const confidence = typeof raw?.confidence === 'number' &&
+        Number.isFinite(raw.confidence) && raw.confidence >= 0 && raw.confidence <= 1
+        ? raw.confidence : 0;
 
     if (relation === 'distinct') {
         return {
@@ -287,6 +261,19 @@ function validateDecision(raw, candidates, memory = null) {
     }
 
     const candidate = candidates[index];
+    if (memory && (
+        (memory.category && !candidateScopeMatches(memory, candidate)) ||
+        procedureScopeDiffers(memory, candidate) ||
+        hasConflictingSubjectQualifiers(memory.subject, candidate.subject) ||
+        Boolean(getSubjectQualifiers(memory.subject).length) !== Boolean(getSubjectQualifiers(candidate.subject).length)
+    )) {
+        return {
+            matched: false,
+            relation: 'distinct',
+            confidence: 0,
+            reason: 'The candidate crosses a memory scope or explicit entity-variant boundary.'
+        };
+    }
     if (relation === 'equivalent' && memory) {
         if (hasDifferentVersions(memory.value, candidate.value)) {
             return {
@@ -298,8 +285,10 @@ function validateDecision(raw, candidates, memory = null) {
             };
         }
 
+        const risk = equivalenceRisk(memory, candidate);
+        if (risk) return { matched: false, relation: 'distinct', confidence: 0, reason: risk };
+
         if (
-            normalizeComparable(memory.key) !== normalizeComparable(candidate.key) &&
             isCompositeValue(memory.value) !== isCompositeValue(candidate.value)
         ) {
             return {
@@ -320,95 +309,26 @@ function validateDecision(raw, candidates, memory = null) {
     };
 }
 
-function buildPrompt(memory, candidates) {
-    const bank = memory.category;
-    const incoming = {
-        category: memory.category,
-        project_key: memory.project_key || null,
-        knowledge_category: memory.knowledge_category || null,
-        subject: memory.subject || null,
-        key: memory.key,
-        value: memory.value,
-        topics: memory.topics || [],
-        trigger: memory.trigger || null,
-        action: memory.action || null
-    };
-    const compactCandidates = candidates.map((candidate, index) => ({
-        index,
-        id: candidate.id,
-        category: candidate.category,
-        project_key: candidate.project_key || null,
-        subject: candidate.subject || null,
-        key: candidate.key,
-        value: String(candidate.value || '').slice(0, 320),
-        topics: candidate.topics || [],
-        trigger: candidate.trigger || null,
-        action: candidate.action || null
-    }));
 
-    return `
-Decide whether one incoming ${bank} memory has the same canonical
-identity as ONE stored candidate.
-
-Canonical identity means the same real entity, preference, project
-property, knowledge claim, or behavioral rule. Merely sharing a topic
-is not enough. Do not merge two different properties of the same entity.
-The stored subject and key are older extracted labels, not authoritative
-truth. They may be worded differently or contain an obsolete version.
-Compare their meaning with the value. Topics are retrieval metadata and
-must never be used as evidence that two memories are different identities.
-Different key wording is expected in this task and is not, by itself,
-evidence of a distinct identity. Ask whether both values answer the same
-property question about the same entity.
-
-Examples:
-- dark_mode_restored and dark_mode_support_restored, with values that both
-  say dark mode was restored, are equivalent.
-- release_date and parameter_count are distinct properties even when their
-  subject is identical.
-- latest_version=v1 and release_version=v2 concern the same property but
-  conflict unless the incoming statement is explicitly newer.
-- current_status=pending followed by an explicitly newer current_status=done
-  is an update.
-
-Relations:
-- equivalent: same identity and same meaning, even if paraphrased.
-- update: same identity and the incoming value is explicitly a newer
-  state, correction, or replacement.
-- conflict: same identity but incompatible values with no clear basis
-  for choosing the incoming value as a replacement.
-- distinct: none of the candidates has the same identity.
-
-Be conservative. Prefer distinct when uncertain. Never create an index.
-
-INCOMING:
-${JSON.stringify(incoming)}
-
-CANDIDATES:
-${JSON.stringify(compactCandidates)}
-
-Return JSON only. Use candidate_index -1 when relation is distinct.
-`;
-}
-
-async function evaluateWithModel(memory, candidates) {
+async function evaluateWithModel(memory, candidates, options = {}) {
     const response = await llmQueue.enqueue(() =>
         modelAdapter.complete(
             [
                 {
                     role: 'system',
-                    content: 'You are a conservative semantic identity classifier. Return only valid JSON.'
+                    content: 'You compare memory identity and value agreement as separate dimensions. Return only valid JSON.'
                 },
                 {
                     role: 'user',
-                    content: `${buildPrompt(memory, candidates)}\n/no_think`
+                    content: `${buildComparisonPrompt(memory, candidates)}\n/no_think`
                 }
             ],
             {
                 think: false,
                 temperature: 0,
-                maxTokens: 450,
-                format: DECISION_SCHEMA
+                maxTokens: 600,
+                signal: options.signal,
+                format: COMPARISON_SCHEMA
             }
         )
     );
@@ -418,7 +338,7 @@ async function evaluateWithModel(memory, candidates) {
         console.log('[MemoryCanonicalizer] Invalid response:', safePreview(response));
         return { candidate_index: -1, relation: 'distinct', confidence: 0, reason: 'Invalid classifier response.' };
     }
-    return parsed;
+    return comparisonToDecision(parsed, memory, candidates);
 }
 
 async function loadCandidates(memory, repositories = {}) {
@@ -508,6 +428,7 @@ async function resolveMemory(memory, options = {}) {
 }
 
 module.exports = {
+    evaluateWithModel,
     resolveMemory,
     selectCandidates,
     scoreCandidate,
@@ -524,7 +445,6 @@ module.exports = {
     validateDecision,
     applyCanonicalIdentity,
     toCandidateMemory,
-    DECISION_SCHEMA,
     MIN_CONFIDENCE,
     MAX_CANDIDATES
 };

@@ -96,13 +96,16 @@ const fakeKnowledgeLibrary = {
         fakeWriteLog.push({ op: 'update', row: { ...row } });
         return true;
     },
-    async upsertKnowledge(memoryData) {
+    async upsertKnowledge(memoryData, options = {}) {
         const id = identityKey(memoryData.category, memoryData.subject, memoryData.key);
         const existing = fakeKnowledgeStore.get(id) || null;
+        if (options.forceReview || (existing && existing.value !== memoryData.value && !options.equivalent)) {
+            return { action: 'review', review_id: 1, reason: 'Different value requires review' };
+        }
         const row = fakeBuildRow(memoryData, existing);
         fakeKnowledgeStore.set(id, row);
         fakeWriteLog.push({ op: existing ? 'upsert(refresh)' : 'upsert(insert)', row: { ...row } });
-        return true;
+        return { action: existing ? 'refreshed' : 'inserted', record_id: 1 };
     },
     async getAll() {
         return [...fakeKnowledgeStore.values()];
@@ -466,7 +469,7 @@ async function testPlanScenarios() {
         JSON.stringify(allAfterC)
     );
 
-    // --- Test D: same identity, materially different value -> UPDATE ---
+    // --- Test D: same identity, materially different value -> durable review ---
     const testD = await memoryManager.handleMemoryAction([{
         category: 'knowledge',
         knowledge_category: 'geography',
@@ -480,15 +483,15 @@ async function testPlanScenarios() {
     }]);
 
     ok(
-        'Test D: materially different value at same identity → update (saved)',
-        testD.action === 'saved' && testD.memories.length === 1,
+        'Test D: materially different value at same identity → review (not overwritten)',
+        testD.action === 'conflict' && testD.conflicts[0].review_id === 1 && testD.memories.length === 0,
         JSON.stringify(testD)
     );
 
     const afterD = await fakeKnowledgeLibrary.find('geography', 'pacific_ocean', 'size_rank');
     ok(
-        'Test D: value actually changed, still exactly one row for this identity',
-        afterD.value.includes('30%'),
+        'Test D: canonical value is unchanged',
+        !afterD.value.includes('30%'),
         JSON.stringify(afterD)
     );
 
@@ -506,7 +509,7 @@ async function testPlanScenarios() {
         subject: 'pacific_ocean',
         topics: ['records', 'superlatives'],
         key: 'size_rank',
-        value: 'The Pacific Ocean covers more than 30% of the Earth\'s surface, making it the largest ocean.',
+        value: afterD.value,
         type: 'fact',
         source_type: 'conversation'
     }]);
@@ -531,7 +534,7 @@ async function testPlanScenarios() {
         subject: 'pacific_ocean',
         topics: ['records'],
         key: 'size_rank',
-        value: 'The Pacific Ocean covers more than 30% of the Earth\'s surface, making it the largest ocean.',
+        value: afterD.value,
         type: 'fact',
         source: 'user confirmed directly',
         source_type: 'user_statement'

@@ -68,9 +68,13 @@ async function reverifyKnowledgeRecord(recordId, dependencies = {}) {
     const evaluator = dependencies.evaluator || require('./knowledgeVerificationEvaluator');
     const record = await repository.getById(recordId);
     if (!record) return `Knowledge record ${recordId} was not found.`;
+    if (record.verification_status === 'pending') return `Knowledge record ${recordId} already has a pending verification attempt. It was not started again.`;
+    if (record.verification_status === 'superseded') return `Knowledge record ${recordId} is superseded. Reverify its active replacement instead.`;
 
     const queries = buildVerificationQueries(record);
     let runId = null;
+    let claimed = null;
+    let applied = false;
 
     try {
         runId = await repository.createVerificationRun({
@@ -78,7 +82,12 @@ async function reverifyKnowledgeRecord(recordId, dependencies = {}) {
             query: queries.join(' | '),
             previousValue: record.value
         });
-        await repository.beginVerification(record.id, record.verification_attempts);
+        claimed = await repository.beginVerification(record.id, record);
+        if (!claimed || claimed.verification_status !== 'pending' || String(claimed.id) !== String(record.id)) {
+            claimed = null;
+            throw new Error('Verification ownership was not confirmed; no search or result write was performed.');
+        }
+        memoryCache.invalidate('knowledge_library');
 
         const evidence = await searchPipeline.executeSearch(queries);
         if (!hasVerifiedSearchEvidence(evidence)) {
@@ -89,7 +98,8 @@ async function reverifyKnowledgeRecord(recordId, dependencies = {}) {
                 reason: 'Fresh web evidence was unavailable.',
                 supporting_urls: []
             };
-            const updated = await repository.applyVerification(record.id, buildRecordUpdate(record, result, new Date()));
+            const updated = await repository.applyVerification(record.id, buildRecordUpdate(record, result, new Date()), claimed);
+            applied = true;
             await repository.completeVerificationRun(runId, {
                 status: result.verdict,
                 confidence: result.confidence,
@@ -103,7 +113,8 @@ async function reverifyKnowledgeRecord(recordId, dependencies = {}) {
         const rawEvaluation = await evaluator.evaluateKnowledge(record, evidence);
         const evaluation = validateEvaluation(rawEvaluation, evidence, record);
         const now = new Date();
-        const updated = await repository.applyVerification(record.id, buildRecordUpdate(record, evaluation, now));
+        const updated = await repository.applyVerification(record.id, buildRecordUpdate(record, evaluation, now), claimed);
+        applied = true;
         await repository.completeVerificationRun(runId, {
             status: evaluation.verdict,
             proposedValue: evaluation.proposed_value,
@@ -114,10 +125,12 @@ async function reverifyKnowledgeRecord(recordId, dependencies = {}) {
         memoryCache.invalidate('knowledge_library');
         return formatVerificationResult(record, evaluation, updated);
     } catch (error) {
-        const cleanup = [repository.applyVerification(record.id, {
-            verification_status: 'failed',
-            verification_error: error.message
-        })];
+        const cleanup = [];
+        if (claimed && !applied) {
+            cleanup.push(repository.applyVerification(record.id, {
+                verification_status: 'failed', verification_error: error.message
+            }, claimed));
+        }
         if (runId !== null) {
             cleanup.push(repository.completeVerificationRun(runId, {
                 status: 'failed',

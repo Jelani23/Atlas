@@ -273,10 +273,16 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
         console.log(
             `[SearchKnowledgeExtractor] Query "${query}" -> ${saveResult.action} ` +
             `(${(saveResult.memories || []).length} saved, ${(saveResult.duplicates || []).length} duplicates, ` +
+            `${(saveResult.conflicts || []).length} held for review, ` +
             `${(saveResult.ignored || []).length} ignored)`
         );
 
-        return { saved: (saveResult.memories || []).length, result: saveResult };
+        return {
+            saved: (saveResult.memories || []).length,
+            queuedForReview: (saveResult.conflicts || []).filter(item => item.review_id).length,
+            duplicates: (saveResult.duplicates || []).length,
+            result: saveResult
+        };
 
     } catch (error) {
         console.error('[SearchKnowledgeExtractor] Extraction failed:', error.message);

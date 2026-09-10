@@ -508,8 +508,12 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
                     console.log(
                         `[SearchKnowledgeExtraction_BG] Result:`,
                         extractionResult.saved > 0
-                            ? `Saved ${extractionResult.saved} knowledge memories.`
-                            : `Nothing saved (${extractionResult.reason || extractionResult.error || 'no extractable facts'}).`
+                            ? `Saved ${extractionResult.saved} knowledge memories; ${extractionResult.queuedForReview || 0} queued for review.`
+                            : extractionResult.queuedForReview > 0
+                                ? `Queued ${extractionResult.queuedForReview} knowledge proposals for review; canonical claims unchanged.`
+                                : extractionResult.duplicates > 0
+                                    ? `Refreshed ${extractionResult.duplicates} existing knowledge memories.`
+                                    : `Nothing saved (${extractionResult.reason || extractionResult.error || 'no extractable facts'}).`
                     );
 
                     if (extractionResult.saved > 0) {
