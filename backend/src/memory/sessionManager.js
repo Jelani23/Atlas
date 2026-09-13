@@ -724,8 +724,8 @@ async function getWorkingContext(sessionId) {
 // The database owns the canonical merge so concurrent background
 // tasks cannot overwrite each other's context updates.
 async function mergeWorkingContext(sessionId, contextDelta) {
-    if (!sessionId) {
-        return {};
+    if (!/^[1-9]\d*$/.test(String(sessionId))) {
+        throw new Error('Working-context merge requires a positive numeric session id.');
     }
 
     if (
@@ -733,11 +733,7 @@ async function mergeWorkingContext(sessionId, contextDelta) {
         typeof contextDelta !== 'object' ||
         Array.isArray(contextDelta)
     ) {
-        console.warn(
-            '[SessionManager] Ignoring invalid working-context delta.'
-        );
-
-        return {};
+        throw new Error('Working-context merge requires an object delta.');
     }
 
     if (Object.keys(contextDelta).length === 0) {
@@ -745,7 +741,7 @@ async function mergeWorkingContext(sessionId, contextDelta) {
     }
 
     const { data, error } = await supabase.rpc(
-        'merge_session_working_context',
+        'merge_session_working_context_v2',
         {
             p_session_id: sessionId,
             p_delta: contextDelta
@@ -753,15 +749,15 @@ async function mergeWorkingContext(sessionId, contextDelta) {
     );
 
     if (error) {
-        console.error(
-            '[SessionManager] Failed to merge working context:',
-            error.message
-        );
-
-        return {};
+        const hint = ['PGRST202', '42883'].includes(error.code)
+            ? ' Apply migration 014_session_working_context.sql.' : '';
+        throw new Error(`Working-context merge failed: ${error.message}.${hint}`);
     }
 
-    return data || {};
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Working-context merge returned no object confirmation.');
+    }
+    return data;
 }
 
 module.exports = {

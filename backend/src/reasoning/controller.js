@@ -1,13 +1,10 @@
 // backend/src/reasoning/controller.js
 //
-// qwen3:4b always performs a reasoning pass. Atlas therefore uses one
-// generation contract for every user-facing response: native Ollama thinking
-// stays enabled so reasoning arrives on the dedicated `thinking` channel and
-// only `content` is eligible for UI/TTS output. Trying to create a "fast"
-// think:false path moved the scratchpad into visible content; constraining that
-// path with JSON grammar then made the first planning sentence look like the
-// answer. Both behaviours are model-level, so routing between them is not a
-// reliable latency optimization.
+// Only content that passes the response filters is eligible for UI/TTS output.
+// Legacy Qwen 3 needed native thinking enabled to keep its scratchpad out of
+// visible content. The installed qwen3.5:4b honors native think:false: isolated
+// conversation regressions pass without the reasoning-budget exhaustion seen
+// with think:true. Keep the legacy contract for models we have not validated.
 
 const ReasoningPolicies = {
     NONE: 'NONE',
@@ -16,7 +13,7 @@ const ReasoningPolicies = {
 };
 
 // num_predict is shared by Qwen's thinking and visible answer. These limits
-// leave enough room for the model to finish its unavoidable reasoning pass.
+// leave enough room for the model to finish its enabled reasoning pass.
 // Prompt/retrieval size is controlled separately by contextBuilder and
 // contextManager; token starvation must never be used as a thinking control.
 const POLICY_OPTIONS = {
@@ -56,13 +53,15 @@ function refineWithSemantics(policy, semanticProfile) {
     return policy;
 }
 
-function getReasoningOptions(intent, semanticProfile, userInput = '') {
+function getReasoningOptions(intent, semanticProfile, userInput = '', modelName = null) {
     const intentType = (intent && intent.intent) || 'conversation';
     let policy = refineWithSemantics(baselinePolicy(intentType), semanticProfile);
     if (policy === ReasoningPolicies.NONE && needsSynthesis(userInput)) {
         policy = ReasoningPolicies.LIGHT;
     }
-    return { policy, ...POLICY_OPTIONS[policy] };
+    const options = { policy, ...POLICY_OPTIONS[policy] };
+    if (modelName === 'qwen3.5:4b') options.think = false;
+    return options;
 }
 
 module.exports = {

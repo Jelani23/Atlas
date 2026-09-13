@@ -1,6 +1,6 @@
 // modelRouter.js
 
-const GENERAL_MODEL = process.env.OLLAMA_MODEL_GENERAL || 'qwen3:4b';
+const GENERAL_MODEL = process.env.OLLAMA_MODEL_GENERAL || process.env.OLLAMA_MODEL || 'qwen3.5:4b';
 const CODER_MODEL = process.env.OLLAMA_MODEL_CODER || 'qwen2.5-coder:7b';
 
 const GENERAL_DECISION = {

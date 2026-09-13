@@ -23,7 +23,7 @@ function buildComparisonPrompt(memory, candidates) {
 Return the requested JSON comparison, not a merge instruction. Choose candidate_index -1 when no candidate plausibly matches.
 
 Check these dimensions separately:
-entity: Compare SUBJECT and project, not key or value. Identical subjects identify the same entity even when keys and values differ. Different named variants, projects or unresolved aliases are not established matches.
+entity: Compare the entity that owns the stated property and its project. SUBJECT supplies missing context for fragments, but generated labels can be wrong: if a complete statement names its owner explicitly, that owner takes precedence. A technology used by a service is not the service itself. Different named variants, projects or unresolved aliases are not established matches.
 property: Do they answer the same question about that entity? Judge the meaning of the values, NOT whether the key strings are equal. Keys are imperfect labels. Different wording does NOT imply different properties. A value change does NOT change the property being described.
 scope: Do they concern the same time/context and complete claim? Separate historical observations, different procedure triggers, and a composite versus just one component have different scope. For a current-state property, an explicit replacement can retain scope. Conflicting answers to the same property question retain scope: e.g. different sets of supported platforms are different answers, not different questions.
 values: Only compare the answers after identifying the property. "equivalent" means identical meaning, not merely the same topic or property. Opposite assertions, different quantities/signs, and unequal units are incompatible, not equivalent. Unit symbols and prefixes are case-sensitive; equal numbers do not make unequal units equivalent. Do not declare a property different just because its values conflict. If unsure use uncertain.
@@ -49,15 +49,22 @@ function comparisonToDecision(raw, memory, candidates) {
         !Number.isFinite(raw.confidence) || raw.confidence < 0 || raw.confidence > 1 ||
         typeof raw.reason !== 'string' || typeof raw.replacement_quote !== 'string' ||
         !['entity', 'property', 'scope'].every(field => ['same', 'different', 'uncertain'].includes(raw[field])) ||
-        !['equivalent', 'incompatible', 'uncertain'].includes(raw.values)) return base;
+        !['equivalent', 'incompatible', 'uncertain'].includes(raw.values)) return { ...base, invalidResponse: true };
     base.reason = raw.reason;
     base.confidence = raw.confidence;
-    if (raw.candidate_index < 0 || !['entity', 'property', 'scope'].every(field => raw[field] === 'same')) return base;
-    if (raw.values === 'uncertain') return base;
+    // Validate grounding even for nonmatches: malformed replacement evidence
+    // must not become a confident distinct decision that authorizes insertion.
     const quote = raw.replacement_quote.trim();
     if (quote && !String(memory.value || '').includes(quote)) {
-        return { ...base, confidence: 0, reason: 'Replacement evidence was not present in the incoming value.' };
+        return { ...base, confidence: 0, invalidResponse: true,
+            reason: 'Replacement evidence was not present in the incoming value.' };
     }
+    if (raw.candidate_index === -1 && ['entity', 'property', 'scope'].every(field => raw[field] === 'same')) {
+        return { ...base, confidence: 0, invalidResponse: true,
+            reason: 'Comparison claims matching identity without identifying a candidate.' };
+    }
+    if (raw.candidate_index < 0 || !['entity', 'property', 'scope'].every(field => raw[field] === 'same')) return base;
+    if (raw.values === 'uncertain') return base;
     return {
         ...base, candidate_index: raw.candidate_index,
         relation: raw.values === 'equivalent' ? 'equivalent' : quote ? 'update' : 'conflict'

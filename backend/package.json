@@ -5,6 +5,9 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
+    "test:memory": "node scripts/testMemoryOffline.js",
+    "test:memory-sql": "node tests/knowledgeSql.test.js",
+    "memory:validate-lifecycle": "node scripts/validateMemoryLifecycle.js",
     "start": "node src/index.js",
     "check:supabase": "node scripts/checkSupabaseConnection.js",
     "migrate:supabase": "node scripts/migrateToSupabase.js",
@@ -20,6 +23,7 @@
     "knowledge:topic-cleanup": "node scripts/cleanupKnowledgeTopics.js",
     "knowledge:ingestion-review": "node scripts/listKnowledgeIngestionReviews.js",
     "knowledge:review-resolve": "node scripts/resolveKnowledgeReview.js",
+    "knowledge:maintain": "node scripts/maintainKnowledge.js",
     "knowledge:atomic": "node scripts/applyKnowledgeDecomposition.js"
   },
   "dependencies": {
@@ -30,6 +34,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "better-sqlite3": "^13.0.3"
   }
 }

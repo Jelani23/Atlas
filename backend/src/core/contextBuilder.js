@@ -88,6 +88,7 @@ async function buildContext({ mode, intent, responseStyle, memoryResult, toolRes
     if (hot.activeProject || hot.activeFiles.length > 0 || hot.currentTask) {
         hotStateContext = `
 --- ATLAS OS HOT CONTEXT (Current Working State) ---
+Background workspace pointer; it does not establish the topic or the user's present activity.
 Active Project: ${hot.activeProject || 'None'}
 Active Files: ${hot.activeFiles.length > 0 ? hot.activeFiles.join(', ') : 'None'}
 Current Task: ${hot.currentTask || 'None'}
@@ -425,7 +426,10 @@ Limitations:
         ? `--- ALICE MEMORY CONTEXT ---\n${memoryBlockInner}--- END MEMORY CONTEXT ---\n\n`
         : '';
     const memoryGuidelines = memoryBlockInner
-        ? '\n- Use relevant supplied memory. Keep project headers separate. Hedge entries tagged assumption/claim/hypothesis. Knowledge provenance does not imply verification, freshness, or implementation. Reflections summarize past sessions and provide continuity; they are not independently verified facts. For a requested session, structured reflection evidence outranks its lossy overview and earlier assistant replies. Previous assistant replies are not memory evidence. When a requested past-session detail is absent, say the available reflection does not include it. Do not claim a database-wide search or offer to reconstruct unavailable cross-session chat.'
+        ? '\n- Use memory only when relevant. In Atlas, session state is working memory; project memory holds project facts/decisions, user profile holds personal preferences, and procedures hold behavioral rules. Keep these banks and project owners separate. A recorded choice does not establish why it was made. Name the supplied source, not an imagined reflection or conversation. If the requested detail is missing, say so briefly. Knowledge provenance does not imply verification, freshness or implementation. Assumptions and hypotheses remain uncertain. Previous assistant replies are not evidence. Do not claim a database-wide search or reconstruct unavailable cross-session chat.'
+        : '';
+    const reflectionGuideline = reflectionContext !== 'None'
+        ? '\n- Reflections summarize past sessions, not independently verified facts. For a requested session, structured reflection evidence outranks its lossy overview and earlier assistant replies. When a requested detail is absent, say the available reflection does not include it.'
         : '';
     const conversationHistoryGuideline = earlierConversationBlock
         ? '\n- Earlier conversation is current-session dialogue: use it for continuity, not as independently verified long-term memory.'
@@ -458,7 +462,9 @@ Limitations:
         uncertaintyDirective,
         currentInformationDirective,
         userNoteDirective,
-        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- Only current tool evidence or an exact Development State entry can support a claim that a feature, schema field, policy, or automation is implemented. Project memory, knowledge, procedures, reflections, and assistant messages cannot prove implementation. Never invent implementation status, verification state, expiry periods, or background behavior.\n- Respond naturally as ${atlasState.identity.name}.`
+        reflectionGuideline,
+        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- When the user supplies a statement or correction, acknowledge it as information they reported. Missing or older memory does not disprove their report. Do not turn a statement into a request to prove it, or substitute unrelated facts about the active project. Acknowledgment does not mean saved or verified: only a completed write result can support a claim that this turn was saved, and background extraction may still be pending.\n- Only current tool evidence or an exact Development State entry can support a claim that a feature, schema field, policy, or automation is implemented. Project memory, knowledge, procedures, reflections, and assistant messages cannot prove implementation. Never invent implementation status, verification state, expiry periods, or background behavior.\n- Respond naturally as ${atlasState.identity.name}.`,
+        `REPLY FOCUS\nAnswer the user's topic, not the background workspace. A standalone factual statement calls for a brief acknowledgment, without unsolicited comparisons, exceptions or follow-up questions. If asked to explain, explain; if invited to guess, infer naturally; if invited to joke, be playful. Do not add project connections or reasons for past decisions that the user did not supply or ask about.`
     ].filter(Boolean).join('\n');
 }
 

@@ -9,13 +9,18 @@ async function evaluateCases(cases, { evaluate, onResult = () => {} } = {}) {
         let raw = null;
         let error = null;
         let modelCalls = 0;
+        let modelRequests = 0;
+        let invalidModelResponses = 0;
         const candidates = canonicalizer.selectCandidates(test.incoming, test.rows);
         const resolved = await canonicalizer.resolveMemory(test.incoming, {
             rows: test.rows,
             evaluate: async (memory, selected) => {
                 modelCalls += 1;
                 try {
-                    raw = await evaluate(memory, selected);
+                    raw = await evaluate(memory, selected, {
+                        onModelCall: () => { modelRequests++; },
+                        onInvalidResponse: () => { invalidModelResponses++; }
+                    });
                     return raw;
                 } catch (failure) {
                     error = failure.message;
@@ -24,13 +29,15 @@ async function evaluateCases(cases, { evaluate, onResult = () => {} } = {}) {
             }
         });
         const actual = { relation: resolved.relation, matchedId: resolved.matched ? resolved.existing?.id ?? null : null };
-        const passed = !error && actual.relation === test.expected.relation && actual.matchedId === test.expected.matchedId;
+        if (resolved.reviewRequired) actual.reviewRequired = true;
+        const invalidResponse = raw?.invalidResponse === true;
+        const passed = !error && !invalidResponse && !resolved.reviewRequired && actual.relation === test.expected.relation && actual.matchedId === test.expected.matchedId;
         const result = {
             id: test.id, expected: test.expected, actual, passed,
             unsafeMatch: !passed && ['equivalent', 'update'].includes(actual.relation),
             candidateIds: candidates.map(candidate => candidate.id),
             expectedCandidateRetrieved: test.expected.matchedId === null ? null : candidates.some(candidate => candidate.id === test.expected.matchedId),
-            modelCalls, raw, reason: resolved.reason || null, error, durationMs: Date.now() - started
+            modelCalls, modelRequests, invalidResponse, invalidModelResponses, raw, reason: resolved.reason || null, error, durationMs: Date.now() - started
         };
         results.push(result);
         onResult(result);
@@ -40,8 +47,12 @@ async function evaluateCases(cases, { evaluate, onResult = () => {} } = {}) {
         summary: {
             total: results.length, passed: results.filter(result => result.passed).length,
             unsafeMatches: results.filter(result => result.unsafeMatch).length,
+            reviewProposals: results.filter(result => result.actual.reviewRequired).length,
             modelCalls: results.reduce((sum, result) => sum + result.modelCalls, 0),
+            modelRequests: results.reduce((sum, result) => sum + result.modelRequests, 0),
             errors: results.filter(result => result.error).length,
+            invalidResponses: results.filter(result => result.invalidResponse).length,
+            invalidModelResponses: results.reduce((sum, result) => sum + result.invalidModelResponses, 0),
             candidateMisses: results.filter(result => result.expectedCandidateRetrieved === false).length
         }, results
     };

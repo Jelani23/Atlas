@@ -12,6 +12,7 @@ const responseController = require('../response/controller');
 const memoryManager = require('../memory/memoryManager');
 const contextBuilder = require('./contextBuilder');
 const responseProcessor = require('../response/processor');
+const { formatImmediateToolReply } = require('../response/toolResultPresenter');
 const personalityEngine = require('./personalityEngine');
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
@@ -171,7 +172,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         // behind modelAdapter only when explicitly selected in the future.
         intent.intent = deriveIntentCategory({ toolResult });
 
-        const reasoningDepth = reasoningController.getReasoningOptions(intent, null, userInput);
+        const reasoningDepth = reasoningController.getReasoningOptions(intent, null, userInput, modelRouter.getDefaultModel().model);
         const responseStyle = responseController.getResponseStyle(intent);
 
         let effectiveMode = mode;
@@ -193,7 +194,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
 
         // Short-Circuit for Deterministic Tools & Background Tasks
         if (toolResult.shortCircuit) {
-            const instantReply = toolResult.toolResult;
+            const instantReply = formatImmediateToolReply(toolResult);
             return finishImmediateReply(instantReply, {
                 memory, sessionId, taskId, requestId, requestStart
             });

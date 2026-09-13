@@ -8,6 +8,9 @@ assert.equal(decide({}).relation, 'conflict');
 assert.equal(decide({ values: 'equivalent' }).relation, 'equivalent');
 assert.equal(decide({ replacement_quote: 'now uses B, replacing A' }).relation, 'update');
 assert.equal(decide({ replacement_quote: 'Invented evidence' }).relation, 'distinct');
+assert.equal(decide({ replacement_quote: 'Invented evidence' }).invalidResponse, true);
+assert.equal(decide({ scope: 'different', replacement_quote: 'It uses A' }).invalidResponse, true,
+    'A quote from the stored claim is invalid even when the comparison reports different scope');
 for (const field of ['entity', 'property', 'scope']) {
     assert.equal(decide({ [field]: 'different' }).relation, 'distinct');
     assert.equal(decide({ [field]: 'uncertain' }).relation, 'distinct');

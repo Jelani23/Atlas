@@ -35,6 +35,13 @@ assert.strictEqual(coding.policy, ReasoningPolicies.DEEP);
 assert.strictEqual(coding.think, true);
 assert(coding.maxTokens >= 4096);
 
-console.log('✓ every Qwen user-facing policy uses the native thinking channel');
+for (const intent of ['conversation', 'search', 'memory', 'planning', 'coding']) {
+    const modern = getReasoningOptions({ intent }, null, '', 'qwen3.5:4b');
+    assert.strictEqual(modern.think, false, 'Validated Qwen 3.5 must not exhaust the reply budget on native reasoning');
+    assert.strictEqual(modern.format, undefined, 'Conversational replies remain free text');
+    assert.strictEqual(getReasoningOptions({ intent }, null, '', 'qwen3:4b').think, true);
+    assert.strictEqual(getReasoningOptions({ intent }, null, '', 'unvalidated-model').think, true);
+}
+console.log('✓ thinking mode follows the validated model contract');
 console.log('✓ shared thinking/content budgets leave room for a completed answer');
 console.log('✓ synthesis and coding still receive higher reasoning tiers');

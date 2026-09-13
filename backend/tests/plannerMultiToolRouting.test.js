@@ -6,6 +6,7 @@ process.env.SEMANTIC_MULTI_TOOL_PLANNING = 'false';
 
 const planner = require('../src/planner/planner');
 const { resolve } = require('../src/intent/intentResolver');
+const { formatImmediateToolReply } = require('../src/response/toolResultPresenter');
 
 async function run() {
     const message = 'Calculate 2 + 2 and then word count of hello world';
@@ -15,6 +16,7 @@ async function run() {
     assert.strictEqual(result.shortCircuit, true);
     assert(result.toolResult.includes('The result of 2 + 2 is 4'));
     assert(result.toolResult.includes('Word count: 2'));
+    assert.strictEqual(formatImmediateToolReply(result), 'Here you go. 2 + 2 is 4. “hello world” has 2 words.');
 
     const blockedMessage = 'Find the file package.json and then read it';
     const blocked = await planner.route(resolve(blockedMessage), blockedMessage);

@@ -1,9 +1,10 @@
-const { createModelAdapter } = require('../models/modelAdapter');
+const { createMemoryModelAdapter } = require('../models/memoryModelAdapter');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const projectRegistry = require('./projectRegistry');
 const llmQueue = require('./llmQueue');
+const { projectExtractionScope } = require('./projectExtractionScope');
 
-const modelAdapter = createModelAdapter();
+const modelAdapter = createMemoryModelAdapter();
 
 // Ollama's `format` option constrains decoding to a JSON Schema at
 // the token level - the model cannot emit a token that would violate
@@ -39,7 +40,7 @@ function buildExtractionSchema(projectKeys = []) {
         ? { type: 'string', enum: projectKeys }
         : { type: 'string' };
 
-    return {
+    const schema = {
         type: 'object',
         properties: {
             memories: {
@@ -47,8 +48,12 @@ function buildExtractionSchema(projectKeys = []) {
                 items: {
                     type: 'object',
                     properties: {
-                        category: { type: 'string' },
-                        subject: { type: 'string' },
+                        category: {
+                            type: 'string',
+                            enum: ['preference', 'behavior', 'identity', 'relationship', 'state', 'history',
+                                'knowledge', 'procedure', ...(projectKeys.length ? ['project'] : [])]
+                        },
+                        subject: { type: 'string', description: 'The entity that owns the property, not the property itself. Preserve the named entity from the message.' },
                         // project_key: the canonical project identity for
                         // category:'project' memories ONLY. Must be one of
                         // the registered project_key values, never a
@@ -76,7 +81,12 @@ function buildExtractionSchema(projectKeys = []) {
                         source: { type: 'string' },
                         source_type: { type: 'string' }
                     },
-                    required: ['category', 'key', 'value']
+                    required: ['category', 'key', 'value'],
+                    anyOf: [
+                        { properties: { category: { enum: ['preference', 'behavior', 'identity', 'relationship', 'state', 'history', 'procedure'] } }, required: ['category', 'key', 'value'] },
+                        { properties: { category: { const: 'knowledge' } }, required: ['category', 'key', 'value', 'subject', 'knowledge_category'] },
+                        ...(projectKeys.length ? [{ properties: { category: { const: 'project' } }, required: ['category', 'key', 'value', 'project_key'] }] : [])
+                    ]
                 }
             },
             conversation_update: {
@@ -89,6 +99,13 @@ function buildExtractionSchema(projectKeys = []) {
         },
         required: ['memories']
     };
+    // Some constrained decoders do not merge sibling properties into anyOf.
+    // Give every alternative its complete fields and required set.
+    const item = schema.properties.memories.items;
+    item.anyOf = item.anyOf.map(branch => ({
+        type: 'object', properties: { ...item.properties, ...branch.properties }, required: branch.required
+    }));
+    return schema;
 }
 
 // Kept for any external code/tests that import the schema shape directly.
@@ -114,13 +131,8 @@ async function extractMemory(
     workingContext = {}
 ) {
 
-    // Phase: this used to only build a flattened, display-only list of
-    // names/keys/aliases (registeredProjects) with no separate record of
-    // which strings are actual canonical project_key values - so there
-    // was nothing to constrain the schema's project_key field against
-    // (see buildExtractionSchema's comment). This now always loads the
-    // full project rows so project_key values are known with certainty,
-    // regardless of what workingContext happened to carry.
+    // Registry identity and a reference in this message are both required.
+    // Active context alone must not attach unrelated entities to a project.
     let projectRows = [];
     try {
         projectRows = await projectRegistry.getAllProjects();
@@ -131,36 +143,14 @@ async function extractMemory(
         );
     }
 
-    const projectKeys = projectRows
+    const scopedProjects = projectExtractionScope(message, projectRows, workingContext);
+    const projectKeys = scopedProjects
         .map(project => project.project_key)
         .filter(Boolean);
 
-    // Display list keeps the richer name/key/alias text (and honors a
-    // caller-supplied workingContext.registered_projects subset when
-    // present) so the model can still pattern-match against whatever
-    // name or alias the user actually typed - project_key is what gets
-    // stored, but the model needs the human-readable forms too in order
-    // to recognize the project in the first place.
-    let displayProjects = Array.isArray(workingContext.registered_projects)
-        ? workingContext.registered_projects
-            .map(project => {
-                if (typeof project === 'string') return project;
-                return project.name || project.project_key || null;
-            })
-            .filter(Boolean)
-        : [];
-
-    if (displayProjects.length === 0) {
-        displayProjects = projectRows.flatMap(project => [
-            project.name,
-            project.project_key,
-            ...(Array.isArray(project.aliases) ? project.aliases : [])
-        ]).filter(Boolean);
-    }
-
     const registeredProjectsText =
-        projectRows.length > 0
-            ? projectRows
+        scopedProjects.length > 0
+            ? scopedProjects
                 .map(project => `- project_key: "${project.project_key}" (name: "${project.name}"${
                     Array.isArray(project.aliases) && project.aliases.length > 0
                         ? `, aliases: ${project.aliases.map(a => `"${a}"`).join(', ')}`
@@ -170,9 +160,10 @@ async function extractMemory(
             : 'None';
 
     const projectContextInstruction =
-        projectRows.length > 0
+        scopedProjects.length > 0
             ? `
-The project registry above is authoritative.
+The project list above contains the registered projects referenced by this message.
+The active project alone does not establish ownership of an unrelated named entity.
 
 If the user's message clearly refers to one of these
 registered projects (by name, project_key, or alias), you
@@ -188,26 +179,29 @@ is None. A project can be referenced explicitly without
 being the currently active project.
 `
             : `
-No registered projects are available to the fallback
-classifier. Do not create project memories for named
-projects unless the current context explicitly identifies
-the project as registered.
+No registered project is referenced by this message.
+Category "project" is unavailable for this call, even if a project is active.
+Facts about other named services, software, or entities belong to
+knowledge; do not discard them merely because they are not registered projects.
 `;
 
     const prompt = `
-You are Alice's fallback memory classifier. A deterministic
-extractor already ran and found nothing, so look specifically for
-persistent information phrased in a way it wouldn't recognize.
+You are Alice's fallback memory classifier. An earlier pattern
+matcher found nothing. Nothing from this message has been saved yet.
+Extract its persistent information even when the wording is simple.
 
-If the message is a question, command, request, filler, speculation,
+If the message contains only a question, command, request, filler,
 or ordinary response with no persistent information, return an
-empty memories array.
+empty memories array. A request to remember a stated fact does contain
+persistent information. A reported completed change or correction is
+also information: preserve what changed and the new state in its value.
+A request to perform a change is not evidence that it has happened.
 
 CURRENT CONTEXT:
 - Active Project: ${workingContext.current_project || 'None'}
 - Current Topic: ${workingContext.current_topic || 'None'}
 
-REGISTERED PROJECTS:
+PROJECTS REFERENCED BY THIS MESSAGE:
 ${registeredProjectsText}
 
 ${projectContextInstruction}
@@ -310,7 +304,10 @@ and NOT a rule about how Alice should behave (that's "procedure").
 "Python was created by Guido van Rossum" → knowledge. "Bindex uses
 Python for its backend" → project. "Always write Python with type
 hints" → procedure.
-- subject: the specific entity/concept the knowledge is about
+- subject: the specific entity/concept that OWNS the property in the message.
+  Preserve its name; do not substitute the property's name or its new value.
+  The owner stays the same when its property changes.
+  Examples of entities:
   (earth, python, http, mars, photosynthesis) - not the broad field,
   and never a registered project name.
 - knowledge_category: ONE broad knowledge domain (science,
@@ -324,9 +321,10 @@ hints" → procedure.
   (release_year, creator, orbital_period, natural_satellite,
   definition, programming_language). Canonical identity =
   knowledge_category + subject + key.
-- value: the actual knowledge, concise (e.g. "Moon" for
-  earth/natural_satellite, or "Guido van Rossum" for
-  python/creator).
+- value: a self-contained statement retaining the named entity, property,
+  and value (e.g. "Earth's natural satellite is the Moon"). Preserve
+  negation, uncertainty, scope, and reported transitions. Do not reduce
+  a completed replacement to its new value alone.
 - type: the semantic nature of the knowledge - fact, definition,
   concept, relationship, observation, claim, assumption, or
   hypothesis. Use "assumption" or "claim" (not "fact") for anything
@@ -393,12 +391,10 @@ QUALITY RULES
   the project name as subject.
 - If uncertain whether something is persistent information, prefer
   returning no memory over inventing one.
-- You are the fallback for whatever the deterministic extractor
-  didn't recognize - focus on facts phrased in unusual or less
-  predictable structures (project components, files, logs, test
-  results, architecture, config, capabilities, limitations, causes,
-  dependencies, observed behavior), not just sentences with an
-  obvious verb like "uses" or "has".
+- A miss by the earlier pattern matcher is not a reason to omit
+  a fact. Simple statements and completed corrections about an
+  entity's components, dependencies, capabilities, limitations,
+  or observed behavior are valid information too.
 
 Return ONLY valid JSON:
 
@@ -489,6 +485,14 @@ If nothing should be remembered:
             }
 
             if (Array.isArray(parsed.memories)) {
+
+                // Defense for providers that do not enforce the supplied schema.
+                // Do not invent a knowledge subject by relabeling invalid projects.
+                parsed.memories = parsed.memories.filter(memory => {
+                    if (memory?.category !== 'project' || projectKeys.includes(memory.project_key)) return true;
+                    console.warn('[MemoryExtractor] Rejected project extraction without a message-grounded project_key.');
+                    return false;
+                });
 
                 parsed.memories = parsed.memories.map(memory => {
 

@@ -1,10 +1,11 @@
-const { createModelAdapter } = require('../models/modelAdapter');
+const { createMemoryModelAdapter } = require('../models/memoryModelAdapter');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const llmQueue = require('./llmQueue');
 const { equivalenceRisk, procedureScopeDiffers } = require('./memoryEquivalencePolicy');
 const { COMPARISON_SCHEMA, buildComparisonPrompt, comparisonToDecision } = require('./memoryIdentityComparison');
+const { ASSERTION_SCHEMA, buildAssertionPrompt, assertionBoundary } = require('./memoryAssertionBoundary');
 
-const modelAdapter = createModelAdapter();
+const modelAdapter = createMemoryModelAdapter();
 
 const RELATIONS = new Set(['equivalent', 'update', 'conflict', 'distinct']);
 const MIN_CONFIDENCE = 0.9;
@@ -166,19 +167,6 @@ function findStrongEquivalent(memory, candidates) {
     }) || null;
 }
 
-function findStrongConflict(memory, candidates) {
-    return candidates.find(candidate => {
-        if (!candidateScopeMatches(memory, candidate) ||
-            hasConflictingSubjectQualifiers(memory.subject, candidate.subject)) return false;
-        const subjectOverlap = overlap(tokenize(memory.subject), tokenize(candidate.subject));
-        const sameKey = normalizeComparable(memory.key) === normalizeComparable(candidate.key);
-        const keyOverlap = overlap(tokenize(memory.key), tokenize(candidate.key));
-        return hasDifferentVersions(memory.value, candidate.value) &&
-            subjectOverlap >= 0.5 &&
-            (sameKey || keyOverlap >= 0.75);
-    }) || null;
-}
-
 function toCandidateMemory(memory, candidate) {
     if (memory.category === 'knowledge') {
         return {
@@ -226,7 +214,10 @@ function hasDifferentVersions(left, right) {
 }
 
 function isCompositeValue(value) {
-    return /[;\n]|\b(?:and also|additionally|as well as)\b/i.test(String(value || ''));
+    // A coordinated predicate can add another claim without a semicolon.
+    // This conservative veto does not split claims or treat noun lists (such
+    // as supported platforms) as multiple properties.
+    return /[;\n]|\b(?:and also|additionally|as well as)\b|\band\s+(?:is|are|was|were|has|have|can|will|must|should|uses|stores|supports|requires|provides|includes|runs|retains)\b/i.test(String(value || ''));
 }
 
 function validateDecision(raw, candidates, memory = null) {
@@ -235,6 +226,25 @@ function validateDecision(raw, candidates, memory = null) {
     const confidence = typeof raw?.confidence === 'number' &&
         Number.isFinite(raw.confidence) && raw.confidence >= 0 && raw.confidence <= 1
         ? raw.confidence : 0;
+
+    // Uncertain value agreement is not evidence that a claim is new. Preserve
+    // a plausible same-identity knowledge proposal for an operator; this never
+    // authorizes refresh, replacement, or verification.
+    const comparison = raw?.comparison;
+    const reviewIndex = comparison?.candidate_index;
+    if (memory?.category === 'knowledge' && !raw?.invalidResponse &&
+        Number.isInteger(reviewIndex) && reviewIndex >= 0 && reviewIndex < candidates.length &&
+        comparison.entity === 'same' && comparison.scope === 'same' &&
+        (comparison.property === 'uncertain' ||
+            (comparison.property === 'same' && comparison.values === 'uncertain') || confidence < MIN_CONFIDENCE)) {
+        const candidate = candidates[reviewIndex];
+        if (candidateScopeMatches(memory, candidate) &&
+            !hasConflictingSubjectQualifiers(memory.subject, candidate.subject) &&
+            Boolean(getSubjectQualifiers(memory.subject).length) === Boolean(getSubjectQualifiers(candidate.subject).length)) {
+            return { matched: false, reviewRequired: true, candidate, relation: 'distinct', confidence,
+                reason: 'A knowledge candidate shares the entity and scope, but the comparison is uncertain; review before creating another record.' };
+        }
+    }
 
     if (relation === 'distinct') {
         return {
@@ -311,34 +321,68 @@ function validateDecision(raw, candidates, memory = null) {
 
 
 async function evaluateWithModel(memory, candidates, options = {}) {
-    const response = await llmQueue.enqueue(() =>
-        modelAdapter.complete(
-            [
+    // Retry only malformed/truncated output, never a valid semantic disagreement.
+    // One shared deadline bounds both requests and any optional experimental pass.
+    const signal = options.signal || AbortSignal.timeout(30000);
+    let decision;
+    for (const maxTokens of [600, 1200]) {
+        options.onModelCall?.(maxTokens === 600 ? 'identity' : 'identity_retry');
+        const response = await llmQueue.enqueue(() =>
+            modelAdapter.complete(
+                [
+                    {
+                        role: 'system',
+                        content: 'You compare memory identity and value agreement as separate dimensions. Return only valid JSON.'
+                    },
+                    {
+                        role: 'user',
+                        content: `${buildComparisonPrompt(memory, candidates)}\n/no_think`
+                    }
+                ],
                 {
-                    role: 'system',
-                    content: 'You compare memory identity and value agreement as separate dimensions. Return only valid JSON.'
-                },
-                {
-                    role: 'user',
-                    content: `${buildComparisonPrompt(memory, candidates)}\n/no_think`
+                    think: false,
+                    temperature: 0,
+                    maxTokens,
+                    signal,
+                    format: COMPARISON_SCHEMA
                 }
-            ],
-            {
-                think: false,
-                temperature: 0,
-                maxTokens: 600,
-                signal: options.signal,
-                format: COMPARISON_SCHEMA
-            }
-        )
-    );
+            )
+        );
 
-    const parsed = extractJSON(response);
-    if (!parsed) {
+        const parsed = extractJSON(response);
+        decision = comparisonToDecision(parsed, memory, candidates);
+        if (!decision.invalidResponse) break;
+        options.onInvalidResponse?.();
         console.log('[MemoryCanonicalizer] Invalid response:', safePreview(response));
-        return { candidate_index: -1, relation: 'distinct', confidence: 0, reason: 'Invalid classifier response.' };
     }
-    return comparisonToDecision(parsed, memory, candidates);
+    if (decision.invalidResponse) return decision;
+    // The second-pass experiment regressed live accuracy. Only the synthetic
+    // evaluator opts in; normal ingestion retains the established comparison.
+    if (options.experimentalAssertionCheck !== true ||
+        decision.relation === 'distinct' || decision.confidence < MIN_CONFIDENCE) return decision;
+    options.onModelCall?.('assertion');
+    const assertionResponse = await llmQueue.enqueue(() => modelAdapter.complete([
+        { role: 'system', content: 'Classify assertion modes. Return only valid JSON.' },
+        { role: 'user', content: `${buildAssertionPrompt(memory, candidates[decision.candidate_index])}\n/no_think` }
+    ], { think: false, temperature: 0, maxTokens: 240, signal, format: ASSERTION_SCHEMA }));
+    const assertion = extractJSON(assertionResponse);
+    const boundary = assertionBoundary(assertion);
+    if (boundary === 'invalid') {
+        return { ...decision, candidate_index: -1, relation: 'distinct', confidence: 0, assertion, invalidResponse: true,
+            reason: 'Malformed assertion comparison; defer classification.' };
+    }
+    if (boundary === 'different') {
+        // Clear the earlier same-scope judgment so the uncertainty review guard
+        // cannot retarget a requirement/proposal onto an actual-state record.
+        return { ...decision, candidate_index: -1, relation: 'distinct', assertion,
+            comparison: { ...decision.comparison, scope: 'different' },
+            reason: 'The claims have different assertion modes; keep their identities separate.' };
+    }
+    if (boundary === 'uncertain') {
+        return { ...decision, candidate_index: -1, relation: 'distinct', confidence: 0, assertion,
+            reason: 'The assertion modes differ or are uncertain; do not combine desired or possible behavior with established behavior.' };
+    }
+    return { ...decision, assertion };
 }
 
 async function loadCandidates(memory, repositories = {}) {
@@ -376,19 +420,8 @@ async function resolveMemory(memory, options = {}) {
         return { memory, matched: false, relation: 'distinct', confidence: 1 };
     }
 
-    const strongConflict = findStrongConflict(memory, candidates);
-    if (strongConflict) {
-        return {
-            memory: applyCanonicalIdentity(memory, strongConflict),
-            matched: true,
-            existing: strongConflict,
-            candidate: strongConflict,
-            relation: 'conflict',
-            confidence: 1,
-            reason: 'The memories concern the same entity and property but contain different version values.'
-        };
-    }
-
+    // Different version strings alone cannot establish shared property/time scope.
+    // Prefer an exact duplicate; all non-exact comparisons go through semantic review.
     const strongEquivalent = findStrongEquivalent(memory, candidates);
     if (strongEquivalent) {
         return {
@@ -406,9 +439,13 @@ async function resolveMemory(memory, options = {}) {
         const raw = options.evaluate
             ? await options.evaluate(memory, candidates)
             : await evaluateWithModel(memory, candidates);
+        if (raw?.invalidResponse) {
+            return { memory, matched: false, relation: 'distinct', confidence: 0,
+                invalidResponse: true, reason: raw.reason || 'Invalid identity comparison after bounded retry.' };
+        }
         const decision = validateDecision(raw, candidates, memory);
 
-        if (!decision.matched) return { memory, ...decision };
+        if (!decision.matched && !decision.reviewRequired) return { memory, ...decision };
 
         return {
             ...decision,
@@ -421,6 +458,7 @@ async function resolveMemory(memory, options = {}) {
             memory,
             matched: false,
             relation: 'distinct',
+            comparisonFailed: true,
             confidence: 0,
             reason: error.message
         };
@@ -438,7 +476,6 @@ module.exports = {
     hasConflictingSubjectQualifiers,
     getSubjectCore,
     findStrongEquivalent,
-    findStrongConflict,
     extractVersionTokens,
     hasDifferentVersions,
     isCompositeValue,

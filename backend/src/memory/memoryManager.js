@@ -172,10 +172,22 @@ async function handleMemoryAction(extractedMemories) {
             let existingMemory = await findExistingMemory(memory);
             let semanticResolution = null;
 
-            if (!existingMemory) {
-                semanticResolution = await memoryCanonicalizer.resolveMemory(memory);
+            // A stable key does not imply word-for-word value equality. Compare
+            // changed knowledge wording against that exact row before deciding
+            // whether it is a duplicate or a proposal requiring review.
+            const compareExistingKnowledge = memory.category === 'knowledge' && existingMemory &&
+                !memoryDeduplicator.valuesEqual(existingMemory.value, memory.value, { caseSensitive: true });
+            if (!existingMemory || compareExistingKnowledge) {
+                semanticResolution = await memoryCanonicalizer.resolveMemory(memory,
+                    compareExistingKnowledge ? { rows: [existingMemory] } : {});
 
-                if (semanticResolution.matched) {
+                if (memory.category === 'knowledge' && !existingMemory && (semanticResolution.invalidResponse || semanticResolution.comparisonFailed)) {
+                    ignored.push({ memory, reason: 'Knowledge classification deferred: comparison failed or remained invalid after retry. Original statement remains in conversation history.' });
+                    console.warn('[MemoryCanonicalizer] Knowledge write deferred after unsuccessful comparison; no new record created.');
+                    continue;
+                }
+
+                if (semanticResolution.matched || semanticResolution.reviewRequired) {
                     memory = semanticResolution.memory;
                     existingMemory = semanticResolution.existing;
                     console.log(

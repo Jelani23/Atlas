@@ -186,7 +186,7 @@ async function run() {
     assert.strictEqual(versionGuard.relation, 'conflict', 'different versions cannot be equivalent');
 
     evaluatorCalled = false;
-    const deterministicVersionConflict = await canonicalizer.resolveMemory({
+    const reviewedVersionConflict = await canonicalizer.resolveMemory({
         category: 'knowledge',
         knowledge_category: 'technology',
         subject: 'ollama_release',
@@ -206,8 +206,8 @@ async function run() {
             return { candidate_index: -1, relation: 'distinct', confidence: 1, reason: '' };
         }
     });
-    assert.strictEqual(deterministicVersionConflict.relation, 'conflict');
-    assert.strictEqual(evaluatorCalled, false, 'anchored version conflicts should be deterministic');
+    assert.strictEqual(reviewedVersionConflict.relation, 'distinct');
+    assert.strictEqual(evaluatorCalled, true, 'different versions must still establish semantic identity and scope');
 
     const compositeGuard = canonicalizer.validateDecision({
         candidate_index: 0,

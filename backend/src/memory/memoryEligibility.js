@@ -336,8 +336,13 @@ const DECLARATIVE_LEAD_PRONOUNS =
 const DECLARATIVE_LEAD_GREETING =
     /^(hey|hi|hello|yo|hiya|sup|howdy)\b/i;
 
+// Embedded facts in questions/one-off requests are not assertions by
+// themselves. Explicit memory and standing-rule signals still score separately.
+const DECLARATIVE_LEAD_REQUEST =
+    /^(who|what|where|when|why|how|which|is|are|was|were|do|does|did|can|could|would|should|will|please|show|tell|explain|check|find|change|use|store)\b/i;
+
 const DECLARATIVE_VERBS =
-    /\b(is|are|was|were|has|have|consists of|refers to|orbits|originated|was discovered|was invented|was founded|was created)\b/i;
+    /\b(is|are|was|were|has|have|uses|stores|requires|supports|includes|contains|provides|depends on|runs on|connects to|consists of|refers to|orbits|originated|was discovered|was invented|was founded|was created)\b/i;
 
 function isDeclarativeFactCandidate(message) {
     const trimmed = message.trim();
@@ -360,7 +365,7 @@ function isDeclarativeFactCandidate(message) {
         return false;
     }
 
-    if (DECLARATIVE_LEAD_GREETING.test(trimmed)) {
+    if (DECLARATIVE_LEAD_GREETING.test(trimmed) || DECLARATIVE_LEAD_REQUEST.test(trimmed)) {
         return false;
     }
 
@@ -543,14 +548,21 @@ async function checkEligibility(message) {
         };
     }
 
-    const eligible = score >= THRESHOLD;
+    // A generic project mention plus its registered name can reach the score
+    // threshold without teaching anything. References supply scope, not a claim.
+    const hasMemorySignal = matchedSignals.some(signal =>
+        signal !== 'project_reference' && signal !== 'registered_project_reference'
+    );
+    const eligible = score >= THRESHOLD && hasMemorySignal;
 
     return {
         eligible,
         score,
         reason: eligible
             ? 'Matched memory signals'
-            : 'Below threshold',
+            : score >= THRESHOLD && !hasMemorySignal
+                ? 'Project reference without a memory signal'
+                : 'Below threshold',
         matchedSignals,
         projectReference: matchedProject || null
     };

@@ -11,6 +11,15 @@ async function run() {
     });
     assert.equal(result.summary.passed, 2);
     assert.equal(result.summary.modelCalls, 1);
+    const counted = await evaluateCases([paraphrase], {
+        evaluate: async (memory, candidates, telemetry) => {
+            telemetry.onModelCall('identity');
+            telemetry.onModelCall('assertion');
+            return { candidate_index: 0, relation: 'equivalent', confidence: 0.99, reason: 'Fixture classifier' };
+        }
+    });
+    assert.equal(counted.summary.modelCalls, 1, 'One comparison invocation');
+    assert.equal(counted.summary.modelRequests, 2, 'Both provider requests count toward experiment cost');
     assert.equal(JSON.stringify([exact, paraphrase]), before, 'fixtures must not be mutated');
 
     const unsafe = await evaluateCases([{ ...paraphrase, expected: { relation: 'distinct', matchedId: null } }], {
@@ -18,6 +27,11 @@ async function run() {
     });
     assert.equal(unsafe.summary.unsafeMatches, 1);
     assert.equal(unsafe.summary.passed, 0);
+    const invalid = await evaluateCases([{ ...paraphrase, expected: { relation: 'distinct', matchedId: null } }], {
+        evaluate: async () => ({ candidate_index: -1, relation: 'distinct', confidence: 0, invalidResponse: true })
+    });
+    assert.equal(invalid.summary.passed, 0, 'A parse failure must not count as a correct distinct decision');
+    assert.equal(invalid.summary.invalidResponses, 1);
 
     const unavailable = await evaluateCases([paraphrase], {
         evaluate: async () => { throw new Error('Offline fixture'); }

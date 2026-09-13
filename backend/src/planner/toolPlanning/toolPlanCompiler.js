@@ -1,4 +1,6 @@
 const tools = require('../../tools');
+const { isDeepStrictEqual } = require('node:util');
+const { validateToolArguments, canonicalizeToolArguments } = require('../../tools/toolArguments');
 const { resolve } = require('../../intent/intentResolver');
 const { getSchemas } = require('../../tools/toolRegistry');
 const permissionManager = require('../../permissions/permissionManager');
@@ -25,12 +27,18 @@ function getExecutableSchemas() {
         .map(schema => [schema.name, schema]));
 }
 
-function looksLikeRequestClause(clause, schemas = getExecutableSchemas()) {
+function looksLikeRequestClause(clause, schemas = getExecutableSchemas(), resolveIntent = resolve) {
     const text = String(clause || '').trim().toLowerCase();
     if (!text) return false;
     if (/\?$/.test(text) || /^(?:please\s+)?(?:can|could|would|will)\s+you\b/.test(text)) {
         return true;
     }
+
+    // A recognized tool request need not begin with the first word of a
+    // trigger. It may still need semantic recovery for another clause's args.
+    const route = resolveIntent(clause);
+    if (route.state === 'DETERMINISTIC' && schemas.has(route.winner) &&
+        route.confidence >= 0.55 && route.margin >= 0.15) return true;
 
     const firstWord = text.replace(/^please\s+/, '').match(/^[a-z]+/)?.[0];
     if (!firstWord) return false;
@@ -96,6 +104,7 @@ function validateSemanticPlan(proposal, segments, resolveIntent = resolve) {
     const steps = [];
     for (let index = 0; index < proposal.steps.length; index++) {
         const proposed = proposal.steps[index];
+        if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)) return null;
         const clause = segments[index];
         const schema = schemas.get(proposed.toolName);
         const permission = schema ? permissionManager.check(proposed.toolName) : null;
@@ -103,17 +112,23 @@ function validateSemanticPlan(proposal, segments, resolveIntent = resolve) {
         const isCorroborated = corroboratingRoute.state === 'DETERMINISTIC' &&
             corroboratingRoute.winner === proposed.toolName;
 
-        if (!schema || !permission || proposed.confidence < 0.9 || !hasUsableParams(proposed.args)) {
+        const canonicalArgs = canonicalizeToolArguments(proposed.toolName, proposed.args);
+        if (!schema || !permission || !Number.isFinite(proposed.confidence) ||
+            proposed.confidence < 0.9 || proposed.confidence > 1 ||
+            !hasUsableParams(proposed.args) || !validateToolArguments(proposed.toolName, canonicalArgs)) {
             return null;
         }
-        if (permission.risk !== 'LOW' && !isCorroborated) return null;
+        // Recognizing "deleteNote" is not evidence for a different note name.
+        // State-changing semantic proposals must retain the parser's arguments.
+        if (permission.risk !== 'LOW' && (!isCorroborated ||
+            !isDeepStrictEqual(canonicalArgs, canonicalizeToolArguments(proposed.toolName, corroboratingRoute.params || [])))) return null;
         if (index > 0 && DEPENDENCY_WORDS.test(clause)) return null;
 
         steps.push({
             id: index + 1,
             clause,
             toolName: proposed.toolName,
-            args: proposed.args,
+            args: canonicalArgs,
             confidence: proposed.confidence,
             domain: schema.domain,
             risk: permission.risk,
@@ -143,7 +158,7 @@ async function compileToolPlan(message, { resolveIntent = resolve, semanticPlann
 
     const explicitCandidate = candidates.find(candidate => candidate.boundary === 'explicit');
     const explicitRequestCount = explicitCandidate
-        ? explicitCandidate.segments.filter(segment => looksLikeRequestClause(segment)).length
+        ? explicitCandidate.segments.filter(segment => looksLikeRequestClause(segment, getExecutableSchemas(), resolveIntent)).length
         : 0;
     if (explicitCandidate && explicitRequestCount === explicitCandidate.segments.length && typeof semanticPlanner === 'function') {
         try {

@@ -38,9 +38,10 @@ async function run() {
         }], { ...incoming, subject: 'model_70b' });
         assert.equal(result.matched, false, 'model output cannot override explicit variants');
     }
-    assert.equal(canonicalizer.findStrongConflict({ ...incoming, subject: 'model_8b', value: 'v1.0' }, [{
+    assert.equal(canonicalizer.validateDecision({ ...decision, relation: 'conflict' }, [{
         ...stored, subject: 'model_70b', value: 'v2.0'
-    }]), null, 'versions of different entities are not the same property conflict');
+    }], { ...incoming, subject: 'model_8b', value: 'v1.0' }).matched, false,
+    'versions of different entities are not the same property conflict');
 
     assert.equal(canonicalizer.validateDecision(decision, [{
         ...stored, category: 'project', project_key: 'other'
@@ -49,6 +50,19 @@ async function run() {
     assert.equal(canonicalizer.validateDecision(decision, [{
         ...stored, value: 'Offline mode works; export works'
     }], incoming).matched, false, 'even identical keys cannot collapse a composite into a component');
+    for (const [component, compound] of [
+        ['SQLite is an in-process database library.', 'SQLite is an in-process database library and stores a database in a single file.'],
+        ['The service uses a local cache', 'The service uses a local cache and supports remote backups']
+    ]) {
+        const single = { ...incoming, value: component };
+        const multiple = { ...stored, value: compound };
+        assert.equal(canonicalizer.validateDecision(decision, [multiple], single).matched, false,
+            'A confident model must not discard an additional coordinated predicate');
+        assert.equal(canonicalizer.validateDecision(decision, [{ ...stored, value: component }], { ...incoming, value: compound }).matched, false);
+    }
+    assert.equal(canonicalizer.validateDecision(decision, [{ ...stored, value: 'Supports Linux and Windows' }],
+        { ...incoming, value: 'Runs on Linux and Windows' }).matched, true,
+        'A platform list alone is not a second predicate');
 
     for (const malformed of [
         { candidate_index: null }, { candidate_index: '0' }, { candidate_index: true },

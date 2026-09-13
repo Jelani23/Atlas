@@ -4,7 +4,7 @@ const searchPipeline = require('../searchPipeline');
 const state = require('../state');
 
 function isFailure(result) {
-    return /^(?:error:|tool execution failed:)/i.test(String(result || '').trim());
+    return /^(?:error\b|tool execution failed:)/i.test(String(result || '').trim());
 }
 
 function formatToolName(name) {

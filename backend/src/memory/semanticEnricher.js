@@ -1,8 +1,8 @@
-const { createModelAdapter } = require('../models/modelAdapter');
+const { createMemoryModelAdapter } = require('../models/memoryModelAdapter');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const llmQueue = require('./llmQueue');
 
-const modelAdapter = createModelAdapter();
+const modelAdapter = createMemoryModelAdapter();
 
 /**
  * Semantic enrichment is intentionally LLM-driven.

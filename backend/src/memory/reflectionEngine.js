@@ -339,7 +339,7 @@ async function summarizeReflectionInput(input, instruction, complete = reflectio
                 think: false,
                 temperature: 0.1,
                 maxTokens: Number(process.env.REFLECTION_MAX_TOKENS) || 700,
-                model: process.env.OLLAMA_MODEL_FAST || 'qwen3:4b',
+                model: process.env.OLLAMA_MODEL_FAST || process.env.OLLAMA_MODEL || 'qwen3.5:4b',
                 format: REFLECTION_SCHEMA
             }
         )

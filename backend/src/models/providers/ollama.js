@@ -5,7 +5,7 @@ const EventTypes = require('../../events/eventTypes');
 
 function buildRequestBody(messages, options = {}, stream = false) {
   const body = {
-    model: options.model || process.env.OLLAMA_MODEL || 'qwen3:4b',
+    model: options.model || process.env.OLLAMA_MODEL || 'qwen3.5:4b',
     messages,
     stream,
     think: options.think ?? false,
@@ -39,7 +39,7 @@ async function complete(messages, options = {}) {
 
   const data = await response.json();
   if (data.done) {
-    emitMetrics(data, options.model || process.env.OLLAMA_MODEL || 'qwen3:4b', options.requestId);
+    emitMetrics(data, options.model || process.env.OLLAMA_MODEL || 'qwen3.5:4b', options.requestId);
   }
   return data.message.content;
 }
@@ -82,7 +82,7 @@ async function* streamComplete(messages, options = {}) {
   });
 
   const res = await streamPromise;
-  const modelName = options.model || process.env.OLLAMA_MODEL || 'qwen3:4b';
+  const modelName = options.model || process.env.OLLAMA_MODEL || 'qwen3.5:4b';
 
   let buffer = '';
   let firstRawChunk = true;
@@ -176,7 +176,7 @@ async function warmup(modelName) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: modelName || process.env.OLLAMA_MODEL || 'qwen3:4b',
+        model: modelName || process.env.OLLAMA_MODEL || 'qwen3.5:4b',
         messages: [{ role: 'user', content: 'hi' }],
         stream: false,
         think: false,

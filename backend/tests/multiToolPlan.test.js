@@ -69,6 +69,17 @@ async function testCompilation() {
     assert.strictEqual(semantic.status, 'ready');
     assert(semantic.plan.steps.every(step => step.source === 'semantic'));
 
+    const recovered = await compileToolPlan('Convert 5 kilometers to meters; Count the characters in Atlas', {
+        semanticPlanner: async () => ({ steps: [
+            { toolName: 'convertUnit', args: [5, 'kilometers', 'meters'], confidence: 0.99 },
+            { toolName: 'characterCount', args: ['Atlas'], confidence: 0.99 }
+        ] })
+    });
+    assert.equal(recovered.status, 'ready');
+    assert.deepEqual(recovered.plan.steps.map(step => [step.toolName, step.args]), [
+        ['convertUnit', [5, 'kilometers', 'meters']], ['characterCount', ['Atlas']]
+    ]);
+
     const tooMany = await compileToolPlan(
         Array.from({ length: 9 }, () => 'list my notes').join('; ')
     );
@@ -92,6 +103,26 @@ function testSemanticBoundary() {
         ]
     }, ['Show every memo', 'Get rid of scratchpad']);
     assert.strictEqual(uncorroboratedDelete, null);
+
+    for (const confidence of [undefined, null, '0.99', NaN, Infinity, 1.01, -1, 0.89]) {
+        assert.strictEqual(validateSemanticPlan({ steps: [
+            { toolName: 'listNotes', args: [], confidence },
+            { toolName: 'webSearch', args: ['Qwen releases'], confidence: 0.95 }
+        ] }, ['Show every memo', 'Check online for Qwen releases']), null,
+        `Invalid confidence must not authorize a plan: ${String(confidence)}`);
+    }
+    assert.strictEqual(validateSemanticPlan({ steps: [null, null] }, ['List notes', 'List notes']), null);
+
+    const clauses = ['Delete the note called scratchpad', 'List my notes'];
+    const route = () => ({ state: 'DETERMINISTIC', winner: 'deleteNote', params: ['scratchpad'] });
+    const deletionProposal = args => ({ steps: [
+        { toolName: 'deleteNote', args, confidence: 0.99 },
+        { toolName: 'listNotes', args: [], confidence: 0.99 }
+    ] });
+    assert(validateSemanticPlan(deletionProposal(['scratchpad']), clauses, route));
+    assert.strictEqual(validateSemanticPlan(deletionProposal(['release plan']), clauses, route), null,
+        'Matching the tool name must not authorize a different mutation target');
+    assert.strictEqual(validateSemanticPlan(deletionProposal([]), clauses, route), null);
 }
 
 async function testSemanticProposalAdapter() {
@@ -179,6 +210,11 @@ async function testExecutionQueue() {
     });
     assert.deepStrictEqual(continued, ['listNotes', 'searchKnowledge']);
     assert.strictEqual(partialFailure.failedCount, 1);
+    const reportedFailure = await executeToolPlan(plan, {
+        runTool: async toolName => toolName === 'listNotes' ? 'Error reading notes: unavailable' : 'Knowledge searched'
+    });
+    assert.strictEqual(reportedFailure.failedCount, 1);
+    assert.strictEqual(reportedFailure.results[0].status, 'failed');
 }
 
 async function testApprovalPreflight() {

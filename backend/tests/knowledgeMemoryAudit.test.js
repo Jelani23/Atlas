@@ -157,7 +157,10 @@ installFakeModule('../src/memory/projectRegistry', {
     normalizeProjectKey: (k) => String(k || '').trim().toLowerCase().replace(/\s+/g, '-')
 });
 
-let fakeCompleteImpl = async () => '{"memories":[],"conversation_update":{}}';
+let fakeCompleteImpl = async (_messages, options) => options?.format?.properties?.candidate_index
+    ? JSON.stringify({ candidate_index: 0, entity: 'same', property: 'different', scope: 'same',
+        values: 'uncertain', replacement_quote: '', confidence: 0.95, reason: 'Fixture represents a distinct property.' })
+    : '{"memories":[],"conversation_update":{}}';
 const fakeCompleteCallLog = [];
 
 installFakeModule('../src/models/modelAdapter', {
@@ -224,7 +227,12 @@ async function testEligibility() {
         "Earth's largest ocean is the Pacific Ocean.",
         'Python was created by Guido van Rossum.',
         'Mars has two moons.',
-        'HTTP is a protocol used for web communication.'
+        'HTTP is a protocol used for web communication.',
+        'The juniper_service uses SQLite as its database engine.',
+        'The juniper_service stores its data in a SQLite database.',
+        'The juniper_service now uses PostgreSQL as its database engine, replacing SQLite.',
+        'Redis stores cached responses in memory.',
+        'DNS uses port 53 for queries.'
     ];
 
     for (const msg of facts) {
@@ -255,7 +263,12 @@ async function testEligibility() {
         'Hey how are you doing today',
         'That is cool',
         'ok thanks',
-        'Can you help me with something?'
+        'Can you help me with something?',
+        'What uses SQLite for storage',
+        'Does Redis store cached responses in memory',
+        'Please explain how Redis stores data',
+        'Show which service uses SQLite',
+        'The juniper_service uses SQLite for storage?'
     ];
 
     for (const msg of negativeControls) {
@@ -276,6 +289,30 @@ async function testEligibility() {
         question.eligible === false,
         JSON.stringify(question)
     );
+
+    const registry = require('../src/memory/projectRegistry');
+    const originalProjects = registry.getAllProjects;
+    registry.getAllProjects = async () => [{ name: 'Atlas', project_key: 'atlas' }];
+    try {
+        for (const message of [
+            'Explain how working memory, project memory, user preferences, and procedural memory differ in Atlas.',
+            'Tell me about the Atlas project.',
+            'Atlas project'
+        ]) {
+            const result = await checkEligibility(message);
+            ok(`project reference alone is not a memory: ${message}`, !result.eligible, JSON.stringify(result));
+        }
+        for (const message of [
+            'Atlas uses Supabase for persistent memory.',
+            'Remember that Atlas uses Supabase.',
+            'When explaining Atlas project decisions, distinguish guesses from recorded reasons.'
+        ]) {
+            const result = await checkEligibility(message);
+            ok(`project assertion or teaching remains eligible: ${message}`, result.eligible, JSON.stringify(result));
+        }
+    } finally {
+        registry.getAllProjects = originalProjects;
+    }
 }
 
 /**
@@ -594,6 +631,13 @@ async function testPlanScenarios() {
  */
 async function testExtractorWiring() {
     section('4. memoryExtractor.js — knowledge fields wired into schema + defaulting');
+
+    ok('project category is unavailable without a registered project',
+        !memoryExtractor.buildExtractionSchema([]).properties.memories.items.properties.category.enum.includes('project'));
+    const registeredSchema = memoryExtractor.buildExtractionSchema(['atlas']);
+    ok('registered projects retain their category and constrained project keys',
+        registeredSchema.properties.memories.items.properties.category.enum.includes('project') &&
+        JSON.stringify(registeredSchema.properties.memories.items.properties.project_key.enum) === '["atlas"]');
 
     ok(
         'EXTRACTION_SCHEMA includes the knowledge-specific fields',

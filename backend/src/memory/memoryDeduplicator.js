@@ -148,6 +148,11 @@ function determineAction(memory, existingMemory = null, semanticResolution = nul
         };
     }
 
+    if (memory.category === 'knowledge' && semanticResolution?.reviewRequired) {
+        return { action: 'conflict', memory, existing: existingMemory, identity,
+            semantic: semanticResolution, reason: semanticResolution.reason };
+    }
+
     if (semanticResolution?.matched) {
         if (semanticResolution.relation === 'equivalent') {
             return {

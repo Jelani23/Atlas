@@ -890,7 +890,7 @@ async function testReasoningLeakRobustness() {
     fakeCompleteCallLog = [];
     fakeCompleteImpl = async () => '{"memories": [], "conversation_update": {}}';
 
-    await memoryExtractor.extractMemory('Some message with no deterministic match at all here.', {});
+    await memoryExtractor.extractMemory('Atlas has an unusual deployment arrangement.', {});
 
     const fallbackFormat = fakeCompleteCallLog[0] && fakeCompleteCallLog[0].options.format;
     const projectKeyField = fallbackFormat &&
@@ -900,10 +900,10 @@ async function testReasoningLeakRobustness() {
         'memoryExtractor\'s fallback classifier call carries a project_key-aware schema-constrained format',
         fakeCompleteCallLog.length === 1 &&
         !!fallbackFormat &&
-        JSON.stringify(fallbackFormat.properties.memories.items.properties.category) === JSON.stringify(memoryExtractor.EXTRACTION_SCHEMA.properties.memories.items.properties.category) &&
+        fallbackFormat.properties.memories.items.properties.category.enum.includes('project') &&
         !!projectKeyField &&
         projectKeyField.type === 'string' &&
-        (!Array.isArray(projectKeyField.enum) || projectKeyField.enum.every(k => typeof k === 'string')),
+        JSON.stringify(projectKeyField.enum) === '["atlas"]',
         JSON.stringify(fallbackFormat)
     );
 

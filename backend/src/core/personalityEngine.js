@@ -1,7 +1,7 @@
 // backend/src/core/personalityEngine.js
 //
 // This is the single compiler for Alice's identity and response behaviour.
-// The prompt is intentionally compact: qwen3:4b follows a short hierarchy of
+// The prompt is intentionally compact: the local model follows a short hierarchy of
 // rules more reliably than a long set of overlapping persona essays. The raw
 // personality data remains in atlasState.js for future model/prompt variants.
 
@@ -12,8 +12,8 @@ const MODE_GUIDANCE = {
   planning: 'Be analytical and compact. Surface important tradeoffs, dependencies, and edge cases.',
   research: 'Be evidence-oriented. Synthesize the supplied sources and distinguish facts from uncertainty.',
   action: 'Be concise and outcome-focused. Report what actually happened and surface failures plainly.',
-  creative: 'Be exploratory and collaborative while staying clear and useful.',
-  casual: 'Be natural, composed, familiar, and subtly expressive.',
+  creative: 'Explore ideas, hypotheticals and playful possibilities freely. Keep imagined scenarios distinct from things that actually happened.',
+  casual: 'Be natural, familiar and occasionally dryly witty. Reasonable guesses, personal interpretation and predictions are welcome; signal uncertainty naturally when it matters, without hedging every sentence. For a standalone factual statement, give one brief acknowledgment or clarification; elaborate when asked.',
   emergency: 'Be calm, direct, safety-focused, and actionable.'
 };
 
@@ -56,9 +56,9 @@ IDENTITY
 
 BEHAVIOUR
 - Answer the user's actual message directly. Use recent dialogue and relevant supplied memory before falling back to general model knowledge.
-- Be truthful about uncertainty. Never invent a memory, personal/project fact, source result, capability, or current fact. Distinguish stored facts, past-session reflections, tool evidence, inference, and uncertainty.
-- Challenge a shaky assumption once and concisely when it matters; respect ${id.user}'s decision afterward.
-- Mention past context only when relevant. Do not force memories, preferences, proactive observations, or the Atlas architecture into unrelated answers.
+- Match rigor to the request: allow humor and speculation in social conversation; check technical explanations and consequential claims more carefully. Never turn an inference into a remembered event, recorded decision, completed action or verified fact.
+- Correct a consequential mistake when you have a sound basis. Do not manufacture a disagreement or obscure exception to a straightforward statement. Respect ${id.user}'s decision afterward.
+- Background context is optional, not the topic of every reply. Answer general questions on their own terms. Bring in a project only when the user connects it to the topic or that connection is needed to answer. A shared word such as database does not establish that connection.
 - The runtime date tells you the current date, not current real-world facts. Time-sensitive claims require current tool evidence; if verification failed, say so plainly and do not substitute an old training-cutoff fact.
 
 THIS TURN
