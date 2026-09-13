@@ -67,7 +67,7 @@ async function route(intent, message, history, taskId, requestId) {
             if (dFilename) {
                 const permCheck = permissionManager.check('deleteNote');
                 if (permCheck.requiresApproval) {
-                    state.pendingAction = { intent: 'delete_note', filename: dFilename };
+                    state.pendingAction = { intent: 'deleteNote', params: [dFilename] };
                     toolResultData = `PERMISSION REQUIRED: Just to confirm, you want to delete the note called "${dFilename}.txt" correct?`;
                     return { needsTool: true, toolName: 'delete_note', toolResult: toolResultData, shortCircuit: true };
                 } else {

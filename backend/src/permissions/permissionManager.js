@@ -1,6 +1,7 @@
 // backend/src/permissions/permissionManager.js
 const EventEmitter = require('events');
 const { POLICY } = require('./permissionPolicy');
+const { confirmationDecision } = require('../intent/toolRequestBoundary');
 
 class PermissionManager extends EventEmitter {
     constructor() {
@@ -55,15 +56,12 @@ class PermissionManager extends EventEmitter {
     handlePermissionResponse(message) {
         if (this.pendingRequests.size === 0) return false;
 
-        const lower = message.toLowerCase().trim();
-        const isAffirmative = /\b(yes|yeah|yep|sure|do it|can you do so|please do|go ahead|check it|check for that|approve|allow)\b/i.test(lower);
-        const isNegative = /\b(no|nope|cancel|stop|don't|do not|deny|block)\b/i.test(lower);
-
-        if (isAffirmative || isNegative) {
+        const decision = confirmationDecision(message);
+        if (decision !== null) {
             // Get the oldest pending request
             const [id, request] = this.pendingRequests.entries().next().value;
-            console.log(`[Permission] Message "${message}" interpreted as ${isAffirmative ? 'APPROVE' : 'DENY'} for ${request.toolName} (ID: ${id})`);
-            this.resolve(id, isAffirmative);
+            console.log(`[Permission] Message "${message}" interpreted as ${decision ? 'APPROVE' : 'DENY'} for ${request.toolName} (ID: ${id})`);
+            this.resolve(id, decision);
             return true;
         }
 

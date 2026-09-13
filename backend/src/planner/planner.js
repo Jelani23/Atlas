@@ -3,6 +3,7 @@ const { execute } = require('../tools/toolExecutor');
 const llmRouter = require('./routing/llmRouter');
 const permissionManager = require('../permissions/permissionManager');
 const state = require('./state');
+const { isNonExecutingToolMention, confirmationDecision } = require('../intent/toolRequestBoundary');
 const { compileToolPlan } = require('./toolPlanning/toolPlanCompiler');
 const { executeToolPlan } = require('./toolPlanning/toolPlanExecutor');
 const {
@@ -30,9 +31,9 @@ function planResult(execution) {
 async function route(intent, message, history = [], taskId, requestId) {
     // 0. Systemic Permission & Confirmation Boundary
     // Intercept Yes/No at the very top to resolve pending permissions or actions.
-    const lowerMessage = message.toLowerCase().trim();
-    const isAffirmative = /\b(yes|yeah|yep|sure|do it|can you do so|please do|go ahead|check it|check for that)\b/i.test(lowerMessage);
-    const isNegative = /\b(no|nope|cancel|stop|don't|do not)\b/i.test(lowerMessage);
+    const decision = confirmationDecision(message);
+    const isAffirmative = decision === true;
+    const isNegative = decision === false;
 
     if (isAffirmative || isNegative) {
         // Check for pending LLM tool permissions
@@ -89,6 +90,8 @@ async function route(intent, message, history = [], taskId, requestId) {
             }
         }
     }
+
+    if (isNonExecutingToolMention(message)) return { needsTool: false };
 
     const compiled = await compileToolPlan(message, {
         semanticPlanner: isSemanticPlanningEnabled()

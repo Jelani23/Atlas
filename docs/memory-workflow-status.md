@@ -1,5 +1,9 @@
 # Memory workflow — current handoff
 
+Latest app acceptance: both profile questions selected all 27 stable records and recovered favorites; the note-deletion explanation stayed conversational; the impossible conversion was rejected in 812 ms. Capability explanation was still unsupported (claimed note command/API/trash UI), and inspection found a stale capability-context gate after removal of normal semantic preprocessing. The user requests a roadmap/ideas planning break. See the top of memory-tool-checkpoint-2026-09-13.md for accepted tests, remaining semantic limits and the capability/pipeline-awareness requirement. No SQL or repeat of these app checks is pending; this is a checkpoint, not phase completion.
+
+September 13 resumed implementation supersedes the pending tests below: fixed profile-recall recognition and the eight-record context cap, added profile coverage/error handling, blocked common explanation/negation tool hijacks, tightened confirmation parsing and fixed a pending deletion argument shape. Unit conversion now rejects incompatible dimensions and malformed operands; standalone bounded spoken conversions parse correctly. Read-only Supabase inspection confirms all expected favorites exist, and isolated local-model replay supplied all 27 stable profile records. See the top of memory-tool-checkpoint-2026-09-13.md for evidence, limitations and the next app checks. No SQL is required. Passive news and agent profiles remain roadmap work.
+
 Updated 2026-09-12. This supersedes the earlier September 10 checklist. Commit `e697149` is the September 9 foundation; subsequent work remains uncommitted. Preserve the working tree.
 
 ## September 13 continuation: memory eligibility and semantic tool inputs

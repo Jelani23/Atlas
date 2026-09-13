@@ -4,6 +4,7 @@ const hotSwapManager = require('./hotSwapManager');
 const projectRegistry = require('../memory/projectRegistry');
 const workingMemory = require('../memory/workingMemory');
 const sessionManager = require('../memory/sessionManager');
+const { resolveProfileRecall } = require('../memory/profileRecall');
 const {
     looksLikeTitleReference,
     resolveSessionTitleReference
@@ -319,8 +320,13 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         looksLikeTitleReference(userInput);
     const sessionStore = options.sessionStore || sessionManager;
 
+    let profileReadFailed = false;
     const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx, titledSessions] = await Promise.all([
-        memoryCache.getMemory('user_profile'),
+        memoryCache.getMemory('user_profile').catch(error => {
+            profileReadFailed = true;
+            console.error('[ContextManager] User profile unavailable:', error.message);
+            return [];
+        }),
         memoryCache.getMemory('project_memory'),
         memoryCache.getMemory('knowledge_library'),
         memoryCache.getMemory('dev_state'),
@@ -357,7 +363,9 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     const userNoteType = classifyUserNote(userInput);
     const implementationQuestion = isImplementationQuestion(userInput);
     const trustedKnowledgeQuestion = isTrustedKnowledgeQuestion(userInput);
-    const isAskingAboutSelf = lowerInput.includes('know about me') || lowerInput.includes('what do you remember') || lowerInput.includes('who am i');
+    const profileRecall = resolveProfileRecall(userInput, history);
+    const isAskingAboutSelf = Boolean(profileRecall);
+    const profileKeywords = profileRecall ? extractKeywords(profileRecall.query) : keywords;
     const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas') ;
 
     // Phase 3C.1: Split State from Profile Essentials
@@ -483,16 +491,28 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     }
 
     const profileName = isAskingAboutSelf ? 'memory' : (intent && intent.intent ? intent.intent : 'conversation');
-    const budgetProfile = CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation;
+    const budgetProfile = { ...(CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation) };
+    // Explicit recall needs more than the small personalization slice. Keep a
+    // bounded budget, but do not silently cap a whole profile at eight rows.
+    if (profileRecall) budgetProfile.personal = 1600;
 
     // Identity/relationship essentials personalize every turn, but the core
     // Alice/ATLAS identity already lives in the system prompt. Keep only a
     // small set here instead of duplicating the full profile on every request.
-    const essentialsScored = essentials.map(item => scoreAndBoost('user_profile', item, keywords));
+    const scoreProfile = item => {
+        const scored = scoreAndBoost('user_profile', item, profileKeywords);
+        if (profileRecall) {
+            // Current recall terms outrank activation from old dialogue.
+            const favorite = /favou?rite/i.test(`${scored.key} ${scored.value}`);
+            scored._finalScore = scored._relevanceScore + (profileRecall.favorites && favorite ? 1000 : 0);
+        }
+        return scored;
+    };
+    const essentialsScored = essentials.map(scoreProfile);
     const essentialsAlloc = allocateBudget(essentialsScored, Math.min(120, budgetProfile.personal), 4);
 
     // 3. Dynamic Personal: Only include if relevant OR if asking about self
-    let dynamicPersonalScored = dynamicPersonal.map(item => scoreAndBoost('user_profile', item, keywords))
+    let dynamicPersonalScored = dynamicPersonal.map(scoreProfile)
         .filter(m => m._relevanceScore > 0 || isAskingAboutSelf);
         
     // 4. Projects: scope STRICTLY to the active project and/or any
@@ -667,7 +687,9 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     const remainingPersonalBudget = Math.max(0, budgetProfile.personal - essentialsAlloc.usedTokens);
     const dynamicPersonalAlloc = allocateBudget(dynamicPersonalScored, remainingPersonalBudget, 4);
 
-    const personalAlloc = {
+    const personalAlloc = profileRecall ? allocateBudget(
+        [...essentialsScored, ...dynamicPersonalScored], budgetProfile.personal
+    ) : {
         selected: [...essentialsAlloc.selected, ...dynamicPersonalAlloc.selected],
         usedTokens: essentialsAlloc.usedTokens + dynamicPersonalAlloc.usedTokens
     };
@@ -731,12 +753,22 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     };
     
     console.log(`[ContextManager] 📊 Context Manifest (Task: ${manifest.task}) - Used ${totalUsed} tokens`);
-    console.log(`   State: ${stateScored.length}t | Essentials: ${essentialsAlloc.selected.length}t | Dynamic: ${dynamicPersonalAlloc.selected.length}t | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items | Reflections: ${manifest.selected.reflections} items | Earlier turns: ${manifest.selected.conversationHistory} items`);
+    const selectedEssentials = personalAlloc.selected.filter(item => essentialsClasses.includes(item.category)).length;
+    console.log(`   State: ${stateScored.length} items | Essentials: ${selectedEssentials} items | Dynamic: ${personalAlloc.selected.length - selectedEssentials} items | Projects: ${manifest.selected.projects} items | Proc: ${manifest.selected.procedures} items | Reflections: ${manifest.selected.reflections} items | Earlier turns: ${manifest.selected.conversationHistory} items`);
+
+    const profileCoverage = profileRecall ? {
+        status: profileReadFailed ? 'unavailable' : 'loaded',
+        available: essentials.length + dynamicPersonal.length,
+        selected: personalAlloc.selected.length,
+        omitted: essentials.length + dynamicPersonal.length - personalAlloc.selected.length
+    } : null;
+    if (profileCoverage) console.log('[ContextManager] Profile recall:', JSON.stringify(profileCoverage));
 
     return {
         hotState: memoryCache.getHotState(),
         state: stateScored,
         personal: personalAlloc.selected,
+        profileCoverage,
         projects: projectAlloc.selected,
         projectNames,
         activeProjectKey: currentProjectKeyResolved,

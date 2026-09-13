@@ -1,4 +1,5 @@
 // backend/src/intent/entityExtractor.js
+const { parseUnitConversionRequest } = require('../utils/unitConversionRequest');
 
 function extractEntities(message) {
     const entities = [];
@@ -31,7 +32,13 @@ function extractEntities(message) {
     }
 
     // 5. STANDARD UNITS
-    if (!currencyMatch) {
+    const conversion = parseUnitConversionRequest(message);
+    // Known physical/storage names only; currencies retain their own route.
+    const standardUnit = /^(?:m|meters?|cm|centimeters?|km|kilometers?|in|inch|inches|ft|foot|feet|yd|yards?|mi|miles?|g|grams?|kg|kilograms?|mg|milligrams?|lb|lbs|oz|ounces?|b|bytes?|kb|kilobytes?|mb|megabytes?|gb|gigabytes?|tb|terabytes?)$/i;
+    if (conversion && standardUnit.test(conversion.from) && standardUnit.test(conversion.to)) {
+        entities.push({ type: 'NUMBER', value: conversion.value, confidence: 0.99 });
+        entities.push({ type: 'UNIT', value: conversion.from, confidence: 0.99 });
+    } else if (!currencyMatch) {
         const unitRegex = /(\d+\.?\d*)\s*(cm|centimeters|ft|feet|meters|gb|mb|kb|hours|minutes|seconds)/i;
         const unitMatch = message.match(unitRegex);
         if (unitMatch) {

@@ -101,6 +101,12 @@ Current Task: ${hot.currentTask || 'None'}
     if (relevantMemory.personal && relevantMemory.personal.length > 0) {
         personalMemoryContext = relevantMemory.personal.map(item => `- ${item.key}: ${item.value}`).join('\n');
     }
+    const coverage = relevantMemory.profileCoverage;
+    const profileRecallContext = coverage
+        ? (coverage.status === 'unavailable'
+            ? 'The user profile could not be loaded. Explain that recall is unavailable; do not claim the user never supplied the information.'
+            : `User profile snapshot: ${coverage.selected} of ${coverage.available} stable records supplied; ${coverage.omitted} omitted by the context budget. ${coverage.omitted > 0 ? 'This is a partial view. Missing details may exist in omitted records; do not claim there are no other stored facts or favorites.' : 'Use these profile records to answer, including relevant favorites. This is the loaded profile snapshot, not a search of all memory stores.'} For follow-ups, offer additional relevant facts instead of repeating the same summary. Previous assistant replies do not establish which profile records exist.`)
+        : '';
 
     // Phase 3C.1: Active User State (Pointers)
     let userStateContext = "None";
@@ -416,6 +422,8 @@ Limitations:
     // context that had nothing in it.
     const memoryBlockInner = [
         section('User Profile (Stable Facts):', personalMemoryContext),
+        section('Profile Recall Coverage (internal; do not recite counts or metadata):', profileRecallContext
+            ? `${profileRecallContext} Report the meaning of the stored facts faithfully. Preferences alone do not establish personality traits or behavior. Do not add personal traits or current activities that the records do not state.` : ''),
         section('Active User State:', userStateContext),
         section('Remembered Project Context (not implementation proof):', projectMemoryContext),
         section('Knowledge Library (may be stale or unverified):', knowledgeContext),

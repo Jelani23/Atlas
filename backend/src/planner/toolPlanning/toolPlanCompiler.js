@@ -2,6 +2,7 @@ const tools = require('../../tools');
 const { isDeepStrictEqual } = require('node:util');
 const { validateToolArguments, canonicalizeToolArguments } = require('../../tools/toolArguments');
 const { resolve } = require('../../intent/intentResolver');
+const { isNonExecutingToolMention } = require('../../intent/toolRequestBoundary');
 const { getSchemas } = require('../../tools/toolRegistry');
 const permissionManager = require('../../permissions/permissionManager');
 const { getClauseCandidates, hasExplicitBoundary } = require('./requestSegmenter');
@@ -30,6 +31,7 @@ function getExecutableSchemas() {
 function looksLikeRequestClause(clause, schemas = getExecutableSchemas(), resolveIntent = resolve) {
     const text = String(clause || '').trim().toLowerCase();
     if (!text) return false;
+    if (isNonExecutingToolMention(text)) return false;
     if (/\?$/.test(text) || /^(?:please\s+)?(?:can|could|would|will)\s+you\b/.test(text)) {
         return true;
     }
@@ -57,6 +59,7 @@ function compileCandidate(candidate, resolveIntent = resolve) {
 
     for (let index = 0; index < candidate.segments.length; index++) {
         const clause = candidate.segments[index];
+        if (isNonExecutingToolMention(clause)) return null;
         const route = resolveIntent(clause);
         const schema = route.winner ? schemas.get(route.winner) : null;
         const confident = route.state === 'DETERMINISTIC' &&
@@ -106,6 +109,7 @@ function validateSemanticPlan(proposal, segments, resolveIntent = resolve) {
         const proposed = proposal.steps[index];
         if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)) return null;
         const clause = segments[index];
+        if (isNonExecutingToolMention(clause)) return null;
         const schema = schemas.get(proposed.toolName);
         const permission = schema ? permissionManager.check(proposed.toolName) : null;
         const corroboratingRoute = resolveIntent(clause);

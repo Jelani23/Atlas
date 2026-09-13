@@ -2,6 +2,7 @@
 const { extractEntities } = require('./entityExtractor');
 const { getSchemas } = require('../tools/toolRegistry');
 const permissionManager = require('../permissions/permissionManager'); // <-- IMPORT
+const { isNonExecutingToolMention } = require('./toolRequestBoundary');
 
 // Cache compiled trigger regexes so repeated resolve() calls (every
 // message) don't recompile the same pattern over and over.
@@ -46,6 +47,10 @@ function hasTrigger(lower, trigger) {
 }
 
 function resolve(message) {
+    if (isNonExecutingToolMention(message)) {
+        return { state: 'UNKNOWN', winner: null, confidence: 0, ambiguity: 0,
+            llmRequired: true, entities: [], params: [] };
+    }
     const lower = message.toLowerCase().trim();
     const entities = extractEntities(message);
     const entityTypes = entities.map(e => e.type);

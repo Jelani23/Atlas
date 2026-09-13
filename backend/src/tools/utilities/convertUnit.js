@@ -1,8 +1,11 @@
 // src/tools/utilities/convertUnit.js
+const { parseUnitConversionRequest } = require('../../utils/unitConversionRequest');
 async function convertUnit(value, fromUnit, toUnit) {
     try {
-        const val = parseFloat(value);
-        if (isNaN(val)) return "Error: Invalid number provided.";
+        const val = Number(value);
+        if (!['number', 'string'].includes(typeof value) || String(value).trim() === '' || !Number.isFinite(val)) {
+            return "Error: Invalid number provided.";
+        }
 
         const units = {
             'm': 1, 'meter': 1, 'meters': 1,
@@ -24,12 +27,22 @@ async function convertUnit(value, fromUnit, toUnit) {
             'tb': 1099511627776, 'terabyte': 1099511627776, 'terabytes': 1099511627776
         };
 
-        const f = units[fromUnit.toLowerCase()];
-        const t = units[toUnit.toLowerCase()];
+        const from = typeof fromUnit === 'string' ? fromUnit.trim().toLowerCase() : '';
+        const to = typeof toUnit === 'string' ? toUnit.trim().toLowerCase() : '';
+        const f = Object.hasOwn(units, from) ? units[from] : null;
+        const t = Object.hasOwn(units, to) ? units[to] : null;
 
         if (!f || !t) return `Error: Unsupported unit conversion. Supported units include m, cm, km, in, ft, mi, g, kg, lb, oz, b, kb, mb, gb, tb.`;
 
+        const mass = new Set(['g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'mg', 'milligram', 'milligrams', 'lb', 'lbs', 'pound', 'pounds', 'oz', 'ounce', 'ounces']);
+        const storage = new Set(['b', 'byte', 'bytes', 'kb', 'kilobyte', 'kilobytes', 'mb', 'megabyte', 'megabytes', 'gb', 'gigabyte', 'gigabytes', 'tb', 'terabyte', 'terabytes']);
+        const dimension = unit => mass.has(unit) ? 'mass' : storage.has(unit) ? 'data size' : 'length';
+        if (dimension(from) !== dimension(to)) {
+            return `Error: Cannot convert ${fromUnit} to ${toUnit}; ${dimension(from)} and ${dimension(to)} are different dimensions.`;
+        }
+
         const result = (val * f) / t;
+        if (!Number.isFinite(result)) return 'Error: Conversion result is outside the supported numeric range.';
         return `${val} ${fromUnit} is equal to ${result.toFixed(4)} ${toUnit}.`;
     } catch (error) {
         return `Error converting unit: ${error.message}`;
@@ -44,6 +57,10 @@ module.exports = {
         triggers: ['convert', 'how many', 'cm', 'ft', 'feet', 'centimeters', 'meters'],
         requiredEntities: ["NUMBER","UNIT"],
         extractParams: (message, entities) => {
+        const request = parseUnitConversionRequest(message);
+        if (request && entities.some(entity => entity.type === 'UNIT')) {
+            return [request.value, request.from, request.to];
+        }
         const num = entities.find(e => e.type === 'NUMBER');
         const fromUnit = entities.find(e => e.type === 'UNIT');
         const targetMatch = message.match(/(?:to|how many)\s+(cm|ft|feet|centimeters|meters|gb|mb|kb|hours|minutes|seconds)/i);

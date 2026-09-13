@@ -20,7 +20,8 @@ const tests = [
     'projectExtractionScope.test.js', 'sessionWorkingContext.test.js', 'fictionalCleanup.test.js', 'memoryModelAdapter.test.js',
     'modelRouting.test.js', 'reasoningPolicy.test.js', 'responseRecovery.test.js', 'thinkFilter.test.js',
     'multiToolPlan.test.js', 'plannerMultiToolRouting.test.js', 'plannerNormalizerGrounding.test.js', 'toolArguments.test.js',
-    'arithmeticExpression.test.js', 'toolResultPresenter.test.js'
+    'arithmeticExpression.test.js', 'toolResultPresenter.test.js', 'profileRecall.test.js',
+    'toolRequestBoundary.test.js', 'unitConversion.test.js'
 ];
 const failures = [];
 for (const test of tests) {

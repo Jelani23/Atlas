@@ -3,11 +3,13 @@ const { createModelAdapter } = require('../models/modelAdapter');
 const modelRouter = require('../models/modelRouter');
 const projectCache = require('../core/projectCache');
 const memoryCache = require('../core/memoryCache');
+const { isNonExecutingToolMention } = require('../intent/toolRequestBoundary');
 const { extractJSON, safePreview } = require('../utils/jsonExtractor');
 const getTemplates = async () => [];
 const modelAdapter = createModelAdapter();
 
 async function normalizeTask(message, history = []) {
+    if (isNonExecutingToolMention(message)) return { intent: 'none' };
     const fastPath = fastRegexNormalizer(message);
     if (fastPath && fastPath.intent !== 'none') {
         console.log("[Normalizer] Fast Path triggered (bypassing LLM):", fastPath.intent);
@@ -111,6 +113,7 @@ Return ONLY valid JSON: {"filename": "snake_case_name", "content": "the text to 
 }
 
 function fastRegexNormalizer(message) {
+    if (isNonExecutingToolMention(message)) return { intent: 'none' };
     const lowerMessage = message.toLowerCase();
     const hasNoteTarget = /\bnotes?\b/.test(lowerMessage) || /\.(?:txt|md)\b/.test(lowerMessage);
 

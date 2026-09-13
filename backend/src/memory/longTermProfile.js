@@ -13,8 +13,8 @@ async function get(category = null) {
     const { data, error } = await query;
 
     if (error) {
-        console.error('Failed to load long-term profile:', error.message);
-        return [];
+        // Do not cache a failed read as an empty profile.
+        throw new Error(`Failed to load long-term profile: ${error.message}`);
     }
 
     return data;
