@@ -1,12 +1,12 @@
 "use client"
 
 import {
-  Activity,
   FolderOpen,
   Home,
+  ListTodo,
   MessagesSquare,
+  MonitorSmartphone,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from "lucide-react"
 
@@ -18,10 +18,13 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { id: "home", label: "Home", icon: Home },
-  { id: "conversation", label: "Conversation", icon: MessagesSquare },
-  { id: "memory", label: "Memory", icon: Sparkles },
+  { id: "conversation", label: "Conversations", icon: MessagesSquare },
   { id: "projects", label: "Projects", icon: FolderOpen },
-  { id: "activity", label: "Activity", icon: Activity },
+  // These two IDs intentionally keep the current internal placeholder routes for now.
+  // The user-facing navigation reflects the new Atlas information architecture while
+  // we build the real Tasks and Connected Devices views next.
+  { id: "memory", label: "Tasks", icon: ListTodo },
+  { id: "activity", label: "Devices", icon: MonitorSmartphone },
   { id: "settings", label: "Settings", icon: Settings },
 ]
 
