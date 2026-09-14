@@ -5,8 +5,6 @@
 
 begin;
 
--- Single-owner helper. The UI deliberately hides the email/account concept;
--- Supabase Auth only provides a stable identity for RLS across devices.
 create or replace function public.atlas_is_owner()
 returns boolean
 language sql
@@ -18,11 +16,6 @@ as $$
 $$;
 
 grant execute on function public.atlas_is_owner() to authenticated;
-
--- ---------------------------------------------------------------------------
--- Existing durable data: allow the authenticated Atlas owner to read it
--- directly from the renderer. The trusted backend keeps its service-role path.
--- ---------------------------------------------------------------------------
 
 alter table public.sessions enable row level security;
 alter table public.conversations enable row level security;
@@ -36,40 +29,24 @@ grant select on table public.knowledge_library to authenticated;
 grant update (title), delete on table public.sessions to authenticated;
 
 drop policy if exists atlas_owner_read_sessions on public.sessions;
-create policy atlas_owner_read_sessions on public.sessions
-for select to authenticated using (public.atlas_is_owner());
-
+create policy atlas_owner_read_sessions on public.sessions for select to authenticated using (public.atlas_is_owner());
 drop policy if exists atlas_owner_update_sessions on public.sessions;
-create policy atlas_owner_update_sessions on public.sessions
-for update to authenticated using (public.atlas_is_owner()) with check (public.atlas_is_owner());
-
+create policy atlas_owner_update_sessions on public.sessions for update to authenticated using (public.atlas_is_owner()) with check (public.atlas_is_owner());
 drop policy if exists atlas_owner_delete_sessions on public.sessions;
-create policy atlas_owner_delete_sessions on public.sessions
-for delete to authenticated using (public.atlas_is_owner());
-
+create policy atlas_owner_delete_sessions on public.sessions for delete to authenticated using (public.atlas_is_owner());
 drop policy if exists atlas_owner_read_conversations on public.conversations;
-create policy atlas_owner_read_conversations on public.conversations
-for select to authenticated using (public.atlas_is_owner());
-
+create policy atlas_owner_read_conversations on public.conversations for select to authenticated using (public.atlas_is_owner());
 drop policy if exists atlas_owner_read_project_memory on public.project_memory;
-create policy atlas_owner_read_project_memory on public.project_memory
-for select to authenticated using (public.atlas_is_owner());
-
+create policy atlas_owner_read_project_memory on public.project_memory for select to authenticated using (public.atlas_is_owner());
 drop policy if exists atlas_owner_read_knowledge on public.knowledge_library;
-create policy atlas_owner_read_knowledge on public.knowledge_library
-for select to authenticated using (public.atlas_is_owner());
-
--- ---------------------------------------------------------------------------
--- First-class project state
--- ---------------------------------------------------------------------------
+create policy atlas_owner_read_knowledge on public.knowledge_library for select to authenticated using (public.atlas_is_owner());
 
 create table if not exists public.atlas_projects (
   id text primary key,
   name text not null,
   category text not null default 'Project',
   description text not null default '',
-  status text not null default 'active'
-    check (status in ('active', 'paused', 'completed', 'archived')),
+  status text not null default 'active' check (status in ('active', 'paused', 'completed', 'archived')),
   current_focus text not null default '',
   progress integer check (progress between 0 and 100),
   icon text not null default 'folder',
@@ -95,9 +72,7 @@ create table if not exists public.atlas_project_history (
   happened_at timestamptz not null default now(),
   source text not null default 'atlas'
 );
-
-create index if not exists idx_atlas_project_history_project
-  on public.atlas_project_history(project_id, happened_at desc);
+create index if not exists idx_atlas_project_history_project on public.atlas_project_history(project_id, happened_at desc);
 
 create table if not exists public.atlas_project_files (
   id bigint generated always as identity primary key,
@@ -111,14 +86,11 @@ create table if not exists public.atlas_project_files (
   unique (project_id, path)
 );
 
--- Global durable task table. project_id is optional so future system/personal
--- work can appear in the global Tasks view without belonging to a project.
 create table if not exists public.atlas_tasks (
   id text primary key,
   project_id text references public.atlas_projects(id) on delete set null,
   title text not null,
-  status text not null default 'planned'
-    check (status in ('in-progress', 'waiting', 'planned', 'completed', 'failed', 'interrupted')),
+  status text not null default 'planned' check (status in ('in-progress', 'waiting', 'planned', 'completed', 'failed', 'interrupted')),
   progress integer check (progress between 0 and 100),
   stage text,
   detail text,
@@ -129,12 +101,8 @@ create table if not exists public.atlas_tasks (
   completed_at timestamptz,
   updated_at timestamptz not null default now()
 );
+create index if not exists idx_atlas_tasks_project_status on public.atlas_tasks(project_id, status, updated_at desc);
 
-create index if not exists idx_atlas_tasks_project_status
-  on public.atlas_tasks(project_id, status, updated_at desc);
-
--- Durable device presence. A device is considered online by the UI only while
--- last_seen is fresh; the row itself remains so offline devices keep context.
 create table if not exists public.atlas_devices (
   id text primary key,
   name text not null,
@@ -149,25 +117,12 @@ create table if not exists public.atlas_devices (
   updated_at timestamptz not null default now()
 );
 
--- Reuse the existing updated_at helper from the main Atlas schema.
 drop trigger if exists trg_atlas_projects_updated_at on public.atlas_projects;
-create trigger trg_atlas_projects_updated_at
-before update on public.atlas_projects
-for each row execute function public.set_updated_at();
-
+create trigger trg_atlas_projects_updated_at before update on public.atlas_projects for each row execute function public.set_updated_at();
 drop trigger if exists trg_atlas_tasks_updated_at on public.atlas_tasks;
-create trigger trg_atlas_tasks_updated_at
-before update on public.atlas_tasks
-for each row execute function public.set_updated_at();
-
+create trigger trg_atlas_tasks_updated_at before update on public.atlas_tasks for each row execute function public.set_updated_at();
 drop trigger if exists trg_atlas_devices_updated_at on public.atlas_devices;
-create trigger trg_atlas_devices_updated_at
-before update on public.atlas_devices
-for each row execute function public.set_updated_at();
-
--- Owner-readable workspace tables.
-foreach_table:
--- label above is only a visual separator for humans; policies are explicit below.
+create trigger trg_atlas_devices_updated_at before update on public.atlas_devices for each row execute function public.set_updated_at();
 
 alter table public.atlas_projects enable row level security;
 alter table public.atlas_project_context enable row level security;
@@ -200,26 +155,13 @@ create policy atlas_owner_insert_devices on public.atlas_devices for insert to a
 drop policy if exists atlas_owner_update_devices on public.atlas_devices;
 create policy atlas_owner_update_devices on public.atlas_devices for update to authenticated using (public.atlas_is_owner()) with check (public.atlas_is_owner());
 
--- ---------------------------------------------------------------------------
--- Seed the current prototype into durable state. These upserts make the
--- migration safe to re-run while preserving future rows added by Alice.
--- ---------------------------------------------------------------------------
-
 insert into public.atlas_projects (id, name, category, description, status, current_focus, progress, icon, sort_order)
 values
   ('atlas', 'ATLAS', 'Personal AI Assistant', 'Alice''s assistant system, memory architecture, tools, voice, agents, and cross-device interface.', 'active', 'Cross-device persistent UI and cloud state', 72, 'cloud', 10),
   ('bindex', 'Bindex', 'Pokémon TCG Collection', 'Collection tracking, binder layouts, owned-card pricing, and Collector+ features.', 'active', 'Collection and pricing pipeline', 54, 'book', 20),
   ('short-films', 'Short Films', 'Writing & Film', 'Story development, screenwriting, thematic exploration, and future film production work.', 'paused', 'Story refinement and reflection', 72, 'film', 30),
   ('cs445', 'CS 445', 'Artificial Intelligence', 'Fall 2026 AI course project centered on ATLAS, Alice, and progressively more autonomous capabilities.', 'active', 'Build toward the October progress milestone', 30, 'graduation', 40)
-on conflict (id) do update set
-  name = excluded.name,
-  category = excluded.category,
-  description = excluded.description,
-  status = excluded.status,
-  current_focus = excluded.current_focus,
-  progress = excluded.progress,
-  icon = excluded.icon,
-  sort_order = excluded.sort_order;
+on conflict (id) do update set name=excluded.name, category=excluded.category, description=excluded.description, status=excluded.status, current_focus=excluded.current_focus, progress=excluded.progress, icon=excluded.icon, sort_order=excluded.sort_order;
 
 insert into public.atlas_project_context (project_id, value, sort_order)
 values
@@ -245,13 +187,7 @@ values
   ('cs445-progress', 'cs445', 'Progress milestone', 'in-progress', 30, null, 'Prepare demonstrable progress for the October checkpoint.'),
   ('cs445-demo', 'cs445', 'Cross-device demo', 'in-progress', 45, null, 'Demonstrate one Atlas host across multiple client devices.'),
   ('short-films-unsent', 'short-films', 'Unsent Letters revision', 'waiting', 72, null, 'Continue refining the screenplay after the current interaction rewrite.')
-on conflict (id) do update set
-  project_id = excluded.project_id,
-  title = excluded.title,
-  status = excluded.status,
-  progress = excluded.progress,
-  stage = excluded.stage,
-  detail = excluded.detail;
+on conflict (id) do update set project_id=excluded.project_id, title=excluded.title, status=excluded.status, progress=excluded.progress, stage=excluded.stage, detail=excluded.detail;
 
 insert into public.atlas_project_history (project_id, title, detail, happened_at, source)
 select seed.project_id, seed.title, seed.detail, seed.happened_at, 'migration'
@@ -264,10 +200,7 @@ from (values
   ('short-films', 'Unsent Letters interaction revised', 'The central exchange shifted toward reflection through an outside perspective.', now() - interval '3 days'),
   ('cs445', 'Project proposal approved', 'ATLAS is the individual AI project for the semester.', now() - interval '10 days')
 ) as seed(project_id, title, detail, happened_at)
-where not exists (
-  select 1 from public.atlas_project_history existing
-  where existing.project_id = seed.project_id and existing.title = seed.title
-);
+where not exists (select 1 from public.atlas_project_history existing where existing.project_id=seed.project_id and existing.title=seed.title);
 
 insert into public.atlas_project_files (project_id, path, description, kind, note, sort_order)
 values
@@ -277,10 +210,6 @@ values
   ('atlas', 'backend/src/server.js', 'Atlas HTTP and WebSocket host for Alice and local execution.', 'code', 'Compute host', 40),
   ('atlas', 'docs/PWA_SETUP.md', 'Mac/iOS development and Tailscale setup notes.', 'document', 'Setup guide', 50),
   ('short-films', 'okurenai_tegami_script.docx', 'Canonical surviving screenplay for Unsent Letters.', 'document', 'Reference', 10)
-on conflict (project_id, path) do update set
-  description = excluded.description,
-  kind = excluded.kind,
-  note = excluded.note,
-  sort_order = excluded.sort_order;
+on conflict (project_id, path) do update set description=excluded.description, kind=excluded.kind, note=excluded.note, sort_order=excluded.sort_order;
 
 commit;
