@@ -164,6 +164,22 @@ export function AtlasRuntime() {
 
   useEffect(() => {
     if (nativeDesktop || !("serviceWorker" in navigator)) return
+
+    // Never let the PWA cache sit in front of Next's dev server. A service
+    // worker that cached yesterday's shell can otherwise pair stale HTML with
+    // today's HMR bundle and cause React hydration mismatches after UI edits.
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => void registration.unregister())
+      })
+      if ("caches" in window) {
+        caches.keys().then((keys) => {
+          keys.filter((key) => key.startsWith("atlas-pwa-")).forEach((key) => void caches.delete(key))
+        })
+      }
+      return
+    }
+
     const register = () => navigator.serviceWorker.register("/sw.js").catch(() => undefined)
 
     if (document.readyState === "complete") register()
