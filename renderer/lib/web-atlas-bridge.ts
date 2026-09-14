@@ -1,5 +1,12 @@
 import type { AtlasBridge, AtlasEvent } from "./atlas-events"
 import type { ConversationSummary, StoredMessage } from "./types"
+import {
+  deleteCloudConversation,
+  getAtlasCloudSession,
+  getCloudConversation,
+  listCloudConversations,
+  renameCloudConversation,
+} from "./atlas-cloud"
 
 export type AtlasConnectionState = "connecting" | "initializing" | "online" | "offline"
 
@@ -27,13 +34,12 @@ function normalizeRemoteOrigin(value: string) {
   const trimmed = trimTrailingSlash(value)
   if (!trimmed) return getDefaultAtlasRemoteOrigin()
   if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (typeof window !== "undefined" && window.location.protocol === "https:") return `https://${trimmed}`
   return `http://${trimmed}`
 }
 
 export function getDefaultAtlasRemoteOrigin() {
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
-    // An HTTPS PWA cannot open ws:// mixed content. Tailscale Serve can expose
-    // the same backend as HTTPS/WSS on the machine's tailnet hostname.
     return `https://${DEFAULT_HOSTNAME}`
   }
   return `http://${DEFAULT_HOSTNAME}:${DEFAULT_PORT}`
@@ -112,12 +118,9 @@ class WebAtlasBridge implements AtlasWebBridge {
 
   private installResumeListeners() {
     if (typeof window === "undefined") return
-
     window.addEventListener("online", () => this.retryNow())
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && this.socket?.readyState !== WebSocket.OPEN) {
-        this.retryNow()
-      }
+      if (document.visibilityState === "visible" && this.socket?.readyState !== WebSocket.OPEN) this.retryNow()
     })
   }
 
@@ -181,11 +184,9 @@ class WebAtlasBridge implements AtlasWebBridge {
       } catch {
         return
       }
-
       if (!data || typeof data !== "object") return
       const packet = data as Record<string, unknown>
       const id = typeof packet.id === "string" ? packet.id : null
-
       if (id && this.pending.has(id)) {
         const pending = this.pending.get(id)!
         this.pending.delete(id)
@@ -194,23 +195,16 @@ class WebAtlasBridge implements AtlasWebBridge {
         else pending.resolve(packet.result)
         return
       }
-
       if (typeof packet.type === "string") {
         const event: AtlasEvent = {
           type: packet.type as AtlasEvent["type"],
-          payload:
-            packet.payload && typeof packet.payload === "object"
-              ? (packet.payload as Record<string, unknown>)
-              : {},
+          payload: packet.payload && typeof packet.payload === "object" ? (packet.payload as Record<string, unknown>) : {},
         }
         this.eventListeners.forEach((listener) => listener(event))
       }
     }
 
-    socket.onerror = () => {
-      // onclose is the single source of truth for retry/state changes.
-    }
-
+    socket.onerror = () => undefined
     socket.onclose = () => {
       if (this.socket === socket) this.socket = null
       if (this.connectTimer) clearTimeout(this.connectTimer)
@@ -233,25 +227,19 @@ class WebAtlasBridge implements AtlasWebBridge {
       }
       publishConnectionState("initializing")
     } catch {
-      // The backend can accept the socket a moment before Atlas finishes
-      // initializing. Keep the connection and try the readiness probe again.
+      // Keep the socket and retry while Atlas finishes initializing.
     }
-
     this.readyTimer = setTimeout(() => void this.checkReady(), 1_000)
   }
 
   private rpc(method: string, args: unknown[] = [], timeoutMs = RPC_TIMEOUT_MS): Promise<unknown> {
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("Atlas is currently not active."))
-    }
-
+    if (this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Atlas is currently not active."))
     const id = `pwa-${Date.now()}-${++this.rpcCounter}`
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id)
         reject(new Error(`Atlas request timed out (${method})`))
       }, timeoutMs)
-
       this.pending.set(id, { resolve, reject, timeout })
       this.socket!.send(JSON.stringify({ id, method, args }))
     })
@@ -263,7 +251,6 @@ class WebAtlasBridge implements AtlasWebBridge {
       this.retryNow()
       return
     }
-
     this.origin = normalized
     this.clearTimers()
     this.rejectPending("Atlas connection changed")
@@ -299,102 +286,69 @@ class WebAtlasBridge implements AtlasWebBridge {
   }
 
   async listModes() {
-    try {
-      return (await this.rpc("listModes")) as string[]
-    } catch {
-      return []
-    }
+    try { return (await this.rpc("listModes")) as string[] } catch { return [] }
   }
 
   async setMode(mode: string) {
-    try {
-      return (await this.rpc("setMode", [mode])) as { ok: boolean; mode?: string; error?: string }
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "Atlas is offline" }
-    }
+    try { return (await this.rpc("setMode", [mode])) as { ok: boolean; mode?: string; error?: string } }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Atlas is offline" } }
   }
 
   async resetConversation() {
-    try {
-      return (await this.rpc("resetConversation")) as { ok: boolean }
-    } catch {
-      return { ok: false }
-    }
+    try { return (await this.rpc("resetConversation")) as { ok: boolean } } catch { return { ok: false } }
   }
 
-  async listConversations() {
-    try {
-      return (await this.rpc("listConversations")) as ConversationSummary[]
-    } catch {
-      return []
+  async listConversations(): Promise<ConversationSummary[]> {
+    if (await getAtlasCloudSession()) {
+      try { return await listCloudConversations() } catch { /* fall through to host */ }
     }
+    try { return (await this.rpc("listConversations")) as ConversationSummary[] } catch { return [] }
   }
 
-  async getConversation(sessionId: string) {
-    try {
-      return (await this.rpc("getConversation", [sessionId])) as StoredMessage[]
-    } catch {
-      return []
+  async getConversation(sessionId: string): Promise<StoredMessage[]> {
+    if (await getAtlasCloudSession()) {
+      try { return await getCloudConversation(sessionId) } catch { /* fall through to host */ }
     }
+    try { return (await this.rpc("getConversation", [sessionId])) as StoredMessage[] } catch { return [] }
   }
 
   async newConversation() {
-    try {
-      return (await this.rpc("newConversation")) as { ok: boolean; sessionId: string }
-    } catch {
-      // Keep UI-only preview work usable even when the host PC is asleep.
-      return { ok: false, sessionId: `preview-${Date.now()}` }
-    }
+    try { return (await this.rpc("newConversation")) as { ok: boolean; sessionId: string } }
+    catch { return { ok: false, sessionId: `preview-${Date.now()}` } }
   }
 
   async resumeConversation(sessionId: string) {
-    try {
-      return (await this.rpc("resumeConversation", [sessionId])) as { ok: boolean; sessionId: string }
-    } catch {
-      return { ok: false, sessionId }
-    }
+    try { return (await this.rpc("resumeConversation", [sessionId])) as { ok: boolean; sessionId: string } }
+    catch { return { ok: false, sessionId } }
   }
 
   async deleteConversation(sessionId: string) {
-    try {
-      return (await this.rpc("deleteConversation", [sessionId])) as {
-        ok: boolean
-        newSessionId: string | null
-      }
-    } catch {
-      return { ok: false, newSessionId: null }
+    if (await getAtlasCloudSession()) {
+      try { return await deleteCloudConversation(sessionId) } catch { /* fall through */ }
     }
+    try { return (await this.rpc("deleteConversation", [sessionId])) as { ok: boolean; newSessionId: string | null } }
+    catch { return { ok: false, newSessionId: null } }
   }
 
   async renameConversation(sessionId: string, title: string) {
-    try {
-      return (await this.rpc("renameConversation", [sessionId, title])) as {
-        ok: boolean
-        title: string | null
-      }
-    } catch {
-      return { ok: false, title: null }
+    if (await getAtlasCloudSession()) {
+      try { return await renameCloudConversation(sessionId, title) } catch { /* fall through */ }
     }
+    try { return (await this.rpc("renameConversation", [sessionId, title])) as { ok: boolean; title: string | null } }
+    catch { return { ok: false, title: null } }
   }
 
   async transcribeAudio(base64Audio: string) {
     try {
-      return (await this.rpc("transcribeAudio", [base64Audio], 60_000)) as {
-        ok: boolean
-        text?: string
-        error?: string
-      }
+      return (await this.rpc("transcribeAudio", [base64Audio], 60_000)) as { ok: boolean; text?: string; error?: string }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "Atlas is offline" }
     }
   }
 
   async interrupt() {
-    try {
-      return (await this.rpc("interrupt")) as { ok: boolean; error?: string }
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "Atlas is offline" }
-    }
+    try { return (await this.rpc("interrupt")) as { ok: boolean; error?: string } }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Atlas is offline" } }
   }
 
   onEvent(callback: (event: AtlasEvent) => void) {
@@ -403,23 +357,15 @@ class WebAtlasBridge implements AtlasWebBridge {
   }
 }
 
-/**
- * Return Electron's native bridge when it exists. In a browser/PWA, install
- * a WebSocket-backed bridge with the exact same surface so the rest of the
- * renderer does not need a second code path.
- */
 export function ensureAtlasBridge(): AtlasBridge | undefined {
   if (typeof window === "undefined") return undefined
-
   if (window.atlasBridge && !browserBridge) {
     publishConnectionState("online")
     return window.atlasBridge
   }
-
   if (!browserBridge) {
     browserBridge = new WebAtlasBridge(getAtlasRemoteOrigin())
     window.atlasBridge = browserBridge
   }
-
   return browserBridge
 }
