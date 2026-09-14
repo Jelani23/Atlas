@@ -1,5 +1,9 @@
 # Project recovery — September 10, 2026
 
+Latest user follow-up: personality app checks accepted; the genuine favorite-game update to `Minecraft and Celeste` logged a successful save. Fresh-session recall of the update is not yet tested. The user now asks to review the remaining list. See [current acceptance](alice-personality-checkpoint-2026-09-14.md); the restart/personality check mentioned below is completed.
+
+Latest September 14 handoff: [Alice personality restoration](alice-personality-checkpoint-2026-09-14.md). The original profile is preserved and now compiled into relevant conversational context without competing response-tone settings. 63 offline test files pass; the next action is the user's app tone check after restart. Factual correction and invented-memory response failures remain open. No migration is pending, and database-backed agent profiles are future work. Personality changes are uncommitted on top of `eb45502`.
+
 ## Scope and source of context
 
 Recovered from the Coding task's local saved session, Git state, project documentation, the Atlas ideas and planning task, and the recent messages in the ChatGPT conversation Atlas Access Clarified. Only relevant recent portions of the planning conversations were read; this is not an exhaustive import of all Atlas history.

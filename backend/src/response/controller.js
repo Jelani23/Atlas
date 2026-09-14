@@ -1,3 +1,4 @@
+// Controls length/layout only. personalityEngine owns identity and mode tone.
 function getResponseStyle(intent) {
   switch (intent.intent) {
     case "conversation":
@@ -5,24 +6,21 @@ function getResponseStyle(intent) {
         length: "brief unless additional detail is useful",
         formatting: "natural spoken conversation",
         allowMarkdown: false,
-        allowLists: false,
-        tone: "calm, familiar, and conversational"
+        allowLists: false
       };
     case "planning":
       return {
         length: "detailed when needed, but focused",
         formatting: "natural paragraphs, avoid bullet points unless strictly necessary",
         allowMarkdown: false, 
-        allowLists: false, 
-        tone: "analytical, collaborative, and thoughtful"
+        allowLists: false
       };
     case "coding":
       return {
         length: "detailed technical explanation",
         formatting: "use code blocks and structured sections when helpful",
         allowMarkdown: true,
-        allowLists: true,
-        tone: "precise and instructional"
+        allowLists: true
       };
     case "search":
       return {
@@ -38,32 +36,28 @@ function getResponseStyle(intent) {
         length: "as long as the information actually requires - a couple sentences for a simple factual answer, a full paragraph or more for anything with real substance. Never compress genuinely useful detail just to sound brief.",
         formatting: "one single, coherent, synthesized answer written in your own words after actually reading and comprehending everything the search turned up - not a per-source or per-query recap, not a stitched-together list of snippets, and not a bare copy of any one result",
         allowMarkdown: false,
-        allowLists: false,
-        tone: "informative, direct, and well-organized"
+        allowLists: false
       };
     case "memory":
       return {
-        length: "short and direct",
+        length: "brief for simple recall; include the details the user requested",
         formatting: "natural conversational response",
         allowMarkdown: false,
-        allowLists: false,
-        tone: "neutral and acknowledging"
+        allowLists: false
       };
     case "action":
       return {
-        length: "1 sentence confirming the action",
+        length: "brief, reporting the actual outcomes or failures",
         formatting: "natural conversational response",
         allowMarkdown: false,
-        allowLists: false,
-        tone: "helpful and direct"
+        allowLists: false
       };
     default:
       return {
         length: "balanced",
         formatting: "natural conversation",
         allowMarkdown: false,
-        allowLists: false,
-        tone: "calm and helpful"
+        allowLists: false
       };
   }
 }

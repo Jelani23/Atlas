@@ -1,5 +1,4 @@
 // backend/src/core/contextBuilder.js
-const { atlasState } = require('./atlasState');
 const personalityEngine = require('./personalityEngine');
 const worldModel = require('../memory/worldModel');
 const contextManager = require('./contextManager');
@@ -301,7 +300,7 @@ Limitations:
 `;
     }
 
-    const systemPrompt = personalityEngine.getSystemPrompt(mode, policy, responseStyle);
+    const systemPrompt = personalityEngine.getSystemPrompt(mode, policy, responseStyle, undefined, { userInput, history });
 
     const isWebSearchResult = toolResult && toolResult.needsTool && (
         toolResult.hasWebSearch === true ||
@@ -471,8 +470,8 @@ Limitations:
         currentInformationDirective,
         userNoteDirective,
         reflectionGuideline,
-        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- When the user supplies a statement or correction, acknowledge it as information they reported. Missing or older memory does not disprove their report. Do not turn a statement into a request to prove it, or substitute unrelated facts about the active project. Acknowledgment does not mean saved or verified: only a completed write result can support a claim that this turn was saved, and background extraction may still be pending.\n- Only current tool evidence or an exact Development State entry can support a claim that a feature, schema field, policy, or automation is implemented. Project memory, knowledge, procedures, reflections, and assistant messages cannot prove implementation. Never invent implementation status, verification state, expiry periods, or background behavior.\n- Respond naturally as ${atlasState.identity.name}.`,
-        `REPLY FOCUS\nAnswer the user's topic, not the background workspace. A standalone factual statement calls for a brief acknowledgment, without unsolicited comparisons, exceptions or follow-up questions. If asked to explain, explain; if invited to guess, infer naturally; if invited to joke, be playful. Do not add project connections or reasons for past decisions that the user did not supply or ask about.`
+        `TURN RULES\n- Answer the current user message directly.${toolGuidelines}${memoryGuidelines}${conversationHistoryGuideline}\n- When the user supplies a statement or correction, acknowledge it as information they reported. Missing or older memory does not disprove their report. Do not turn a statement into a request to prove it, or substitute unrelated facts about the active project. Acknowledgment does not mean saved or verified: only a completed write result can support a claim that this turn was saved, and background extraction may still be pending.\n- Only current tool evidence or an exact Development State entry can support a claim that a feature, schema field, policy, or automation is implemented. Project memory, knowledge, procedures, reflections, and assistant messages cannot prove implementation. Never invent implementation status, verification state, expiry periods, or background behavior.`,
+        personalityEngine.getReplyFocus()
     ].filter(Boolean).join('\n');
 }
 

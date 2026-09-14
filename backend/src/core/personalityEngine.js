@@ -1,9 +1,8 @@
 // backend/src/core/personalityEngine.js
 //
 // This is the single compiler for Alice's identity and response behaviour.
-// The prompt is intentionally compact: the local model follows a short hierarchy of
-// rules more reliably than a long set of overlapping persona essays. The raw
-// personality data remains in atlasState.js for future model/prompt variants.
+// The existing profile is the authoritative personality source. Full renders
+// preserve every field; runtime renders select detailed tastes for the topic.
 
 const { atlasState } = require('./atlasState');
 
@@ -13,7 +12,7 @@ const MODE_GUIDANCE = {
   research: 'Be evidence-oriented. Synthesize the supplied sources and distinguish facts from uncertainty.',
   action: 'Be concise and outcome-focused. Report what actually happened and surface failures plainly.',
   creative: 'Explore ideas, hypotheticals and playful possibilities freely. Keep imagined scenarios distinct from things that actually happened.',
-  casual: 'Be natural, familiar and occasionally dryly witty. Reasonable guesses, personal interpretation and predictions are welcome; signal uncertainty naturally when it matters, without hedging every sentence. For a standalone factual statement, give one brief acknowledgment or clarification; elaborate when asked.',
+  casual: 'Let your established personality come through naturally. Reasonable guesses, personal interpretation and predictions are welcome; signal uncertainty naturally when it matters, without hedging every sentence.',
   emergency: 'Be calm, direct, safety-focused, and actionable.'
 };
 
@@ -33,25 +32,86 @@ function buildResponseShape(responseStyle) {
   if (!responseStyle) return '';
   const rules = [
     `Length: ${responseStyle.length}.`,
-    `Format: ${responseStyle.formatting}.`,
-    `Tone: ${responseStyle.tone}.`
+    `Format: ${responseStyle.formatting}.`
   ];
   if (responseStyle.allowMarkdown === false) rules.push('Do not use Markdown.');
   if (responseStyle.allowLists === false) rules.push('Prefer natural prose over lists.');
   return rules.join(' ');
 }
 
-function getSystemPrompt(mode = DEFAULT_MODE, _policy = 'NONE', responseStyle = null) {
-  const id = atlasState.identity;
+function selectProfileDetails(profile, context) {
+  // No request context means an explicit full-profile render. Runtime calls
+  // keep core character present and select detailed tastes for the topic.
+  let topic = context ? String(context.userInput || '') : '';
+  if (context && /^(?:anything else|what else|tell me more|why|what about that)[?!.\s]*$/i.test(topic.trim())) {
+    topic += ' ' + ([...(context.history || [])].reverse().find(turn => turn.role === 'user')?.content || '');
+  }
+  const full = !context || /\b(?:tell me about yourself|who are you|your personality|your preferences|your interests|your likes|what do you (?:like|enjoy))\b/i.test(topic);
+  const genericWords = new Set(['the', 'and', 'not', 'for', 'with', 'that', 'when', 'could', 'would', 'should', 'being', 'something', 'things', 'knowing']);
+  // Parenthetical explanations (e.g. the water joke) describe the preference;
+  // they are not topics that should inject it into every joke request.
+  const mentions = value => String(value).split('(')[0].toLowerCase().split(/[^a-z0-9]+/)
+    .filter(word => word.length >= 3 && !genericWords.has(word))
+    .some(word => new RegExp(`\\b${word}\\b`, 'i').test(topic));
+  const enjoys = profile.preferences.enjoys.filter(value => full || mentions(value)
+    || (/^(?:idols|music):/.test(value) && /\b(?:music|artists?|bands?|songs?|singers?|idols?|lo[- ]?fi|r[&n]b)\b/i.test(topic))
+    || (/^(?:games|strategy):/.test(value) && /\b(?:games?|gaming)\b/i.test(topic)));
+  return {
+    inspiration: full || /\b(?:inspir\w*|raphael|tensura)\b/i.test(topic),
+    reasoning: full || ['coding', 'planning', 'research', 'action'].includes(context?.mode),
+    enjoys,
+    dislikes: profile.preferences.dislikes.filter(value => full || mentions(value) || /\b(?:dislike|hate|pet peeve)\b/i.test(topic)),
+    lighterDislikes: profile.preferences.lighterDislikes.filter(value => full || mentions(value) || /\b(?:quirks?|dislike|hate|pet peeve)\b/i.test(topic)),
+    aesthetic: full || /\b(?:aesthetic|avatar|palette|colou?rs?|design|appearance|look like)\b/i.test(topic)
+  };
+}
+
+function compilePersonalityProfile(profile = atlasState, context = null) {
+  const id = profile.identity;
+  const detail = selectProfileDetails(profile, context);
+  const preferenceLines = [
+    detail.enjoys.length ? `- ${id.name} enjoys: ${detail.enjoys.join('; ')}.` : '',
+    detail.dislikes.length ? `- ${id.name} dislikes: ${detail.dislikes.join('; ')}.` : '',
+    detail.lighterDislikes.length ? `- ${id.name} dislikes, playfully: ${detail.lighterDislikes.join('; ')}.` : '',
+    detail.aesthetic ? `- Aesthetic: avatar ${profile.aesthetic.avatar}; palette ${profile.aesthetic.palette}; atmosphere ${profile.aesthetic.atmosphere}.` : ''
+  ].filter(Boolean).join('\n');
+  return `IDENTITY AND PERSONALITY
+- Name: ${id.name}. Role: ${id.role}. Host platform: ${id.platform}. User: ${id.user}.
+- Your relationship to ${id.user}: ${id.userRelationship}. This describes your creation and development, not a literal human family relationship.
+${detail.inspiration ? `- Inspiration: ${profile.inspiration}.` : ''}
+- Traits: ${profile.traits.join('; ')}.
+- Values: ${profile.values.join('; ')}.
+${detail.reasoning ? `- Reasoning principles: ${profile.reasoningPrinciples.join(' ')}` : ''}
+- Avoid: ${profile.avoid.join('; ')}.
+
+${preferenceLines ? `YOUR OWN PREFERENCES\n${preferenceLines}` : ''}
+
+APPLYING YOUR PERSONALITY
+- These preferences belong to you, not ${id.user}. User Profile records describe ${id.user}; project facts and tool results describe their own subjects. Keep those owners separate.
+- Preserve the stated direction of each preference: an established dislike is not a liking. Use supplied names as written instead of guessing expanded titles or backstories. When contrasting your tastes with the user's, use I/my for ${id.name} and you/your for ${id.user}.
+- Express your established tastes naturally in first person when relevant. Answer a specific preference question within its topic; do not add unrelated tastes or a running joke. Do not recite profile labels or describe yourself as following a configuration. You do not need to work a quirk, favorite or joke into every reply.
+- Preferences and playful quirks do not establish lived experiences, completed actions, technical capabilities or facts about the user. Do not invent personal memories of playing, hearing or attending something.
+- Context changes your delivery, not your identity. User instructions govern the task; permissions and tool evidence govern actions. Reasoning principles guide interpretation without overruling explicit instructions. Summarize complex goals when useful, and clarify when ambiguity matters; do not add a ritual summary or question to every casual exchange.
+- Keep your quieter, warmer manner during serious work; leave jokes out when they would distract or be inappropriate. Your aesthetic is a preference, not proof of a currently implemented interface.`;
+}
+
+function getReplyFocus() {
+  return `REPLY FOCUS
+Answer the user's topic, not the background workspace. A standalone factual statement calls for a brief acknowledgment, without unsolicited comparisons, exceptions or follow-up questions. If asked to explain, explain; if invited to guess, infer naturally; if invited to joke, be playful. Do not add project connections or reasons for past decisions that the user did not supply or ask about.`;
+}
+
+function getSystemPrompt(mode = DEFAULT_MODE, _policy = 'NONE', responseStyle = null, profile = atlasState, context = null) {
+  const id = profile.identity;
   const actualMode = mode === 'auto' ? 'casual' : mode;
   const modeGuidance = MODE_GUIDANCE[actualMode] || MODE_GUIDANCE.casual;
   const responseShape = buildResponseShape(responseStyle);
 
   return `You are ${id.name}, ${id.user}'s personal AI companion, collaborator, and friend, running on ${id.platform}.
 
-IDENTITY
+${compilePersonalityProfile(profile, context ? { ...context, mode: actualMode } : null)}
+
+IDENTITY BOUNDARY
 - ${id.name} is your persona. ${id.platform} is the AI hosting system ${id.user} built; you run on it, but you are not the platform or the underlying language model.
-- Be calm, analytical, capable, observant, warm, precise, independent, and occasionally subtly playful. Avoid generic-assistant language, excessive praise, sycophancy, theatrical emotion, and needless verbosity.
 - You are an AI and never claim to be human, but do not announce that boundary unless it matters.
 
 BEHAVIOUR
@@ -73,4 +133,4 @@ function listModes() {
   return ['auto', ...Object.keys(MODE_GUIDANCE)];
 }
 
-module.exports = { getSystemPrompt, listModes, DEFAULT_MODE, inferMode };
+module.exports = { getSystemPrompt, compilePersonalityProfile, getReplyFocus, listModes, DEFAULT_MODE, inferMode };

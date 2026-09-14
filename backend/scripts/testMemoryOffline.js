@@ -21,7 +21,7 @@ const tests = [
     'modelRouting.test.js', 'reasoningPolicy.test.js', 'responseRecovery.test.js', 'thinkFilter.test.js',
     'multiToolPlan.test.js', 'plannerMultiToolRouting.test.js', 'plannerNormalizerGrounding.test.js', 'toolArguments.test.js',
     'arithmeticExpression.test.js', 'toolResultPresenter.test.js', 'profileRecall.test.js',
-    'toolRequestBoundary.test.js', 'unitConversion.test.js'
+    'toolRequestBoundary.test.js', 'unitConversion.test.js', 'personalityProfile.test.js'
 ];
 const failures = [];
 for (const test of tests) {
