@@ -1,6 +1,7 @@
 "use client"
 
 import { ListTodo, MonitorSmartphone, type LucideIcon } from "lucide-react"
+import { ProjectsView } from "./projects-view"
 
 interface ComingSoonProps {
   icon: LucideIcon
@@ -13,6 +14,11 @@ const PLANNED_PAGE_OVERRIDES: Record<string, { icon: LucideIcon; label: string }
 }
 
 export function ComingSoon({ icon, label }: ComingSoonProps) {
+  // AtlasApp still routes the secondary tabs through this shared slot. Projects
+  // is the first of those pages to graduate from a placeholder into a real view;
+  // Tasks, Devices, and Settings can follow the same pattern as we build them.
+  if (label === "Projects") return <ProjectsView />
+
   const plannedPage = PLANNED_PAGE_OVERRIDES[label]
   const Icon = plannedPage?.icon ?? icon
   const displayLabel = plannedPage?.label ?? label
