@@ -152,6 +152,7 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
 }
 
 export function AtlasRuntime() {
+  const [nativeDesktop] = useState(() => typeof window !== "undefined" && Boolean(window.windowControls))
   const [connectionState, setConnectionState] = useState<AtlasConnectionState>(() => {
     // This happens before AtlasApp mounts, so its first bridge lookup sees the
     // native Electron bridge or the browser WebSocket adapter immediately.
@@ -162,24 +163,26 @@ export function AtlasRuntime() {
   useEffect(() => subscribeAtlasConnection(setConnectionState), [])
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return
+    if (nativeDesktop || !("serviceWorker" in navigator)) return
     const register = () => navigator.serviceWorker.register("/sw.js").catch(() => undefined)
 
     if (document.readyState === "complete") register()
     else window.addEventListener("load", register, { once: true })
 
     return () => window.removeEventListener("load", register)
-  }, [])
+  }, [nativeDesktop])
 
   return (
     <div className="relative h-dvh overflow-hidden">
       <AtlasApp />
-      <aside
-        className="pointer-events-none fixed right-[max(0.75rem,env(safe-area-inset-right))] top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-[100]"
-        aria-live="polite"
-      >
-        <ConnectionIndicator state={connectionState} />
-      </aside>
+      {!nativeDesktop && (
+        <aside
+          className="pointer-events-none fixed right-[max(0.75rem,env(safe-area-inset-right))] top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-[100]"
+          aria-live="polite"
+        >
+          <ConnectionIndicator state={connectionState} />
+        </aside>
+      )}
     </div>
   )
 }
