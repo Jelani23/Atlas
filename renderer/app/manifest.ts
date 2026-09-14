@@ -1,5 +1,10 @@
 import type { MetadataRoute } from "next"
 
+// The renderer is exported as a fully static site for Electron/PWA use.
+// Next 16 requires metadata routes to opt into static generation when
+// `output: "export"` is enabled.
+export const dynamic = "force-static"
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Atlas OS — Alice",
