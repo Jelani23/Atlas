@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { ChevronLeft, Sparkles } from "lucide-react"
+import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
 import { type AtlasState, STATE_LABEL } from "./atlas-state"
 import { CloudSurface } from "./cloud-skin"
 
@@ -10,14 +11,18 @@ interface ActivityPanelProps {
   state: AtlasState
 }
 
+const TRANSITION_NAME = "alice-thought-cloud"
+
 export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   const active = state === "thinking" || state === "working"
   const dormant = state === "dormant"
   const [expanded, setExpanded] = useState(active)
 
   useEffect(() => {
-    if (active) setExpanded(true)
-  }, [active])
+    if (active && !expanded) {
+      runViewTransition(() => setExpanded(true))
+    }
+  }, [active, expanded])
 
   if (!expanded) {
     return (
@@ -26,10 +31,11 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
         className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
         skinClassName="opacity-66"
         contentClassName="flex h-full items-center justify-center"
+        style={viewTransitionStyle(TRANSITION_NAME)}
       >
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => runViewTransition(() => setExpanded(true))}
           className="flex h-full w-full items-center justify-center text-sky-deep/75 active:scale-95"
           aria-label="Show Alice's current thoughts"
           title="Alice's thoughts"
@@ -43,8 +49,9 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(20rem,48vw)] min-h-[9rem] select-none"
+      className="pointer-events-auto w-[min(20rem,48vw)] min-h-[9rem] select-none"
       skinClassName="opacity-72"
+      style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="mb-2.5 flex items-center gap-2">
         <Sparkles
@@ -57,7 +64,7 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
         {!active && (
           <button
             type="button"
-            onClick={() => setExpanded(false)}
+            onClick={() => runViewTransition(() => setExpanded(false))}
             className="alice-icon-button -mr-1 flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/30 hover:text-foreground/65"
             aria-label="Collapse thought panel"
           >
