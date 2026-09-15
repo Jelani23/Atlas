@@ -35,12 +35,12 @@ interface BottomNavProps {
 
 export function BottomNav({ active, onChange }: BottomNavProps) {
   return (
-    <nav aria-label="Primary" className="flex max-w-full justify-center px-2 py-1 sm:px-4 sm:py-2">
+    <nav aria-label="Primary" className="flex max-w-full justify-center px-2 py-0.5 sm:px-4 sm:py-1">
       <CloudSurface
         asset="nav"
-        className="max-w-full"
-        skinClassName="opacity-78"
-        contentClassName="themed-scroll flex max-w-full items-center gap-0.5 overflow-x-auto sm:gap-1"
+        className="min-h-[4.6rem] max-w-full"
+        skinClassName="opacity-74"
+        contentClassName="themed-scroll flex min-h-[4.6rem] max-w-full items-center justify-center gap-0.5 overflow-x-auto sm:gap-1"
       >
         {ITEMS.map((item) => {
           const isActive = item.id === active
@@ -55,8 +55,8 @@ export function BottomNav({ active, onChange }: BottomNavProps) {
               title={item.label}
               className={`alice-nav-item flex shrink-0 cursor-pointer items-center gap-2 px-2.5 py-2 text-sm sm:px-3.5 ${
                 isActive
-                  ? "bg-white/58 text-sky-deep shadow-[0_6px_16px_-12px_rgba(45,90,145,0.7)]"
-                  : "text-foreground/58 hover:bg-white/28 hover:text-foreground/85"
+                  ? "bg-white/52 text-sky-deep shadow-[0_6px_16px_-12px_rgba(45,90,145,0.7)]"
+                  : "text-foreground/58 hover:bg-white/24 hover:text-foreground/85"
               }`}
             >
               <Icon className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
