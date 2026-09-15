@@ -24,7 +24,7 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
       <CloudSurface
         asset="panelSquare"
         className="h-14 w-14 transition-transform hover:-translate-y-0.5"
-        skinClassName="opacity-62"
+        skinClassName="opacity-66"
         contentClassName="flex h-full items-center justify-center"
       >
         <button
@@ -43,10 +43,10 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold ml-auto w-[min(20rem,48vw)] min-h-[9.5rem] text-left"
-      skinClassName="opacity-70"
+      className="animate-alice-unfold ml-auto w-[min(20rem,48vw)] min-h-[9rem] text-left"
+      skinClassName="opacity-72"
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2.5 flex items-center gap-2">
         <MessageCircle className="h-4 w-4 shrink-0 text-sky-deep/65" strokeWidth={1.8} aria-hidden="true" />
         <span className="font-display text-[16px] leading-none text-foreground/76">Recent chat</span>
         <button
