@@ -25,6 +25,25 @@ const STATUS_COPY: Record<AtlasConnectionState, { title: string; detail: string 
 
 const TRANSITION_NAME = "atlas-host-status"
 
+const CLOUD_TRANSITION_SNAPSHOT_FIX = `
+::view-transition-old(alice-thought-cloud),
+::view-transition-old(alice-recent-cloud),
+::view-transition-old(atlas-cloud-status),
+::view-transition-old(atlas-host-status) {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+::view-transition-new(alice-thought-cloud),
+::view-transition-new(alice-recent-cloud),
+::view-transition-new(atlas-cloud-status),
+::view-transition-new(atlas-host-status) {
+  opacity: 1 !important;
+  animation: none !important;
+  mix-blend-mode: normal !important;
+}
+`
+
 function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
   const [expanded, setExpanded] = useState(false)
   const [remoteOrigin, setRemoteOriginValue] = useState("")
@@ -181,6 +200,7 @@ export function AtlasRuntime() {
 
   return (
     <div className="relative h-dvh overflow-hidden">
+      <style>{CLOUD_TRANSITION_SNAPSHOT_FIX}</style>
       <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} hostConnectionState={connectionState} />
       {!nativeDesktop && (
         <aside
