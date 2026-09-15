@@ -10,6 +10,7 @@ interface ActivityPanelProps {
 
 export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   const active = state === "thinking" || state === "working"
+  const dormant = state === "dormant"
 
   return (
     <div className="pointer-events-none w-[min(18rem,44vw)] select-none">
@@ -18,7 +19,7 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
           <span
             className={`flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary ${
               active ? "animate-pulse" : ""
-            }`}
+            } ${dormant ? "opacity-40" : ""}`}
           >
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
@@ -33,10 +34,10 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
         <ul className="space-y-1.5">
           {steps.length === 0 && (
             <li className="text-xs leading-relaxed text-muted-foreground/70">
-              Alice is resting. Ask her anything.
+              {dormant ? "Alice is offline. No active thought process." : "Alice is resting. Ask her anything."}
             </li>
           )}
-          {steps.map((step, i) => {
+          {!dormant && steps.map((step, i) => {
             const isLast = i === steps.length - 1
             return (
               <li
