@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { Check, CloudOff, KeyRound, LoaderCircle, LockKeyhole, LogOut } from "lucide-react"
+import { Cloud, CloudOff, KeyRound, LoaderCircle, LockKeyhole, LogOut, X } from "lucide-react"
 import {
   getAtlasCloudState,
   initializeAtlasCloud,
@@ -16,79 +16,84 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(state !== "online")
+  const [expanded, setExpanded] = useState(state === "locked")
 
   useEffect(() => {
-    if (state !== "online") setExpanded(true)
+    if (state === "locked") setExpanded(true)
+    if (state === "online") setExpanded(false)
   }, [state])
 
-  if (state === "online" && !expanded) {
+  if (!expanded && state !== "locked") {
     return (
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/45 bg-white/55 px-3 py-2 text-xs font-medium text-foreground/75 shadow-sm backdrop-blur-xl transition hover:bg-white/75"
-        aria-label="Atlas cloud settings"
+        className="alice-edge-tab pointer-events-auto flex h-10 w-10 items-center justify-center text-sky-deep/70"
+        aria-label="Atlas cloud status"
+        title={state === "online" ? "Atlas cloud connected" : state === "offline" ? "Atlas cloud unavailable" : "Checking Atlas cloud"}
       >
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-35" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-sky-500" />
-        </span>
-        Cloud
+        {state === "checking" ? (
+          <LoaderCircle className="h-[17px] w-[17px] animate-spin" strokeWidth={1.8} aria-hidden="true" />
+        ) : state === "online" ? (
+          <Cloud className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
+        ) : (
+          <CloudOff className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
+        )}
       </button>
     )
   }
 
   return (
-    <div className="pointer-events-auto w-[min(92vw,390px)] overflow-hidden rounded-[1.4rem] border border-white/50 bg-white/72 shadow-[0_16px_50px_-20px_rgba(45,90,145,0.5)] backdrop-blur-2xl">
-      <div className="flex items-start gap-3 p-3.5">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/65 text-primary shadow-sm">
+    <div className="alice-surface animate-alice-unfold pointer-events-auto w-[min(90vw,360px)] overflow-hidden">
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
           {state === "checking" ? (
-            <LoaderCircle className="h-[18px] w-[18px] animate-spin" aria-hidden="true" />
+            <LoaderCircle className="h-[18px] w-[18px] animate-spin" strokeWidth={1.8} aria-hidden="true" />
           ) : state === "online" ? (
-            <Check className="h-[18px] w-[18px]" aria-hidden="true" />
+            <Cloud className="h-[19px] w-[19px]" strokeWidth={1.8} aria-hidden="true" />
           ) : state === "locked" ? (
-            <LockKeyhole className="h-[18px] w-[18px]" aria-hidden="true" />
+            <LockKeyhole className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
           ) : (
-            <CloudOff className="h-[18px] w-[18px]" aria-hidden="true" />
+            <CloudOff className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
           )}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">
+          <p className="font-display text-[17px] leading-tight text-foreground/78">
             {state === "online"
-              ? "Atlas cloud connected"
+              ? "Atlas cloud"
               : state === "locked"
                 ? "Unlock Atlas"
                 : state === "offline"
-                  ? "Atlas cloud unavailable"
-                  : "Checking Atlas cloud…"}
+                  ? "Cloud unavailable"
+                  : "Finding your cloud…"}
           </p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-xs leading-relaxed text-foreground/46">
             {state === "online"
-              ? "Chats, projects, tasks, and device state are available on this device."
+              ? "Your chats and shared Atlas state are available here."
               : state === "locked"
-                ? "Enter your Atlas password to access shared cloud data."
+                ? "Enter your Atlas password to open your shared data on this device."
                 : state === "offline"
-                  ? "Last-known cloud data can still be used where it has been cached."
-                  : "Looking for your persistent Atlas data."}
+                  ? "Cached data can still appear while the cloud is unreachable."
+                  : "Checking for your persistent Atlas data."}
           </p>
         </div>
 
-        {state === "online" && (
+        {state !== "locked" && (
           <button
             type="button"
-            onClick={() => setExpanded((value) => !value)}
-            className="rounded-full px-2 py-1 text-[10px] font-semibold text-muted-foreground transition hover:bg-white/65 hover:text-foreground"
+            onClick={() => setExpanded(false)}
+            className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/38 hover:text-foreground/65"
+            aria-label="Collapse cloud status"
           >
-            {expanded ? "Hide" : "Manage"}
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {expanded && state === "locked" && (
+      {state === "locked" && (
         <form
-          className="border-t border-border/45 bg-white/35 p-3.5"
+          className="border-t border-white/32 bg-white/20 px-4 py-3.5"
           onSubmit={async (event) => {
             event.preventDefault()
             if (!password || submitting) return
@@ -107,54 +112,51 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
         >
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
-              <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+              <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/35" strokeWidth={1.8} />
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Atlas password"
                 autoComplete="current-password"
-                className="w-full rounded-xl border border-border/65 bg-white/65 py-2 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-primary/55 focus:bg-white/85"
+                className="w-full rounded-[1.15rem_1.35rem_1.2rem_1.45rem] border border-white/42 bg-white/46 py-2 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-white/68 focus:bg-white/66"
               />
             </div>
             <button
               type="submit"
               disabled={!password || submitting}
-              className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+              className="alice-nav-item bg-white/72 px-3 py-2 font-display text-[14px] text-sky-deep/80 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {submitting ? "Unlocking…" : "Unlock"}
+              {submitting ? "Opening…" : "Open"}
             </button>
           </div>
           {error && <p className="mt-2 text-[11px] text-destructive">{error}</p>}
-          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-            Atlas uses one private owner identity behind the scenes; there is no account switching in the app.
-          </p>
         </form>
       )}
 
-      {expanded && state === "offline" && (
-        <div className="flex items-center justify-between gap-3 border-t border-border/45 bg-white/35 p-3.5">
-          <p className="text-[10px] leading-relaxed text-muted-foreground">Cloud state is separate from whether Alice is running on the host PC.</p>
+      {state === "offline" && (
+        <div className="flex items-center justify-between gap-3 border-t border-white/32 bg-white/18 px-4 py-3">
+          <p className="text-[10px] leading-relaxed text-foreground/42">Cloud access is separate from whether Alice is awake on the PC.</p>
           <button
             type="button"
             onClick={() => void refreshAtlasCloudState()}
-            className="shrink-0 rounded-full bg-white/65 px-3 py-1.5 text-[10px] font-semibold text-primary"
+            className="font-display text-[13px] text-sky-deep/64 transition hover:text-sky-deep"
           >
-            Retry
+            Try again
           </button>
         </div>
       )}
 
-      {expanded && state === "online" && (
-        <div className="flex items-center justify-between gap-3 border-t border-border/45 bg-white/35 p-3.5">
-          <p className="text-[10px] leading-relaxed text-muted-foreground">This device keeps a persistent Supabase session until you lock Atlas.</p>
+      {state === "online" && (
+        <div className="flex items-center justify-between gap-3 border-t border-white/32 bg-white/18 px-4 py-3">
+          <p className="text-[10px] leading-relaxed text-foreground/42">This device stays unlocked until you lock it.</p>
           <button
             type="button"
             onClick={async () => {
               await lockAtlasCloud()
               setExpanded(true)
             }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/65 px-3 py-1.5 text-[10px] font-semibold text-muted-foreground transition hover:text-foreground"
+            className="inline-flex shrink-0 items-center gap-1.5 font-display text-[13px] text-foreground/52 transition hover:text-foreground/75"
           >
             <LogOut className="h-3 w-3" aria-hidden="true" />
             Lock
@@ -178,7 +180,7 @@ export function CloudRuntime({ children }: { children: ReactNode }) {
     <div className="relative h-dvh overflow-hidden">
       {children}
       <aside
-        className="pointer-events-none fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-[max(0.75rem,env(safe-area-inset-left))] z-[110]"
+        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0.75rem,env(safe-area-inset-left))] z-[110]"
         aria-live="polite"
       >
         <CloudStatusCard state={state} />
