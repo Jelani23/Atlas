@@ -34,7 +34,7 @@ export function HomeView({
   const visualState: AtlasState = hostAvailable ? state : "dormant"
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="animate-alice-page-in relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 px-6 pt-2 md:px-10 md:pt-5">
         <ActivityPanel steps={hostAvailable ? steps : []} state={visualState} />
         <div className="pointer-events-auto">
@@ -61,9 +61,9 @@ export function HomeView({
               />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-start px-6 pt-4 text-center">
-                <p className="font-display text-lg font-medium text-foreground/75">Alice is offline</p>
-                <p className="mt-1 max-w-md text-sm leading-relaxed text-muted-foreground/70">
-                  The ATLAS host is not reachable. Your conversations, projects, tasks, and saved data are still available.
+                <p className="font-display text-[22px] leading-none text-foreground/72">Alice is offline</p>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-foreground/45">
+                  She'll wake back up when the ATLAS host returns. Your saved chats and workspace are still here.
                 </p>
               </div>
             )}
@@ -76,6 +76,7 @@ export function HomeView({
             listening={listening}
             onToggleMic={onToggleMic}
             disabled={!hostAvailable}
+            disabledPlaceholder="Alice is offline for now"
           />
         </div>
       </div>
