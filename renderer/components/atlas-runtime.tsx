@@ -35,9 +35,9 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
   if (!expanded) {
     return (
       <CloudSurface
-        asset="edgeTab"
-        className="pointer-events-auto h-16 w-12 transition-transform hover:-translate-x-0.5"
-        skinClassName="opacity-80"
+        asset="panelSquare"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
+        skinClassName="opacity-66"
         contentClassName="flex h-full items-center justify-center"
       >
         <button
@@ -61,9 +61,9 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
 
   return (
     <CloudSurface
-      asset="drawerWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)]"
-      skinClassName="opacity-78"
+      asset="panelWide"
+      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)] min-h-[12rem]"
+      skinClassName="opacity-72"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -178,7 +178,7 @@ export function AtlasRuntime() {
       <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} hostConnectionState={connectionState} />
       {!nativeDesktop && (
         <aside
-          className="pointer-events-none fixed right-[max(0rem,env(safe-area-inset-right))] top-[max(4.8rem,calc(env(safe-area-inset-top)+4.2rem))] z-[100]"
+          className="pointer-events-none fixed right-[max(0.65rem,env(safe-area-inset-right))] top-[max(4.8rem,calc(env(safe-area-inset-top)+4.2rem))] z-[100]"
           aria-live="polite"
         >
           <ConnectionIndicator state={connectionState} />
