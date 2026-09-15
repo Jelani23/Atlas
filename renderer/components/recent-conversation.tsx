@@ -21,22 +21,22 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
 
   if (!expanded) {
     return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
-        aria-label="Show recent conversation"
-        title="Recent conversation"
+      <CloudSurface
+        asset="panelSquare"
+        className="h-14 w-14 transition-transform hover:-translate-y-0.5"
+        skinClassName="opacity-62"
+        contentClassName="flex h-full items-center justify-center"
       >
-        <CloudSurface
-          asset="panelSquare"
-          className="h-14 w-14"
-          skinClassName="opacity-62"
-          contentClassName="flex h-full items-center justify-center"
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="flex h-full w-full items-center justify-center text-sky-deep/70 active:scale-95"
+          aria-label="Show recent conversation"
+          title="Recent conversation"
         >
-          <MessageCircle className="h-[17px] w-[17px] text-sky-deep/70" strokeWidth={1.8} aria-hidden="true" />
-        </CloudSurface>
-      </button>
+          <MessageCircle className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </CloudSurface>
     )
   }
 
