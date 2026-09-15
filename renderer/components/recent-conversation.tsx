@@ -1,49 +1,67 @@
 "use client"
 
-import { MessageCircle } from "lucide-react"
+import { useState } from "react"
+import { ChevronRight, MessageCircle } from "lucide-react"
 import { previewLine } from "@/lib/response-preview"
 import type { Message } from "@/lib/types"
 
 interface RecentConversationProps {
   messages: Message[]
   onOpen: () => void
-  /** how many of the most recent messages to show, default 3 */
   count?: number
 }
 
 export function RecentConversation({ messages, onOpen, count = 3 }: RecentConversationProps) {
+  const [expanded, setExpanded] = useState(false)
+
   if (messages.length === 0) return null
 
   const recent = messages.slice(-count)
 
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="alice-edge-tab flex h-10 w-10 items-center justify-center text-sky-deep/70"
+        aria-label="Show recent conversation"
+        title="Recent conversation"
+      >
+        <MessageCircle className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+      </button>
+    )
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group ml-auto w-[min(18rem,44vw)] cursor-pointer rounded-2xl border border-border/60 bg-card/55 p-3.5 text-left backdrop-blur-md shadow-[0_8px_30px_-12px_rgba(80,130,190,0.35)] transition-colors hover:bg-card/70"
-    >
+    <div className="alice-surface-soft animate-alice-page-in ml-auto w-[min(18rem,44vw)] px-4 py-3.5 text-left">
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        <span className="text-xs font-medium tracking-wide text-muted-foreground">
-          Recent conversation
-        </span>
-        <span className="ml-auto text-[10px] font-medium uppercase tracking-[0.12em] text-primary/70 opacity-0 transition-opacity group-hover:opacity-100">
-          Open →
-        </span>
+        <MessageCircle className="h-4 w-4 text-sky-deep/65" strokeWidth={1.8} aria-hidden="true" />
+        <span className="font-display text-[16px] leading-none text-foreground/76">Recent chat</span>
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="alice-icon-button ml-auto flex h-7 w-7 items-center justify-center text-foreground/38 hover:bg-white/36 hover:text-foreground/65"
+          aria-label="Collapse recent conversation"
+        >
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
       </div>
 
-      <ul className="space-y-1">
-        {recent.map((m) => (
-          <li key={m.id} className="truncate text-xs leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground/80">
-              {m.role === "atlas" ? "Alice: " : "You: "}
-            </span>
-            {previewLine(m.text)}
-          </li>
-        ))}
-      </ul>
-    </button>
+      <button type="button" onClick={onOpen} className="group block w-full cursor-pointer text-left">
+        <ul className="space-y-1">
+          {recent.map((m) => (
+            <li key={m.id} className="truncate text-xs leading-relaxed text-foreground/46 transition-colors group-hover:text-foreground/58">
+              <span className="font-medium text-foreground/68">
+                {m.role === "atlas" ? "Alice: " : "You: "}
+              </span>
+              {previewLine(m.text)}
+            </li>
+          ))}
+        </ul>
+        <span className="mt-2 inline-block font-display text-[13px] text-sky-deep/58 transition-transform group-hover:translate-x-0.5">
+          Open conversation →
+        </span>
+      </button>
+    </div>
   )
 }
