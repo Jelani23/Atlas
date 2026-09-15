@@ -35,7 +35,7 @@ interface BottomNavProps {
 export function BottomNav({ active, onChange }: BottomNavProps) {
   return (
     <nav aria-label="Primary" className="flex max-w-full justify-center">
-      <div className="themed-scroll flex max-w-full items-center gap-0.5 overflow-x-auto rounded-full border border-border/60 bg-card/60 p-1 backdrop-blur-xl shadow-[0_12px_40px_-18px_rgba(80,130,190,0.5)] sm:gap-1 sm:p-1.5">
+      <div className="alice-nav-shell themed-scroll flex max-w-full items-center gap-0.5 overflow-x-auto p-1 sm:gap-1 sm:p-1.5">
         {ITEMS.map((item) => {
           const isActive = item.id === active
           const Icon = item.icon
@@ -47,14 +47,16 @@ export function BottomNav({ active, onChange }: BottomNavProps) {
               aria-current={isActive ? "page" : undefined}
               aria-label={item.label}
               title={item.label}
-              className={`flex shrink-0 cursor-pointer items-center gap-2 rounded-full px-2.5 py-2 text-sm font-medium transition-all sm:px-3.5 ${
+              className={`alice-nav-item flex shrink-0 cursor-pointer items-center gap-2 px-2.5 py-2 text-sm sm:px-3.5 ${
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  ? "bg-white/76 text-sky-deep shadow-[0_5px_14px_-10px_rgba(45,90,145,0.75)]"
+                  : "text-foreground/58 hover:bg-white/38 hover:text-foreground/85"
               }`}
             >
-              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-              <span className="hidden sm:inline">{item.label}</span>
+              <Icon className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+              <span className="hidden font-display text-[15px] leading-none tracking-[0.01em] sm:inline">
+                {item.label}
+              </span>
             </button>
           )
         })}
