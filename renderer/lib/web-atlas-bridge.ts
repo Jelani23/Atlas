@@ -15,7 +15,10 @@ const DEFAULT_PORT = 7341
 const STORAGE_KEY = "atlas.remoteOrigin"
 const RPC_TIMEOUT_MS = 15_000
 const CONNECT_TIMEOUT_MS = 4_500
-const RECONNECT_MS = 3_000
+// Automatic host discovery should be quiet background work, not visible UI churn.
+// A slower interval is plenty for a personal host while still reconnecting soon
+// after the PC comes back online.
+const RECONNECT_MS = 15_000
 
 const connectionListeners = new Set<(state: AtlasConnectionState) => void>()
 let connectionState: AtlasConnectionState = "connecting"
@@ -76,7 +79,8 @@ export function subscribeAtlasConnection(listener: (state: AtlasConnectionState)
 }
 
 export function retryAtlasConnection() {
-  browserBridge?.retryNow()
+  // Explicit user action should remain visible so the Retry button has feedback.
+  browserBridge?.retryNow(false)
 }
 
 function toWebSocketUrl(origin: string) {
@@ -113,14 +117,19 @@ class WebAtlasBridge implements AtlasWebBridge {
   constructor(origin: string) {
     this.origin = normalizeRemoteOrigin(origin)
     this.installResumeListeners()
-    this.connect()
+    this.connect(false)
   }
 
   private installResumeListeners() {
     if (typeof window === "undefined") return
-    window.addEventListener("online", () => this.retryNow())
+
+    // These are opportunistic probes. Keep the UI in its stable offline state
+    // unless the host really becomes reachable.
+    window.addEventListener("online", () => this.retryNow(true))
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && this.socket?.readyState !== WebSocket.OPEN) this.retryNow()
+      if (document.visibilityState === "visible" && this.socket?.readyState !== WebSocket.OPEN) {
+        this.retryNow(true)
+      }
     })
   }
 
@@ -145,16 +154,16 @@ class WebAtlasBridge implements AtlasWebBridge {
     if (this.reconnectTimer) return
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      this.connect()
+      this.connect(true)
     }, RECONNECT_MS)
   }
 
-  private connect() {
+  private connect(silent = false) {
     if (typeof window === "undefined") return
     if (this.socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(this.socket.readyState)) return
 
     this.started = true
-    publishConnectionState("connecting")
+    if (!silent) publishConnectionState("connecting")
 
     let socket: WebSocket
     try {
@@ -173,6 +182,8 @@ class WebAtlasBridge implements AtlasWebBridge {
     socket.onopen = () => {
       if (this.connectTimer) clearTimeout(this.connectTimer)
       this.connectTimer = null
+      // This is the first automatic state change the user should see: the host
+      // actually answered, so Atlas really is reconnecting/waking up now.
       publishConnectionState("initializing")
       void this.checkReady()
     }
@@ -248,7 +259,7 @@ class WebAtlasBridge implements AtlasWebBridge {
   setOrigin(origin: string) {
     const normalized = normalizeRemoteOrigin(origin)
     if (normalized === this.origin && this.started) {
-      this.retryNow()
+      this.retryNow(false)
       return
     }
     this.origin = normalized
@@ -257,16 +268,16 @@ class WebAtlasBridge implements AtlasWebBridge {
     const oldSocket = this.socket
     this.socket = null
     if (oldSocket && oldSocket.readyState < WebSocket.CLOSING) oldSocket.close()
-    this.connect()
+    this.connect(false)
   }
 
-  retryNow() {
+  retryNow(silent = false) {
     this.clearTimers()
     const oldSocket = this.socket
     this.socket = null
     this.rejectPending("Retrying Atlas connection")
     if (oldSocket && oldSocket.readyState < WebSocket.CLOSING) oldSocket.close()
-    this.connect()
+    this.connect(silent)
   }
 
   async sendMessage(text: string) {
