@@ -82,11 +82,11 @@ export function BottomNav({ active, onChange }: BottomNavProps) {
     <nav aria-label="Primary" className="flex max-w-full justify-center px-2 py-1 sm:px-4 sm:py-2">
       <CloudSurface
         asset="nav"
-        className="max-w-full min-h-[5.75rem]"
+        className="max-w-full"
         skinClassName="opacity-80"
-        contentClassName="overflow-hidden"
+        contentClassName="flex min-h-[6.75rem] items-center overflow-hidden"
       >
-        <div className="themed-scroll max-w-full overflow-x-auto">
+        <div className="themed-scroll w-full max-w-full overflow-x-auto">
           <div ref={trackRef} className="relative flex w-max items-center gap-0.5 sm:gap-1">
             <span
               aria-hidden="true"
