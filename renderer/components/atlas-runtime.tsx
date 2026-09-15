@@ -156,11 +156,6 @@ export function AtlasRuntime() {
   const [bridgeReady, setBridgeReady] = useState(false)
   const [connectionState, setConnectionState] = useState<AtlasConnectionState>("connecting")
 
-  // Important: install the browser bridge only after hydration. A useState
-  // initializer also runs during Next's server render, where `window` does not
-  // exist; React then hydrates that already-created state instead of re-running
-  // the initializer in the browser. That left the PWA permanently stuck in the
-  // initial "connecting" state with no WebSocket adapter ever created.
   useEffect(() => {
     ensureAtlasBridge()
     setConnectionState(getAtlasConnectionState())
@@ -171,9 +166,6 @@ export function AtlasRuntime() {
   useEffect(() => {
     if (nativeDesktop || !("serviceWorker" in navigator)) return
 
-    // Never let the PWA cache sit in front of Next's dev server. A service
-    // worker that cached yesterday's shell can otherwise pair stale HTML with
-    // today's HMR bundle and cause React hydration mismatches after UI edits.
     if (process.env.NODE_ENV !== "production") {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         registrations.forEach((registration) => void registration.unregister())
@@ -196,11 +188,10 @@ export function AtlasRuntime() {
 
   return (
     <div className="relative h-dvh overflow-hidden">
-      {/* Render the UI immediately even while Alice is unavailable. Once the
-          browser bridge is installed, remount AtlasApp exactly once so its
-          event/state effects attach to the real adapter instead of observing an
-          undefined bridge during the first hydration pass. */}
-      <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} />
+      <AtlasApp
+        key={bridgeReady ? "bridge-ready" : "bridge-booting"}
+        hostConnectionState={connectionState}
+      />
       {!nativeDesktop && (
         <aside
           className="pointer-events-none fixed right-[max(0.75rem,env(safe-area-inset-right))] top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-[100]"
