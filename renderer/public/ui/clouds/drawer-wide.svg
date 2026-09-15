@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 480" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.91"/><stop offset="1" stop-color="#dcefff" stop-opacity="0.78"/></linearGradient>
+    <filter id="glow" x="-22%" y="-28%" width="144%" height="170%"><feDropShadow dx="0" dy="9" stdDeviation="13" flood-color="#6caee9" flood-opacity="0.34"/></filter>
+  </defs>
+  <path filter="url(#glow)" d="M92 421 C42 404 31 350 57 313 C29 277 34 220 63 190 C45 130 84 79 143 84 C177 40 239 44 273 82 C382 68 493 71 548 91 C586 53 647 69 652 124 C694 145 694 202 669 232 C692 266 685 319 655 341 C670 391 632 431 583 421 C512 441 438 426 367 430 C278 438 191 437 143 423 C125 430 107 428 92 421 Z" fill="url(#fill)" stroke="#82b9ef" stroke-width="5"/>
+  <path d="M104 394 C69 381 67 347 81 319 C57 286 61 239 83 211 C72 160 104 123 147 126 C181 92 232 95 266 123 C381 113 491 115 543 130 C578 99 621 110 629 150" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round"/>
+</svg>

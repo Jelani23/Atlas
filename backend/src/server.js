@@ -6,10 +6,12 @@ const { WebSocketServer } = require('ws');
 const { AtlasInterface } = require('./interface/atlasInterface');
 const ttsManager = require('./voice/tts/ttsManager');
 const kokoroProcess = require('./voice/tts/providers/kokoroProcess');
+const workspaceState = require('./state/workspaceState');
 
 const PORT = process.env.ATLAS_PORT || 7341;
 const atlas = new AtlasInterface();
 let isReady = false;
+let hostHeartbeatTimer = null;
 
 const FORWARDED_EVENTS = [
     'user.message',
@@ -27,7 +29,6 @@ const FORWARDED_EVENTS = [
     'atlas.audio_chunk',
 ];
 
-// Phase B: Health endpoint for wait-on and Electron to poll
 const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
@@ -38,23 +39,18 @@ const server = http.createServer((req, res) => {
     }
 });
 
-// Phase C: WebSocket server for Electron to connect to
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
     console.log('[Atlas Backend] Electron client connected via WS.');
-    
     const handlers = {};
     FORWARDED_EVENTS.forEach(evt => {
         handlers[evt] = (payload) => {
-            if (ws.readyState === ws.OPEN) {
-                ws.send(JSON.stringify({ type: evt, payload }));
-            }
+            if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: evt, payload }));
         };
         atlas.on(evt, handlers[evt]);
     });
 
-    // Listen for RPC commands from Electron
     ws.on('message', async (data) => {
         const msg = JSON.parse(data.toString());
         const { id, method, args = [] } = msg;
@@ -62,8 +58,7 @@ wss.on('connection', (ws) => {
             let result;
             if (method === 'sendMessage') {
                 const res = await atlas.sendMessage(...args);
-                // Spread so frontend gets { ok: true, reply: "...", audio: "..." }
-                result = { ok: true, ...res }; 
+                result = { ok: true, ...res };
             }
             else if (method === 'getState') result = atlas.getState();
             else if (method === 'listModes') result = atlas.listModes();
@@ -114,7 +109,6 @@ wss.on('connection', (ws) => {
 server.listen(PORT, async () => {
     console.log(`[Atlas Backend] HTTP/WS Server listening on port ${PORT}`);
     try {
-        // Phase 10.4: Run TTS init concurrently with Atlas init to save time
         await Promise.all([
             atlas.initialize(),
             (async () => {
@@ -122,9 +116,14 @@ server.listen(PORT, async () => {
                 await ttsManager.checkHealth();
             })()
         ]);
-        
+
         isReady = true;
         console.log('[Atlas Backend] Atlas is fully initialized and ready.');
+
+        await workspaceState.heartbeatHost({ activity: 'Alice / Atlas available' });
+        hostHeartbeatTimer = setInterval(() => {
+            void workspaceState.heartbeatHost({ activity: 'Alice / Atlas available' });
+        }, 30000);
     } catch (e) {
         console.error('[Atlas Backend] Initialization failed:', e);
         process.exit(1);
@@ -133,13 +132,14 @@ server.listen(PORT, async () => {
 
 async function gracefulShutdown(signal) {
     console.log(`[Atlas Backend] Shutting down (${signal})...`);
-    await atlas.shutdown();
-    
-    // Phase 10.4: Kill Kokoro if auto-started
-    if (process.env.KOKORO_AUTOSTART === 'true') {
-        kokoroProcess.stop();
+    if (hostHeartbeatTimer) {
+        clearInterval(hostHeartbeatTimer);
+        hostHeartbeatTimer = null;
     }
-    
+    await workspaceState.markHostOffline('Atlas host stopped');
+    await atlas.shutdown();
+
+    if (process.env.KOKORO_AUTOSTART === 'true') kokoroProcess.stop();
     process.exit(0);
 }
 
