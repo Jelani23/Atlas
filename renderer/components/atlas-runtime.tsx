@@ -153,14 +153,20 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
 
 export function AtlasRuntime() {
   const [nativeDesktop] = useState(() => typeof window !== "undefined" && Boolean(window.windowControls))
-  const [connectionState, setConnectionState] = useState<AtlasConnectionState>(() => {
-    // This happens before AtlasApp mounts, so its first bridge lookup sees the
-    // native Electron bridge or the browser WebSocket adapter immediately.
-    ensureAtlasBridge()
-    return getAtlasConnectionState()
-  })
+  const [bridgeReady, setBridgeReady] = useState(false)
+  const [connectionState, setConnectionState] = useState<AtlasConnectionState>("connecting")
 
-  useEffect(() => subscribeAtlasConnection(setConnectionState), [])
+  // Important: install the browser bridge only after hydration. A useState
+  // initializer also runs during Next's server render, where `window` does not
+  // exist; React then hydrates that already-created state instead of re-running
+  // the initializer in the browser. That left the PWA permanently stuck in the
+  // initial "connecting" state with no WebSocket adapter ever created.
+  useEffect(() => {
+    ensureAtlasBridge()
+    setConnectionState(getAtlasConnectionState())
+    setBridgeReady(true)
+    return subscribeAtlasConnection(setConnectionState)
+  }, [])
 
   useEffect(() => {
     if (nativeDesktop || !("serviceWorker" in navigator)) return
@@ -190,7 +196,11 @@ export function AtlasRuntime() {
 
   return (
     <div className="relative h-dvh overflow-hidden">
-      <AtlasApp />
+      {/* Render the UI immediately even while Alice is unavailable. Once the
+          browser bridge is installed, remount AtlasApp exactly once so its
+          event/state effects attach to the real adapter instead of observing an
+          undefined bridge during the first hydration pass. */}
+      <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} />
       {!nativeDesktop && (
         <aside
           className="pointer-events-none fixed right-[max(0.75rem,env(safe-area-inset-right))] top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] z-[100]"
