@@ -19,17 +19,15 @@ const ASSETS: Record<CloudAsset, string> = {
   edgeTab: "/ui/clouds/edge-tab.svg",
 }
 
-/*
- * These insets describe the calm interior of each illustrated shell, not just
- * generic component padding. Keeping them here means every caller shares the
- * same visual alignment when the artwork is tuned later.
- */
+// These are deliberately conservative "safe interiors". The visible cloud rim,
+// lobes and glossy highlights all live outside this zone, so interactive content
+// never has to fight the artwork for space.
 const SAFE_AREA: Record<CloudAsset, string> = {
-  nav: "px-9 py-4 sm:px-11",
-  chat: "px-8 py-4 sm:px-10",
-  panelWide: "px-9 py-7 sm:px-10 sm:py-8",
+  nav: "px-12 py-6 sm:px-14 sm:py-6",
+  chat: "px-11 py-5 sm:px-14 sm:py-5",
+  panelWide: "px-11 py-8 sm:px-12 sm:py-9",
   panelSquare: "p-3",
-  drawerWide: "px-9 py-7 sm:px-12 sm:py-9",
+  drawerWide: "px-11 py-8 sm:px-12 sm:py-9",
   edgeTab: "px-2 py-3",
 }
 
@@ -69,13 +67,13 @@ export function CloudSurface({
   mirrorX = false,
 }: CloudSurfaceProps) {
   return (
-    <div className={`relative isolate ${className}`}>
+    <div className={`relative isolate min-w-0 ${className}`}>
       <CloudSkin
         asset={asset}
         mirrorX={mirrorX}
         className={`inset-0 h-full w-full ${skinClassName}`}
       />
-      <div className={`relative z-10 ${SAFE_AREA[asset]} ${contentClassName}`}>
+      <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${contentClassName}`}>
         {children}
       </div>
     </div>
