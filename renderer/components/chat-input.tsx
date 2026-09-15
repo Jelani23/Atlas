@@ -2,6 +2,7 @@
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { ArrowUp, Mic, Paperclip } from "lucide-react"
+import { CloudSkin } from "./cloud-skin"
 
 interface ChatInputProps {
   onSend: (text: string) => void
@@ -44,12 +45,7 @@ export function ChatInput({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      e.key === "Enter" &&
-      !e.shiftKey &&
-      !e.nativeEvent.isComposing &&
-      e.keyCode !== 229
-    ) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault()
       submit()
     }
@@ -57,21 +53,18 @@ export function ChatInput({
 
   return (
     <form onSubmit={handleSubmit} className="relative isolate w-full" aria-disabled={disabled}>
-      <span className="pointer-events-none absolute -left-1 bottom-1 -z-10 h-10 w-12 rounded-[55%_45%_52%_48%/52%_48%_56%_44%] bg-white/16 blur-[1px]" />
-      <span className="pointer-events-none absolute -right-2 bottom-0 -z-10 h-11 w-14 rounded-[46%_54%_50%_50%/58%_42%_54%_46%] bg-white/18 blur-[1px]" />
-      <span className="pointer-events-none absolute right-16 -top-1 -z-10 h-6 w-10 rounded-full bg-white/10 blur-[1px]" />
-
-      <div
-        className={`alice-chat-shell flex items-end gap-2 border p-2 pl-4 backdrop-blur-xl ${
-          disabled
-            ? "border-white/24 bg-white/24 shadow-none"
-            : "border-white/46 bg-white/52 shadow-[0_15px_34px_-26px_rgba(48,91,136,0.58)] focus-within:border-white/68 focus-within:bg-white/67"
+      <CloudSkin
+        asset="chat"
+        className={`-inset-x-5 -inset-y-5 h-[calc(100%+2.5rem)] w-[calc(100%+2.5rem)] transition-opacity duration-300 ${
+          disabled ? "opacity-48" : "opacity-82"
         }`}
-      >
+      />
+
+      <div className="relative z-10 flex items-end gap-2 px-4 py-2.5 sm:px-5">
         <button
           type="button"
           disabled={disabled}
-          className="alice-icon-button mb-1 flex h-9 w-9 shrink-0 items-center justify-center text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/45 enabled:hover:text-foreground/75 disabled:cursor-not-allowed disabled:opacity-25"
+          className="alice-icon-button mb-1 flex h-9 w-9 shrink-0 items-center justify-center text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/35 enabled:hover:text-foreground/75 disabled:cursor-not-allowed disabled:opacity-25"
           aria-label="Attach a file"
         >
           <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
@@ -99,8 +92,8 @@ export function ChatInput({
           disabled={disabled}
           className={`alice-icon-button relative mb-1 flex h-9 w-9 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-25 ${
             listening
-              ? "bg-white/62 text-sky-deep"
-              : "text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/45 enabled:hover:text-foreground/75"
+              ? "bg-white/52 text-sky-deep"
+              : "text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/35 enabled:hover:text-foreground/75"
           }`}
           aria-label={listening ? "Stop listening" : "Speak to Alice"}
           aria-pressed={listening}
@@ -118,7 +111,7 @@ export function ChatInput({
         <button
           type="submit"
           disabled={disabled || !value.trim()}
-          className="alice-icon-button mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-white/78 text-sky-deep shadow-[0_6px_14px_-10px_rgba(36,91,145,0.9)] enabled:cursor-pointer enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-25"
+          className="alice-icon-button mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-white/70 text-sky-deep shadow-[0_6px_14px_-10px_rgba(36,91,145,0.9)] enabled:cursor-pointer enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-25"
           aria-label="Send message"
         >
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" />
