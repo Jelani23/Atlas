@@ -36,8 +36,8 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
     return (
       <CloudSurface
         asset="panelSquare"
-        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
-        skinClassName="opacity-66"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-x-0.5"
+        skinClassName="opacity-70"
         contentClassName="flex h-full items-center justify-center"
       >
         <button
@@ -62,8 +62,9 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)] min-h-[12rem]"
-      skinClassName="opacity-72"
+      className="animate-alice-unfold pointer-events-auto w-[min(94vw,430px)]"
+      skinClassName="opacity-74"
+      contentClassName="overflow-hidden"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -84,7 +85,7 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/28 hover:text-foreground/65"
+          className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/24 hover:text-foreground/65"
           aria-label="Collapse Atlas host status"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -106,13 +107,13 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
             id="atlas-remote-origin"
             value={remoteOrigin}
             onChange={(event) => setRemoteOriginValue(event.target.value)}
-            className="min-w-0 flex-1 rounded-[1.15rem_1.35rem_1.2rem_1.45rem] border border-white/52 bg-white/38 px-3 py-2 text-xs text-foreground outline-none transition focus:border-white/75 focus:bg-white/56"
+            className="min-w-0 flex-1 rounded-[1.15rem_1.35rem_1.2rem_1.45rem] border border-white/52 bg-white/32 px-3 py-2 text-xs text-foreground outline-none transition focus:border-white/75 focus:bg-white/48"
             placeholder="https://desktop-name.tailnet.ts.net"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
           />
-          <button type="submit" className="alice-nav-item shrink-0 bg-white/58 px-3 py-2 font-display text-[14px] text-sky-deep/80 transition hover:bg-white/78">Connect</button>
+          <button type="submit" className="alice-nav-item shrink-0 bg-white/48 px-3 py-2 font-display text-[14px] text-sky-deep/80 transition hover:bg-white/68">Connect</button>
         </div>
 
         <div className="mt-2 flex items-center justify-between gap-3">
@@ -178,7 +179,7 @@ export function AtlasRuntime() {
       <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} hostConnectionState={connectionState} />
       {!nativeDesktop && (
         <aside
-          className="pointer-events-none fixed right-[max(0.65rem,env(safe-area-inset-right))] top-[max(4.8rem,calc(env(safe-area-inset-top)+4.2rem))] z-[100]"
+          className="pointer-events-none fixed right-[max(0rem,env(safe-area-inset-right))] top-[max(4.8rem,calc(env(safe-area-inset-top)+4.2rem))] z-[100]"
           aria-live="polite"
         >
           <ConnectionIndicator state={connectionState} />
