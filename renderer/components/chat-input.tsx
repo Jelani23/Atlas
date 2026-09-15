@@ -2,7 +2,7 @@
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { ArrowUp, Mic, Paperclip } from "lucide-react"
-import { CloudSkin } from "./cloud-skin"
+import { CloudSurface } from "./cloud-skin"
 
 interface ChatInputProps {
   onSend: (text: string) => void
@@ -52,15 +52,13 @@ export function ChatInput({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="relative isolate w-full" aria-disabled={disabled}>
-      <CloudSkin
+    <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
+      <CloudSurface
         asset="chat"
-        className={`-inset-x-5 -inset-y-5 h-[calc(100%+2.5rem)] w-[calc(100%+2.5rem)] transition-opacity duration-300 ${
-          disabled ? "opacity-48" : "opacity-82"
-        }`}
-      />
-
-      <div className="relative z-10 flex items-end gap-2 px-4 py-2.5 sm:px-5">
+        className="w-full"
+        skinClassName={`transition-opacity duration-300 ${disabled ? "opacity-48" : "opacity-82"}`}
+        contentClassName="flex items-end gap-2"
+      >
         <button
           type="button"
           disabled={disabled}
@@ -82,7 +80,7 @@ export function ChatInput({
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={disabled ? disabledPlaceholder : "Talk to Alice…"}
-          className="themed-scroll flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-relaxed text-foreground placeholder:text-foreground/38 focus:outline-none disabled:cursor-not-allowed disabled:text-muted-foreground"
+          className="themed-scroll min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-[15px] leading-relaxed text-foreground placeholder:text-foreground/38 focus:outline-none disabled:cursor-not-allowed disabled:text-muted-foreground"
           style={{ maxHeight: MAX_INPUT_HEIGHT_PX }}
         />
 
@@ -116,7 +114,7 @@ export function ChatInput({
         >
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" />
         </button>
-      </div>
+      </CloudSurface>
     </form>
   )
 }
