@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { Cloud, CloudOff, KeyRound, LoaderCircle, LockKeyhole, LogOut, X } from "lucide-react"
+import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
 import { CloudSurface } from "./cloud-skin"
 import {
   getAtlasCloudState,
@@ -13,6 +14,8 @@ import {
   type AtlasCloudState,
 } from "@/lib/atlas-cloud"
 
+const TRANSITION_NAME = "atlas-cloud-status"
+
 function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -20,8 +23,8 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   const [expanded, setExpanded] = useState(state === "locked")
 
   useEffect(() => {
-    if (state === "locked") setExpanded(true)
-    if (state === "online") setExpanded(false)
+    if (state === "locked") runViewTransition(() => setExpanded(true))
+    if (state === "online") runViewTransition(() => setExpanded(false))
   }, [state])
 
   if (!expanded && state !== "locked") {
@@ -31,10 +34,11 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
         className="pointer-events-auto h-14 w-14 transition-transform hover:translate-x-0.5"
         skinClassName="opacity-68"
         contentClassName="flex h-full items-center justify-center"
+        style={viewTransitionStyle(TRANSITION_NAME)}
       >
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => runViewTransition(() => setExpanded(true))}
           className="flex h-full w-full items-center justify-center text-sky-deep/70 active:scale-95"
           aria-label="Atlas cloud status"
           title={state === "online" ? "Atlas cloud connected" : state === "offline" ? "Atlas cloud unavailable" : "Checking Atlas cloud"}
@@ -54,9 +58,10 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(94vw,430px)]"
+      className="pointer-events-auto w-[min(94vw,430px)]"
       skinClassName="opacity-74"
       contentClassName="overflow-hidden"
+      style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -89,7 +94,7 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
         {state !== "locked" && (
           <button
             type="button"
-            onClick={() => setExpanded(false)}
+            onClick={() => runViewTransition(() => setExpanded(false))}
             className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/24 hover:text-foreground/65"
             aria-label="Collapse cloud status"
           >
@@ -113,7 +118,7 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
               return
             }
             setPassword("")
-            setExpanded(false)
+            runViewTransition(() => setExpanded(false))
             window.location.reload()
           }}
         >
@@ -155,7 +160,7 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
             type="button"
             onClick={async () => {
               await lockAtlasCloud()
-              setExpanded(true)
+              runViewTransition(() => setExpanded(true))
             }}
             className="inline-flex shrink-0 items-center gap-1.5 font-display text-[13px] text-foreground/52 transition hover:text-foreground/75"
           >
