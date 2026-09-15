@@ -55,14 +55,14 @@ export function ChatInput({
     <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
       <CloudSurface
         asset="chat"
-        className="w-full"
-        skinClassName={`transition-opacity duration-300 ${disabled ? "opacity-48" : "opacity-82"}`}
-        contentClassName="flex items-end gap-2"
+        className="min-h-[5rem] w-full"
+        skinClassName={`transition-opacity duration-300 ${disabled ? "opacity-44" : "opacity-78"}`}
+        contentClassName="flex min-h-[5rem] items-center gap-2"
       >
         <button
           type="button"
           disabled={disabled}
-          className="alice-icon-button mb-1 flex h-9 w-9 shrink-0 items-center justify-center text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/35 enabled:hover:text-foreground/75 disabled:cursor-not-allowed disabled:opacity-25"
+          className="alice-icon-button flex h-9 w-9 shrink-0 items-center justify-center text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/32 enabled:hover:text-foreground/75 disabled:cursor-not-allowed disabled:opacity-25"
           aria-label="Attach a file"
         >
           <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} aria-hidden="true" />
@@ -88,10 +88,10 @@ export function ChatInput({
           type="button"
           onClick={onToggleMic}
           disabled={disabled}
-          className={`alice-icon-button relative mb-1 flex h-9 w-9 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-25 ${
+          className={`alice-icon-button relative flex h-9 w-9 shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-25 ${
             listening
-              ? "bg-white/52 text-sky-deep"
-              : "text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/35 enabled:hover:text-foreground/75"
+              ? "bg-white/50 text-sky-deep"
+              : "text-foreground/45 enabled:cursor-pointer enabled:hover:bg-white/32 enabled:hover:text-foreground/75"
           }`}
           aria-label={listening ? "Stop listening" : "Speak to Alice"}
           aria-pressed={listening}
@@ -109,7 +109,7 @@ export function ChatInput({
         <button
           type="submit"
           disabled={disabled || !value.trim()}
-          className="alice-icon-button mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center bg-white/70 text-sky-deep shadow-[0_6px_14px_-10px_rgba(36,91,145,0.9)] enabled:cursor-pointer enabled:hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-25"
+          className="alice-icon-button flex h-10 w-10 shrink-0 items-center justify-center bg-white/66 text-sky-deep shadow-[0_6px_14px_-10px_rgba(36,91,145,0.9)] enabled:cursor-pointer enabled:hover:bg-white/88 disabled:cursor-not-allowed disabled:opacity-25"
           aria-label="Send message"
         >
           <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden="true" />
