@@ -19,9 +19,14 @@ const ASSETS: Record<CloudAsset, string> = {
   edgeTab: "/ui/clouds/edge-tab.svg",
 }
 
+/*
+ * These insets describe the calm interior of each illustrated shell, not just
+ * generic component padding. Keeping them here means every caller shares the
+ * same visual alignment when the artwork is tuned later.
+ */
 const SAFE_AREA: Record<CloudAsset, string> = {
-  nav: "px-10 py-3 sm:px-12",
-  chat: "px-9 py-3.5 sm:px-12",
+  nav: "px-9 py-4 sm:px-11",
+  chat: "px-8 py-4 sm:px-10",
   panelWide: "px-9 py-7 sm:px-10 sm:py-8",
   panelSquare: "p-3",
   drawerWide: "px-9 py-7 sm:px-12 sm:py-9",
