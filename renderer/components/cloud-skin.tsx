@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 
 export type CloudAsset =
   | "nav"
@@ -56,6 +56,7 @@ interface CloudSurfaceProps {
   contentClassName?: string
   skinClassName?: string
   mirrorX?: boolean
+  style?: CSSProperties
 }
 
 export function CloudSurface({
@@ -65,9 +66,10 @@ export function CloudSurface({
   contentClassName = "",
   skinClassName = "",
   mirrorX = false,
+  style,
 }: CloudSurfaceProps) {
   return (
-    <div className={`relative isolate min-w-0 ${className}`}>
+    <div className={`relative isolate min-w-0 ${className}`} style={style}>
       <CloudSkin
         asset={asset}
         mirrorX={mirrorX}
