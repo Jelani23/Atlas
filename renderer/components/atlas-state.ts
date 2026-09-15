@@ -1,4 +1,5 @@
 export type AtlasState = 
+| "dormant"
 | "idle" 
 | "listening" 
 | "transcribing" 
@@ -8,6 +9,7 @@ export type AtlasState =
 | "error"
 
 export const STATE_LABEL: Record<AtlasState, string> = {
+  dormant: "Offline",
   idle: "Resting",
   listening: "Listening",
   transcribing: "Transcribing",
@@ -35,15 +37,25 @@ export interface StateProfile {
   glow: number
   // sun-ray reach/visibility 0..1
   rays: number
-  // slow "jello" squash/stretch wobble intensity 0..1 — Alice's resting
-  // liveliness. Recedes in states that already have their own dominant
-  // motion (speech stretch, working churn) so the motions never fight.
+  // slow "jello" squash/stretch wobble intensity 0..1
   wobble: number
   // rgb tint for the cool inner cloud layers + halo
   tint: [number, number, number]
 }
 
 export const STATE_PROFILE: Record<AtlasState, StateProfile> = {
+  dormant: {
+    speed: 0.16,
+    drift: 0.32,
+    breath: 0.025,
+    speech: 0,
+    wisp: 0.04,
+    particles: 0.02,
+    glow: 0.16,
+    rays: 0.08,
+    wobble: 0.12,
+    tint: [182, 197, 214],
+  },
   idle: {
     speed: 0.55,
     drift: 1.0,
