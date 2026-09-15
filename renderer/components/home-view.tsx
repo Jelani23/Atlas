@@ -10,6 +10,7 @@ import type { Message } from "@/lib/types"
 
 interface HomeViewProps {
   state: AtlasState
+  hostAvailable: boolean
   steps: string[]
   messages: Message[]
   typing: boolean
@@ -21,6 +22,7 @@ interface HomeViewProps {
 
 export function HomeView({
   state,
+  hostAvailable,
   steps,
   messages,
   typing,
@@ -29,56 +31,52 @@ export function HomeView({
   onToggleMic,
   onOpenConversations,
 }: HomeViewProps) {
+  const visualState: AtlasState = hostAvailable ? state : "dormant"
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* floating layer — thought path top-left, recent conversation top-right.
-          `absolute` takes both fully out of the page's flow, onto their own
-          stacking layer, so neither one's size can ever push/shrink anything
-          else on the page. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 px-6 pt-2 md:px-10 md:pt-5">
-        <ActivityPanel steps={steps} state={state} />
+        <ActivityPanel steps={hostAvailable ? steps : []} state={visualState} />
         <div className="pointer-events-auto">
           <RecentConversation messages={messages} onOpen={onOpenConversations} />
         </div>
       </div>
 
-      {/* stage + chat bar, as two independent grid rows (1fr / auto) instead
-          of a centered flex column. A grid row's size only ever depends on
-          its own content, never on a sibling row's — so the chat bar growing
-          as you type can never push the stage (cloud + response) upward. */}
       <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] overflow-hidden">
-        {/* stage — three independent grid rows (1fr / auto / 1fr). The top
-            1fr is a pure spacer that pushes the cloud row down to the
-            vertical center of the stage; the cloud's own row is sized only
-            by its fixed height classes, so it can never be nudged by its
-            neighbors. The bottom 1fr — the same size as the spacer above,
-            so the cloud lands dead-center — is exactly the space between
-            the cloud and the chat bar, and that's where the response lives,
-            scrolling within its own row instead of growing it. Same "own
-            container space" pattern as the floating layer above; reuse it
-            for any future stage element. */}
         <div className="grid min-h-0 grid-rows-[1fr_auto_1fr] overflow-hidden px-4">
           <div aria-hidden="true" />
 
           <div className="mx-auto w-full max-w-4xl">
             <div className="mx-auto h-[26vh] max-h-[300px] min-h-[160px] w-full">
-              <AliceCloud state={state} />
+              <AliceCloud state={visualState} />
             </div>
           </div>
 
           <div className="flex min-h-0 flex-col overflow-hidden">
-            <HomeResponse
-              messages={messages}
-              typing={typing}
-              onContinueInConversations={onOpenConversations}
-            />
+            {hostAvailable ? (
+              <HomeResponse
+                messages={messages}
+                typing={typing}
+                onContinueInConversations={onOpenConversations}
+              />
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-start px-6 pt-4 text-center">
+                <p className="font-display text-lg font-medium text-foreground/75">Alice is offline</p>
+                <p className="mt-1 max-w-md text-sm leading-relaxed text-muted-foreground/70">
+                  The ATLAS host is not reachable. Your conversations, projects, tasks, and saved data are still available.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* quick input — its own grid row, free to grow as you type without
-            ever affecting the stage row above it */}
         <div className="relative z-30 mx-auto w-full max-w-2xl px-4 pb-6 md:pb-8">
-          <ChatInput onSend={onSend} listening={listening} onToggleMic={onToggleMic} />
+          <ChatInput
+            onSend={onSend}
+            listening={listening}
+            onToggleMic={onToggleMic}
+            disabled={!hostAvailable}
+          />
         </div>
       </div>
     </div>
