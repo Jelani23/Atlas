@@ -27,10 +27,9 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   if (!expanded && state !== "locked") {
     return (
       <CloudSurface
-        asset="edgeTab"
-        mirrorX
-        className="pointer-events-auto h-16 w-12 transition-transform hover:translate-x-0.5"
-        skinClassName="opacity-76"
+        asset="panelSquare"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
+        skinClassName="opacity-66"
         contentClassName="flex h-full items-center justify-center"
       >
         <button
@@ -54,9 +53,9 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
 
   return (
     <CloudSurface
-      asset="drawerWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)]"
-      skinClassName="opacity-78"
+      asset="panelWide"
+      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)] min-h-[12rem]"
+      skinClassName="opacity-72"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -180,7 +179,7 @@ export function CloudRuntime({ children }: { children: ReactNode }) {
     <div className="relative h-dvh overflow-hidden">
       {children}
       <aside
-        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0rem,env(safe-area-inset-left))] z-[110]"
+        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0.65rem,env(safe-area-inset-left))] z-[110]"
         aria-live="polite"
       >
         <CloudStatusCard state={state} />
