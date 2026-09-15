@@ -4,6 +4,7 @@ import { useState } from "react"
 import { ChevronRight, MessageCircle } from "lucide-react"
 import { previewLine } from "@/lib/response-preview"
 import type { Message } from "@/lib/types"
+import { CloudSkin } from "./cloud-skin"
 
 interface RecentConversationProps {
   messages: Message[]
@@ -23,29 +24,27 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="alice-edge-tab relative flex h-10 w-10 items-center justify-center text-sky-deep/70"
+        className="relative isolate flex h-11 w-12 items-center justify-center text-sky-deep/70 transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
         aria-label="Show recent conversation"
         title="Recent conversation"
       >
-        <span className="pointer-events-none absolute -right-1 top-0 h-3.5 w-3.5 rounded-full bg-white/18" />
-        <MessageCircle className="relative h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+        <CloudSkin asset="panelSquare" className="-inset-3 h-[calc(100%+1.5rem)] w-[calc(100%+1.5rem)] opacity-62" />
+        <MessageCircle className="relative z-10 h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
       </button>
     )
   }
 
   return (
-    <div className="relative isolate ml-auto w-[min(18rem,44vw)]">
-      <span className="pointer-events-none absolute -right-2 bottom-4 -z-10 h-11 w-11 rounded-full bg-white/22 blur-[1px]" />
-      <span className="pointer-events-none absolute right-7 -top-2 -z-10 h-9 w-14 rounded-full bg-white/17 blur-[1px]" />
-
-      <div className="alice-surface-soft animate-alice-unfold px-4 py-3.5 text-left">
+    <div className="animate-alice-unfold relative isolate ml-auto w-[min(19rem,46vw)] min-h-[9rem] text-left">
+      <CloudSkin asset="panelWide" className="-inset-7 h-[calc(100%+3.5rem)] w-[calc(100%+3.5rem)] opacity-70" />
+      <div className="relative z-10 px-6 py-5">
         <div className="mb-2 flex items-center gap-2">
           <MessageCircle className="h-4 w-4 text-sky-deep/65" strokeWidth={1.8} aria-hidden="true" />
           <span className="font-display text-[16px] leading-none text-foreground/76">Recent chat</span>
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="alice-icon-button ml-auto flex h-7 w-7 items-center justify-center text-foreground/38 hover:bg-white/36 hover:text-foreground/65"
+            className="alice-icon-button ml-auto flex h-7 w-7 items-center justify-center text-foreground/38 hover:bg-white/30 hover:text-foreground/65"
             aria-label="Collapse recent conversation"
           >
             <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -56,9 +55,7 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
           <ul className="space-y-1">
             {recent.map((m) => (
               <li key={m.id} className="truncate text-xs leading-relaxed text-foreground/46 transition-colors group-hover:text-foreground/58">
-                <span className="font-medium text-foreground/68">
-                  {m.role === "atlas" ? "Alice: " : "You: "}
-                </span>
+                <span className="font-medium text-foreground/68">{m.role === "atlas" ? "Alice: " : "You: "}</span>
                 {previewLine(m.text)}
               </li>
             ))}
