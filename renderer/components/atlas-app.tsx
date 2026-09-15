@@ -553,6 +553,7 @@ export function AtlasApp({ hostConnectionState }: AtlasAppProps) {
       {tab === "conversations" && (
         <ConversationsView
           state={hostAvailable ? state : "dormant"}
+          hostAvailable={hostAvailable}
           messages={messages}
           typing={typing}
           listening={listening}
