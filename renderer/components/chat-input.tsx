@@ -56,12 +56,16 @@ export function ChatInput({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
+    <form onSubmit={handleSubmit} className="relative isolate w-full" aria-disabled={disabled}>
+      <span className="pointer-events-none absolute -left-1 bottom-1 -z-10 h-10 w-12 rounded-[55%_45%_52%_48%/52%_48%_56%_44%] bg-white/16 blur-[1px]" />
+      <span className="pointer-events-none absolute -right-2 bottom-0 -z-10 h-11 w-14 rounded-[46%_54%_50%_50%/58%_42%_54%_46%] bg-white/18 blur-[1px]" />
+      <span className="pointer-events-none absolute right-16 -top-1 -z-10 h-6 w-10 rounded-full bg-white/10 blur-[1px]" />
+
       <div
         className={`alice-chat-shell flex items-end gap-2 border p-2 pl-4 backdrop-blur-xl ${
           disabled
-            ? "border-white/28 bg-white/28 shadow-none"
-            : "border-white/48 bg-white/54 shadow-[0_15px_34px_-26px_rgba(48,91,136,0.58)] focus-within:border-white/68 focus-within:bg-white/68"
+            ? "border-white/24 bg-white/24 shadow-none"
+            : "border-white/46 bg-white/52 shadow-[0_15px_34px_-26px_rgba(48,91,136,0.58)] focus-within:border-white/68 focus-within:bg-white/67"
         }`}
       >
         <button
