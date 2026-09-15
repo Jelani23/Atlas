@@ -6,17 +6,15 @@ export type CloudAsset =
   | "panelWide"
   | "panelSquare"
   | "drawerWide"
-  | "drawerTall"
   | "edgeTab"
 
 const ASSETS: Record<CloudAsset, string> = {
-  nav: "/ui/clouds/nav-shell.webp",
-  chat: "/ui/clouds/chat-shell.webp",
-  panelWide: "/ui/clouds/panel-wide.webp",
-  panelSquare: "/ui/clouds/panel-square.webp",
-  drawerWide: "/ui/clouds/drawer-wide.webp",
-  drawerTall: "/ui/clouds/drawer-tall.webp",
-  edgeTab: "/ui/clouds/edge-tab.webp",
+  nav: "/ui/clouds/nav-shell.svg",
+  chat: "/ui/clouds/chat-shell.svg",
+  panelWide: "/ui/clouds/panel-wide.svg",
+  panelSquare: "/ui/clouds/panel-square.svg",
+  drawerWide: "/ui/clouds/drawer-wide.svg",
+  edgeTab: "/ui/clouds/edge-tab.svg",
 }
 
 interface CloudSkinProps {
