@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { ChevronRight, MessageCircle } from "lucide-react"
 import { previewLine } from "@/lib/response-preview"
+import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
 import type { Message } from "@/lib/types"
 import { CloudSurface } from "./cloud-skin"
 
@@ -11,6 +12,8 @@ interface RecentConversationProps {
   onOpen: () => void
   count?: number
 }
+
+const TRANSITION_NAME = "alice-recent-cloud"
 
 export function RecentConversation({ messages, onOpen, count = 3 }: RecentConversationProps) {
   const [expanded, setExpanded] = useState(false)
@@ -26,10 +29,11 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
         className="h-14 w-14 transition-transform hover:-translate-y-0.5"
         skinClassName="opacity-66"
         contentClassName="flex h-full items-center justify-center"
+        style={viewTransitionStyle(TRANSITION_NAME)}
       >
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => runViewTransition(() => setExpanded(true))}
           className="flex h-full w-full items-center justify-center text-sky-deep/70 active:scale-95"
           aria-label="Show recent conversation"
           title="Recent conversation"
@@ -43,15 +47,16 @@ export function RecentConversation({ messages, onOpen, count = 3 }: RecentConver
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold ml-auto w-[min(20rem,48vw)] min-h-[9rem] text-left"
+      className="ml-auto w-[min(20rem,48vw)] min-h-[9rem] text-left"
       skinClassName="opacity-72"
+      style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="mb-2.5 flex items-center gap-2">
         <MessageCircle className="h-4 w-4 shrink-0 text-sky-deep/65" strokeWidth={1.8} aria-hidden="true" />
         <span className="font-display text-[16px] leading-none text-foreground/76">Recent chat</span>
         <button
           type="button"
-          onClick={() => setExpanded(false)}
+          onClick={() => runViewTransition(() => setExpanded(false))}
           className="alice-icon-button ml-auto flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/30 hover:text-foreground/65"
           aria-label="Collapse recent conversation"
         >
