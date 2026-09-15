@@ -28,8 +28,8 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
     return (
       <CloudSurface
         asset="panelSquare"
-        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
-        skinClassName="opacity-66"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:translate-x-0.5"
+        skinClassName="opacity-68"
         contentClassName="flex h-full items-center justify-center"
       >
         <button
@@ -54,8 +54,9 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(92vw,390px)] min-h-[12rem]"
-      skinClassName="opacity-72"
+      className="animate-alice-unfold pointer-events-auto w-[min(94vw,430px)]"
+      skinClassName="opacity-74"
+      contentClassName="overflow-hidden"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -89,7 +90,7 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/28 hover:text-foreground/65"
+            className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/24 hover:text-foreground/65"
             aria-label="Collapse cloud status"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -125,13 +126,13 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Atlas password"
                 autoComplete="current-password"
-                className="w-full rounded-[1.15rem_1.35rem_1.2rem_1.45rem] border border-white/52 bg-white/38 py-2 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-white/75 focus:bg-white/56"
+                className="w-full rounded-[1.15rem_1.35rem_1.2rem_1.45rem] border border-white/52 bg-white/32 py-2 pl-9 pr-3 text-xs text-foreground outline-none transition focus:border-white/75 focus:bg-white/48"
               />
             </div>
             <button
               type="submit"
               disabled={!password || submitting}
-              className="alice-nav-item shrink-0 bg-white/58 px-3 py-2 font-display text-[14px] text-sky-deep/80 transition hover:bg-white/78 disabled:cursor-not-allowed disabled:opacity-40"
+              className="alice-nav-item shrink-0 bg-white/48 px-3 py-2 font-display text-[14px] text-sky-deep/80 transition hover:bg-white/68 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting ? "Opening…" : "Open"}
             </button>
@@ -179,7 +180,7 @@ export function CloudRuntime({ children }: { children: ReactNode }) {
     <div className="relative h-dvh overflow-hidden">
       {children}
       <aside
-        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0.65rem,env(safe-area-inset-left))] z-[110]"
+        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0rem,env(safe-area-inset-left))] z-[110]"
         aria-live="polite"
       >
         <CloudStatusCard state={state} />
