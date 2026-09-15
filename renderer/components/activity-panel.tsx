@@ -21,22 +21,22 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
 
   if (!expanded) {
     return (
-      <button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="pointer-events-auto transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
-        aria-label="Show Alice's current thoughts"
-        title="Alice's thoughts"
+      <CloudSurface
+        asset="panelSquare"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
+        skinClassName="opacity-66"
+        contentClassName="flex h-full items-center justify-center"
       >
-        <CloudSurface
-          asset="panelSquare"
-          className="h-14 w-14"
-          skinClassName="opacity-66"
-          contentClassName="flex h-full items-center justify-center"
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="flex h-full w-full items-center justify-center text-sky-deep/75 active:scale-95"
+          aria-label="Show Alice's current thoughts"
+          title="Alice's thoughts"
         >
-          <Sparkles className="h-[17px] w-[17px] text-sky-deep/75" strokeWidth={1.8} aria-hidden="true" />
-        </CloudSurface>
-      </button>
+          <Sparkles className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </CloudSurface>
     )
   }
 
