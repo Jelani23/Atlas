@@ -10,27 +10,26 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+export type AtlasTab = "home" | "conversations" | "projects" | "tasks" | "devices" | "settings"
+
 interface NavItem {
-  id: string
+  id: AtlasTab
   label: string
   icon: LucideIcon
 }
 
 const ITEMS: NavItem[] = [
   { id: "home", label: "Home", icon: Home },
-  { id: "conversation", label: "Conversations", icon: MessagesSquare },
+  { id: "conversations", label: "Conversations", icon: MessagesSquare },
   { id: "projects", label: "Projects", icon: FolderOpen },
-  // These two IDs intentionally keep the current internal placeholder routes for now.
-  // The user-facing navigation reflects the new Atlas information architecture while
-  // we build the real Tasks and Connected Devices views next.
-  { id: "memory", label: "Tasks", icon: ListTodo },
-  { id: "activity", label: "Devices", icon: MonitorSmartphone },
+  { id: "tasks", label: "Tasks", icon: ListTodo },
+  { id: "devices", label: "Devices", icon: MonitorSmartphone },
   { id: "settings", label: "Settings", icon: Settings },
 ]
 
 interface BottomNavProps {
-  active: string
-  onChange: (id: string) => void
+  active: AtlasTab
+  onChange: (id: AtlasTab) => void
 }
 
 export function BottomNav({ active, onChange }: BottomNavProps) {
