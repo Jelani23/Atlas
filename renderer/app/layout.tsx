@@ -1,13 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Quicksand } from 'next/font/google'
+import { Quicksand } from 'next/font/google'
 import './globals.css'
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
 
 const quicksand = Quicksand({
   subsets: ['latin'],
@@ -66,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`light ${inter.variable} ${quicksand.variable} bg-background`}
+      className={`light ${quicksand.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         {children}
