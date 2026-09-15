@@ -23,59 +23,65 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="alice-edge-tab pointer-events-auto flex h-10 w-10 items-center justify-center text-sky-deep/75"
+        className="alice-edge-tab pointer-events-auto relative flex h-10 w-10 items-center justify-center text-sky-deep/75"
         aria-label="Show Alice's current thoughts"
         title="Alice's thoughts"
       >
-        <Sparkles className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+        <span className="pointer-events-none absolute -left-1 bottom-0 h-4 w-4 rounded-full bg-white/20" />
+        <Sparkles className="relative h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
       </button>
     )
   }
 
   return (
-    <div className="alice-surface-soft animate-alice-page-in pointer-events-auto w-[min(18rem,44vw)] select-none px-4 py-3.5">
-      <div className="mb-2.5 flex items-center gap-2">
-        <Sparkles
-          className={`h-4 w-4 text-sky-deep/70 ${active ? "animate-pulse" : ""} ${dormant ? "opacity-35" : ""}`}
-          strokeWidth={1.8}
-          aria-hidden="true"
-        />
-        <span className="font-display text-[16px] leading-none text-foreground/76">Alice's thoughts</span>
-        <span className="ml-auto text-[11px] text-foreground/42">{STATE_LABEL[state]}</span>
-        {!active && (
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="alice-icon-button -mr-1 flex h-7 w-7 items-center justify-center text-foreground/38 hover:bg-white/36 hover:text-foreground/65"
-            aria-label="Collapse thought panel"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        )}
-      </div>
+    <div className="relative isolate w-[min(18rem,44vw)]">
+      <span className="pointer-events-none absolute -left-2 bottom-3 -z-10 h-12 w-12 rounded-full bg-white/24 blur-[1px]" />
+      <span className="pointer-events-none absolute left-5 -top-2 -z-10 h-10 w-14 rounded-full bg-white/18 blur-[1px]" />
 
-      <ul className="space-y-1.5">
-        {steps.length === 0 && (
-          <li className="text-xs leading-relaxed text-foreground/48">
-            {dormant ? "Alice is quiet while the host is offline." : "Nothing on her mind right now."}
-          </li>
-        )}
-        {!dormant && steps.map((step, i) => {
-          const isLast = i === steps.length - 1
-          return (
-            <li key={`${step}-${i}`} className="flex animate-rise items-center gap-2 text-xs leading-relaxed">
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  isLast && active ? "bg-sky-deep/65" : "bg-foreground/18"
-                }`}
-              />
-              <span className={isLast ? "font-medium text-foreground/72" : "text-foreground/38"}>
-                {step}
-              </span>
+      <div className="alice-surface-soft animate-alice-unfold pointer-events-auto select-none px-4 py-3.5">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Sparkles
+            className={`h-4 w-4 text-sky-deep/70 ${active ? "animate-pulse" : ""} ${dormant ? "opacity-35" : ""}`}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
+          <span className="font-display text-[16px] leading-none text-foreground/76">Alice's thoughts</span>
+          <span className="ml-auto text-[11px] text-foreground/42">{STATE_LABEL[state]}</span>
+          {!active && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="alice-icon-button -mr-1 flex h-7 w-7 items-center justify-center text-foreground/38 hover:bg-white/36 hover:text-foreground/65"
+              aria-label="Collapse thought panel"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <ul className="space-y-1.5">
+          {steps.length === 0 && (
+            <li className="text-xs leading-relaxed text-foreground/48">
+              {dormant ? "Alice is quiet while the host is offline." : "Nothing on her mind right now."}
             </li>
-          )
-        })}
-      </ul>
+          )}
+          {!dormant && steps.map((step, i) => {
+            const isLast = i === steps.length - 1
+            return (
+              <li key={`${step}-${i}`} className="flex animate-rise items-center gap-2 text-xs leading-relaxed">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                    isLast && active ? "bg-sky-deep/65" : "bg-foreground/18"
+                  }`}
+                />
+                <span className={isLast ? "font-medium text-foreground/72" : "text-foreground/38"}>
+                  {step}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
     </div>
   )
 }
