@@ -13,7 +13,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Halah Halu', var(--font-quicksand), ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Halah Halu', var(--font-quicksand), ui-sans-serif, sans-serif;
   --color-sky: var(--sky);
   --color-sky-deep: var(--sky-deep);
