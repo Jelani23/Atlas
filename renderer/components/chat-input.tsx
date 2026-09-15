@@ -55,9 +55,9 @@ export function ChatInput({
     <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
       <CloudSurface
         asset="chat"
-        className="min-h-[5.75rem] w-full"
+        className="w-full"
         skinClassName={`transition-opacity duration-300 ${disabled ? "opacity-48" : "opacity-84"}`}
-        contentClassName="flex h-full items-center gap-2 overflow-hidden"
+        contentClassName="flex min-h-[5.75rem] items-center gap-2 overflow-hidden translate-y-[2px]"
       >
         <button
           type="button"
