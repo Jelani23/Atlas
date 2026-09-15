@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { LoaderCircle, RefreshCw, Wifi, WifiOff, X } from "lucide-react"
+import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
 import { AtlasApp } from "./atlas-app"
 import { CloudSurface } from "./cloud-skin"
 import {
@@ -22,6 +23,8 @@ const STATUS_COPY: Record<AtlasConnectionState, { title: string; detail: string 
   offline: { title: "Alice is offline", detail: "The host is not reachable right now. Your saved Atlas data is still available." },
 }
 
+const TRANSITION_NAME = "atlas-host-status"
+
 function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
   const [expanded, setExpanded] = useState(false)
   const [remoteOrigin, setRemoteOriginValue] = useState("")
@@ -39,10 +42,11 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
         className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-x-0.5"
         skinClassName="opacity-70"
         contentClassName="flex h-full items-center justify-center"
+        style={viewTransitionStyle(TRANSITION_NAME)}
       >
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={() => runViewTransition(() => setExpanded(true))}
           className="flex h-full w-full items-center justify-center text-sky-deep/70 active:scale-95"
           aria-label="Atlas host status"
           title={copy.title}
@@ -62,9 +66,10 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="animate-alice-unfold pointer-events-auto w-[min(94vw,430px)]"
+      className="pointer-events-auto w-[min(94vw,430px)]"
       skinClassName="opacity-74"
       contentClassName="overflow-hidden"
+      style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center text-sky-deep/65">
@@ -84,7 +89,7 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
 
         <button
           type="button"
-          onClick={() => setExpanded(false)}
+          onClick={() => runViewTransition(() => setExpanded(false))}
           className="alice-icon-button flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/24 hover:text-foreground/65"
           aria-label="Collapse Atlas host status"
         >
@@ -98,7 +103,7 @@ function ConnectionIndicator({ state }: { state: AtlasConnectionState }) {
           event.preventDefault()
           setAtlasRemoteOrigin(remoteOrigin)
           setRemoteOriginValue(getAtlasRemoteOrigin())
-          setExpanded(false)
+          runViewTransition(() => setExpanded(false))
         }}
       >
         <label htmlFor="atlas-remote-origin" className="font-display text-[13px] text-foreground/55">Host address</label>
