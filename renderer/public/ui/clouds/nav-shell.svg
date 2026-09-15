@@ -8,8 +8,13 @@
     <filter id="glow" x="-20%" y="-40%" width="140%" height="180%">
       <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#6eaeea" flood-opacity="0.32"/>
     </filter>
+    <clipPath id="shellClip" clipPathUnits="userSpaceOnUse">
+      <path d="M74 225 C28 218 18 151 58 129 C65 78 111 51 158 64 C181 25 252 22 294 69 C394 55 610 54 710 69 C752 29 818 31 843 70 C894 54 941 80 947 130 C987 153 977 220 930 226 C840 238 766 220 688 222 C548 226 434 228 315 223 C225 240 155 245 74 225 Z"/>
+    </clipPath>
   </defs>
   <path filter="url(#glow)" d="M74 225 C28 218 18 151 58 129 C65 78 111 51 158 64 C181 25 252 22 294 69 C394 55 610 54 710 69 C752 29 818 31 843 70 C894 54 941 80 947 130 C987 153 977 220 930 226 C840 238 766 220 688 222 C548 226 434 228 315 223 C225 240 155 245 74 225 Z" fill="url(#fill)" stroke="#86bdf0" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M80 207 C45 202 42 157 72 142 C83 99 122 82 163 94 C194 57 249 53 286 91 C399 79 601 79 714 91 C752 58 805 61 835 96 C876 84 913 102 927 143 C959 157 957 199 922 206" fill="none" stroke="#ffffff" stroke-opacity="0.78" stroke-width="3" stroke-linecap="round"/>
-  <path d="M115 95 C145 61 211 57 257 83" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="9" stroke-linecap="round"/>
+  <g clip-path="url(#shellClip)">
+    <path d="M80 207 C45 202 42 157 72 142 C83 99 122 82 163 94 C194 57 249 53 286 91 C399 79 601 79 714 91 C752 58 805 61 835 96 C876 84 913 102 927 143 C959 157 957 199 922 206" fill="none" stroke="#ffffff" stroke-opacity="0.72" stroke-width="3" stroke-linecap="round"/>
+    <path d="M128 105 C154 78 205 70 242 86" fill="none" stroke="#ffffff" stroke-opacity="0.42" stroke-width="8" stroke-linecap="round"/>
+  </g>
 </svg>
