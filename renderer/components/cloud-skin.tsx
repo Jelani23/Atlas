@@ -38,19 +38,21 @@ const SAFE_AREA: Record<CloudAsset, string> = {
   edgeTab: "px-2 py-3",
 }
 
-// The regenerated v2 raster shells already have roomier geometry, so they only
-// need light optical fitting. Thoughts intentionally keeps the previous artwork
-// and receives the slightly larger fit the user preferred.
+// The v2 raster shells preserve the regenerated silhouettes, but at actual UI
+// size their geometry change is intentionally subtle. These WebP-only optical
+// fits make the roomier treatment visible without changing the stable SVG tab.
+// Thoughts keeps the previous artwork and gets the slightly larger treatment the
+// user preferred rather than being replaced with the vertical reserve asset.
 const WEBP_FIT: Record<WebpCloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
-  nav: { scaleX: 1.03, scaleY: 1.05, translateY: -2 },
-  chat: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
+  nav: { scaleX: 1.06, scaleY: 1.16, translateY: -4 },
+  chat: { scaleX: 1.05, scaleY: 1.14, translateY: 0 },
   panelWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
   panelSquare: { scaleX: 1, scaleY: 1, translateY: 0 },
-  drawerWide: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
+  drawerWide: { scaleX: 1.06, scaleY: 1.08, translateY: 0 },
   edgeTab: { scaleX: 1.06, scaleY: 1.1, translateY: 0 },
-  atlasCloud: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
+  atlasCloud: { scaleX: 1.07, scaleY: 1.09, translateY: 0 },
   verticalPanel: { scaleX: 1, scaleY: 1, translateY: 0 },
-  thoughtsPanel: { scaleX: 1.16, scaleY: 1.18, translateY: 0 },
+  thoughtsPanel: { scaleX: 1.18, scaleY: 1.2, translateY: 0 },
 }
 
 function useWebpCloudSkin() {
