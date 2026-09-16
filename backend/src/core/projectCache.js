@@ -34,7 +34,6 @@ async function initialize() {
                 walk(fullPath);
             } else if (f.name.endsWith('.js') || f.name.endsWith('.json')) {
                 let content = fs.readFileSync(fullPath, 'utf8');
-                if (content.length > 3000) content = content.substring(0, 3000) + "\n... [truncated by cache]";
                 
                 cache.fileTree.push(relPath);
                 cache.fileContents[relPath] = content;
@@ -99,7 +98,9 @@ function findFile(filename) {
     return null;
 }
 
-function getFile(relativePath) {
+function getFile(relativePath, { full = false } = {}) {
+    const present = content => full || content.length <= 3000 ? content
+        : content.substring(0, 3000) + '\n... [preview truncated at 3000 characters; not the complete file]';
     const safePath = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '').replace(/\\/g, '/');
     
     if (cache.fileContents[safePath]) {
@@ -109,15 +110,15 @@ function getFile(relativePath) {
             const currentHash = hashContent(content);
             
             if (currentHash === cache.fileMetadata[safePath].hash) {
-                return cache.fileContents[safePath];
+                return present(cache.fileContents[safePath]);
             }
             
             console.log(`[Cache] File ${safePath} changed on disk. Updating cache...`);
             let newContent = content;
-            if (newContent.length > 3000) newContent = newContent.substring(0, 3000) + "\n... [truncated]";
             cache.fileContents[safePath] = newContent;
             cache.fileMetadata[safePath].hash = currentHash;
-            return newContent;
+            cache.fileMetadata[safePath].size = content.length;
+            return present(newContent);
         } catch (e) {
             console.log(`[Cache] File ${safePath} deleted from disk.`);
             delete cache.fileContents[safePath];
@@ -131,7 +132,6 @@ function getFile(relativePath) {
     if (!fs.existsSync(fullPath)) return null;
     
     let content = fs.readFileSync(fullPath, 'utf8');
-    if (content.length > 3000) content = content.substring(0, 3000) + "\n... [truncated]";
     
     try {
         cache.fileMetadata[safePath] = { hash: hashContent(content), size: content.length };
@@ -139,7 +139,7 @@ function getFile(relativePath) {
         if (!cache.fileTree.includes(safePath)) cache.fileTree.push(safePath);
     } catch(e) {}
     
-    return content;
+    return present(content);
 }
 
 module.exports = { initialize, getTree, findFile, getFile, getFileHash, getChangedFiles };

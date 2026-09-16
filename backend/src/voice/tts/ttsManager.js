@@ -6,20 +6,31 @@ const config = require('./ttsConfig');
 const adapter = createTtsAdapter();
 let isHealthy = config.enabled;
 let retryTimer = null;
+let healthObservation = { health: 'unknown', checkedAt: null };
+
+// Read-only snapshot: configuration alone must not masquerade as a completed
+// health check. Asking about TTS must not start a server or synthesize audio.
+function getStatus() {
+    return { enabled: config.enabled, provider: config.provider, voice: config.voice,
+        ...healthObservation };
+}
 
 async function checkHealth() {
     if (!config.enabled) {
         isHealthy = false;
+        healthObservation = { health: 'disabled', checkedAt: new Date().toISOString() };
         return { available: false, reason: 'TTS_DISABLED' };
     }
 
     if (!adapter.healthCheck) {
         isHealthy = true;
+        healthObservation = { health: 'unknown', checkedAt: null };
         return { available: true, provider: config.provider };
     }
 
     const result = await adapter.healthCheck();
     isHealthy = result.available;
+    healthObservation = { health: result.available ? 'available' : 'unavailable', checkedAt: new Date().toISOString() };
     
     if (isHealthy) {
         console.log(`[TTS Manager] Provider ${config.provider} is healthy.`);
@@ -50,6 +61,7 @@ function scheduleRetry() {
 }
 
 function markUnhealthy() {
+    healthObservation = { health: 'unavailable', checkedAt: new Date().toISOString() };
     if (isHealthy) {
         console.warn(`[TTS Manager] Synthesis failed. Marking ${config.provider} as unhealthy until next health check.`);
         isHealthy = false;
@@ -67,4 +79,4 @@ function stop(requestId = null) {
     ttsQueue.stop(requestId);
 }
 
-module.exports = { enqueue, stop, checkHealth, markUnhealthy, isHealthy: () => isHealthy };
+module.exports = { enqueue, stop, checkHealth, markUnhealthy, getStatus, isHealthy: () => isHealthy };

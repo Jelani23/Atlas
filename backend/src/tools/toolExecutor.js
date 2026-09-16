@@ -3,7 +3,13 @@ const tools = require('./');
 const permissionManager = require('../permissions/permissionManager');
 
 async function execute(toolName, args = [], options = {}) {
+    const state = require('../planner/state');
+    if (state.isSessionClosed()) return 'Error: The originating conversation is closed.';
     const permission = permissionManager.check(toolName);
+    // Approval applies to approval-gated tools, never to a policy prohibition.
+    if (!permission.allowed && !permission.requiresApproval) {
+        return `Error: ${toolName} is disabled. Reason: ${permission.reason}`;
+    }
     
     // If it requires approval, AND we haven't been told it's already approved, block it.
     if (permission.requiresApproval && !options.isApproved) {
@@ -11,10 +17,9 @@ async function execute(toolName, args = [], options = {}) {
         if (!approved) {
             return `Error: Permission denied for ${toolName}.`;
         }
-    } else if (!permission.allowed && !options.isApproved) {
-        return `Error: ${toolName} is disabled. Reason: ${permission.reason}`;
     }
     
+    if (state.isSessionClosed()) return 'Error: The originating conversation is closed.';
     const toolExport = tools[toolName];
     if (!toolExport) {
         return `Error: Tool ${toolName} does not exist.`;

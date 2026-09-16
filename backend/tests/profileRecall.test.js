@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-key';
 globalThis.fetch = async () => { throw new Error('No network in profile tests'); };
-const { resolveProfileRecall } = require('../src/memory/profileRecall');
+const { resolveProfileRecall, selectPersonalContext, retrievalQuery } = require('../src/memory/profileRecall');
 const cache = require('../src/core/memoryCache');
 const registry = require('../src/memory/projectRegistry');
 const worldModel = require('../src/memory/worldModel');
@@ -10,15 +10,24 @@ const { getRelevantContext } = require('../src/core/contextManager');
 const { buildContext } = require('../src/core/contextBuilder');
 
 async function main() {
+    const scopedRows = [{ key: 'favorite_game', value: 'Minecraft' }, { key: 'name', value: 'Jelani' }];
+    assert.deepEqual(selectPersonalContext(scopedRows, 'SQLite is an in process database library'), []);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'Could you explain JavaScript promises to me?'), []);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'Recommend a game'), [scopedRows[0]]);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'What do you know about Minecraft?'), [scopedRows[0]]);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'What games do I like?'), scopedRows);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'Anything else?', [{ role: 'user', content: 'What do you remember about me?' }]), scopedRows);
+    assert.deepEqual(selectPersonalContext(scopedRows, 'A question', [], { status: 'available' }), scopedRows);
+    assert.equal(scopedRows.length, 2, 'Presentation selection must not edit the retrieved snapshot');
     const questions = [
         "Yeah that sounds good. Let's do some quick tests on some things you should already know. What all do you remember about me?",
         "That's good, anything else you remember about me?",
         'What about some other of my favorite things?',
         'What is my favorite color', 'Could you tell me my favourite food',
-        'Show my profile', 'Who am I'
+        'Show my profile', 'Who am I', 'What games do I like', 'Which foods do I enjoy'
     ];
     for (const question of questions) assert(resolveProfileRecall(question), question);
-    for (const text of ['My favorite food is pasta', 'What is your favorite food',
+    for (const text of ['My favorite food is pasta', 'What is your favorite food', 'What games do you like',
         'Explain how user profiles work', 'What do you remember about Atlas', 'Anything else?']) {
         assert.equal(resolveProfileRecall(text), null, text);
     }
@@ -38,7 +47,9 @@ async function main() {
     }));
     rows.push({ id: 28, score: 0, data: { id: 28, category: 'state', key: 'current_project', value: 'atlas' } });
     let failed = false;
+    const bankReads = [];
     cache.getMemory = async store => {
+        bankReads.push(store);
         if (store !== 'user_profile') return [];
         if (failed) throw new Error('Profile read failed');
         return rows;
@@ -64,6 +75,41 @@ async function main() {
     const ordinary = await retrieve('Tell me a joke');
     assert.equal(ordinary.profileCoverage, null);
     assert(ordinary.personal.length <= 8);
+    const pollutedHistory = [
+        { role: 'user', content: 'Explain database migration procedures for Atlas' },
+        { role: 'assistant', content: 'TTS feature state reflections and Minecraft memories' }
+    ];
+    assert.equal(retrievalQuery('What games do I like?', pollutedHistory), 'What games do I like?');
+    assert(!retrievalQuery('Why?', pollutedHistory).includes('TTS'));
+    bankReads.length = 0;
+    const topical = await retrieve('You were a bit off earlier, but what games do I like, and what games do you like?', pollutedHistory);
+    assert.deepEqual(bankReads, ['user_profile'], 'Personal-only recall must not even fetch unrelated banks');
+    assert.deepEqual(topical.personal.map(row => row.key), ['favorite_game']);
+    const recalled = await retrieve('What do you remember about my game preferences?', pollutedHistory);
+    assert.deepEqual(recalled.personal.map(row => row.key), ['favorite_game']);
+    assert.equal(recalled.profileCoverage.scope, 'topic');
+    assert.equal(topical.profileCoverage.scope, 'topic');
+    assert.equal(topical.profileCoverage.available, 1);
+    assert.equal(topical.profileCoverage.excludedAsUnrelated, 26);
+    assert.equal(topical.profileCoverage.omitted, 0);
+    assert.deepEqual(topical.state, []);
+    assert.equal(topical.hotState.activeProject, null);
+    const followup = await retrieve('Anything else?', [{ role: 'user', content: 'What games do I like?' },
+        { role: 'assistant', content: 'Your favorite food is pasta' }]);
+    assert.deepEqual(followup.personal.map(row => row.key), ['favorite_game']);
+    const shared = await retrieve('Which of those do we both like?', [{ role: 'user', content: 'What games do I like?' },
+        { role: 'assistant', content: 'You like pasta.' }]);
+    assert.deepEqual(shared.personal.map(row => row.key), ['favorite_game']);
+    for (const bank of ['projects', 'procedures', 'features', 'reflections', 'conversationHistory']) {
+        assert.deepEqual(topical[bank], [], bank);
+    }
+    const originalGet = cache.getMemory;
+    cache.getMemory = async store => store === 'procedural_memory'
+        ? [{ id: 1, score: 100, data: { trigger: 'database migration', action: 'apply schema' } }]
+        : originalGet(store);
+    const shifted = await retrieve('Tell me a joke about penguins', pollutedHistory);
+    assert.deepEqual(shifted.procedures, [], 'Neither small table size nor assistant history establishes relevance');
+    cache.getMemory = originalGet;
     // Even heavy old activation/history cannot crowd explicit favorites out.
     rows.slice(0, 20).forEach(row => { row.data.value = 'Long old unrelated detail. '.repeat(100); });
     const partial = await retrieve(questions[2], history);

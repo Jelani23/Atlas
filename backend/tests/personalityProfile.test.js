@@ -50,8 +50,8 @@ async function main() {
     assert(prompt.includes('User Profile (Stable Facts):\n- favorite_game: Minecraft'));
     assert(prompt.includes('These preferences belong to you, not Jelani'));
     assert.equal(prompt.split(getReplyFocus()).length - 1, 1);
-    assert(prompt.includes('only a completed write result can support a claim'));
-    assert(prompt.includes('cannot prove implementation'));
+    assert(prompt.includes('selected context, not a search of all memory'));
+    assert(!prompt.includes('cannot prove implementation'), 'Personal game recall should not receive unrelated implementation warnings');
     const overview = getSystemPrompt('casual', 'NONE', null, atlasState, { userInput: 'Tell me about yourself' });
     for (const value of strings(atlasState)) assert(overview.includes(value), `Overview dropped ${value}`);
     const music = getSystemPrompt('casual', 'NONE', null, atlasState, { userInput: 'What music and artists do you like' });

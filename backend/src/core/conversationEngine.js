@@ -33,6 +33,12 @@ const {
 } = require('../utils/turnGrounding');
 const { isSearchKnowledgePersistenceEnabled } = require('../memory/knowledgePersistencePolicy');
 const { shouldRecoverResponse, getRecoveryAppend } = require('../response/recovery');
+const { hasOperatingGuideAnswer, isKnowledgePipelineExplanation, formatToolInventory, selectTopics } = require('./capabilityContext');
+const { isToolInventoryRequest } = require('../intent/capabilityRequest');
+const { resolveKnowledgeOverviewReply } = require('../memory/knowledgeAnswerBoundary');
+const { resolveOperatingAnswer, resolveEmptyEventRecall } = require('../response/groundedAnswers');
+const { resolvePreferenceComparison } = require('../response/preferenceAnswers');
+const { getAgentProfile } = require('../agents/agentProfiles');
 
 const modelAdapter = createModelAdapter();
 let lastEmittedModel = null;
@@ -129,7 +135,12 @@ function scheduleMemoryExtraction({ userInput, memory, userMessageId, workingCon
     }, taskId, requestId, 'NORMAL');
 }
 
-async function handleMessage(userInput, { memory, mode, sessionId, taskId, requestId }) {
+function handleMessage(userInput, options) {
+    return require('../planner/state').runInSession(options.sessionId,
+        () => handleSessionMessage(userInput, options));
+}
+
+async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId }) {
     const requestStart = Date.now();
 
     try {
@@ -146,6 +157,12 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'intent', duration: intentDuration, timestamp: Date.now() });
 
         const history = await memory.workingMemory.getHistory(sessionId, 4);
+        const agent = await getAgentProfile(agentId);
+        const sessionScope = require('../planner/state');
+        const codeEvidence = require('./codeEvidence');
+        const priorCodeEvidence = codeEvidence.followUp(userInput, sessionScope.codeEvidence, agent.agentId);
+        sessionScope.codeEvidence = priorCodeEvidence;
+        console.log(`[AgentProfile] ${agent.agentId}: ${agent.source}, revision ${agent.revision ?? 'seed'}${agent.degraded ? ' (degraded)' : ''}`);
         const userMessageId = await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
 
         // Phase 3C.2: Fetch rolling working context
@@ -155,6 +172,8 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'planner', timestamp: Date.now() });
         const plannerStart = Date.now();
         const toolResult = await planner.route(intent, userInput, history, taskId, requestId);
+        sessionScope.codeEvidence = codeEvidence.capture(toolResult, agent.agentId)
+            || (toolResult.needsTool ? null : priorCodeEvidence);
         const plannerDuration = Date.now() - plannerStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'planner', duration: plannerDuration, timestamp: Date.now() });
 
@@ -200,8 +219,20 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             });
         }
 
+        if (isToolInventoryRequest(userInput)) {
+            console.log('[CapabilityInventory] Answered from executable contracts and permission policy.');
+            return finishImmediateReply(formatToolInventory(), {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
         const modelChoice = modelRouter.getModelForTask(ranWebSearch ? 'search_web' : toolResult.toolName);
         const reasoning = { ...reasoningDepth, ...modelChoice };
+        // Keep concise informational answers stable. Rich personality and
+        // creative turns retain their existing sampling settings.
+        if (effectiveMode !== 'creative' && personalityEngine.usesConciseProfile(agent.profile, { userInput, history })) {
+            reasoning.temperature = 0;
+        }
         if (modelChoice.supportsThinking === false) {
             reasoning.think = false;
         }
@@ -244,11 +275,26 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             });
         }
 
-        const implementationReply = resolveImplementationBoundaryReply(userInput, {
+        const operatingReply = resolveOperatingAnswer(userInput, {
+            relevantMemory, toolResult, runtime: { tts: ttsManager.getStatus() }
+        });
+        if (operatingReply) {
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: Date.now() - contextStart, timestamp: Date.now() });
+            console.log('[OperatingAnswer] Answered from the memory contract and runtime observation.');
+            return finishImmediateReply(operatingReply, { memory, sessionId, taskId, requestId, requestStart });
+        }
+
+        const preferenceReply = resolvePreferenceComparison(userInput, relevantMemory, toolResult, agent.profile);
+        if (preferenceReply) {
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: Date.now() - contextStart, timestamp: Date.now() });
+            return finishImmediateReply(preferenceReply, { memory, sessionId, taskId, requestId, requestStart });
+        }
+
+        const implementationReply = resolveImplementationBoundaryReply(userInput, priorCodeEvidence && !toolResult.needsTool ? priorCodeEvidence : {
             toolName: toolResult.toolName,
             toolResult: toolResult.toolResult
         });
-        if (implementationReply) {
+        if (implementationReply && !hasOperatingGuideAnswer(userInput)) {
             const contextDuration = Date.now() - contextStart;
             eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
             console.log('[GroundedImplementation] No verified implementation evidence was available.');
@@ -267,7 +313,7 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
         }
 
         const trustedKnowledgeReply = resolveTrustedKnowledgeBoundaryReply(userInput, relevantMemory);
-        if (trustedKnowledgeReply) {
+        if (trustedKnowledgeReply && !isKnowledgePipelineExplanation(userInput)) {
             const contextDuration = Date.now() - contextStart;
             eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
             const verifiedCount = Array.isArray(relevantMemory.knowledge)
@@ -292,6 +338,16 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             });
         }
 
+        const knowledgeOverviewReply = selectTopics(userInput, history, intent).length === 0
+            ? resolveKnowledgeOverviewReply(userInput, relevantMemory, toolResult) : null;
+        if (knowledgeOverviewReply) {
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: Date.now() - contextStart, timestamp: Date.now() });
+            console.log('[KnowledgeAnswerBoundary] Factual overview answered from checked records or an explicit evidence gap.');
+            return finishImmediateReply(knowledgeOverviewReply, {
+                memory, sessionId, taskId, requestId, requestStart
+            });
+        }
+
         const reflectionReply = resolveReflectionAnswer(userInput, relevantMemory);
         if (reflectionReply) {
             const contextDuration = Date.now() - contextStart;
@@ -302,25 +358,35 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
             });
         }
 
+        const recallGap = resolveEmptyEventRecall(userInput, { relevantMemory, history, workingContext, toolResult });
+        if (recallGap) {
+            eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: Date.now() - contextStart, timestamp: Date.now() });
+            console.log('[RecallAnswer] Event recall lacks sufficient support or history retrieval failed; no database-wide absence claim.');
+            return finishImmediateReply(recallGap, { memory, sessionId, taskId, requestId, requestStart });
+        }
+
         const context = await contextBuilder.buildContext({
             mode: effectiveMode,
             intent,
             responseStyle,
             memoryResult: { action: "deferred", message: "Processing in background" },
             toolResult,
+            priorCodeEvidence: !toolResult.needsTool ? priorCodeEvidence : null,
             userInput,
             history,
             policy: reasoning.policy,
             workingContext,
             preprocessed: { relevantMemory },
-            sessionId
+            sessionId,
+            capabilityRuntime: { model: modelChoice, tts: ttsManager.getStatus(), agentProfile: { agentId: agent.agentId, source: agent.source, revision: agent.revision } },
+            agentProfile: agent.profile
         });
         const contextDuration = Date.now() - contextStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
 
         const messages = [
             { role: 'system', content: context },
-            ...(await memory.workingMemory.getHistory(sessionId, 4))
+            ...[...history, { role: 'user', content: userInput }].slice(-4)
         ];
 
         // 4. Main LLM Complete (Streaming)
@@ -544,7 +610,9 @@ async function handleMessage(userInput, { memory, mode, sessionId, taskId, reque
     } catch (error) {
         taskManager.endRequest(taskId);
         console.error("[Atlas] handleMessage failed:", error);
-        const fallback = "Something went wrong on my end processing that - try again?";
+        const fallback = error.code === 'HISTORY_UNAVAILABLE'
+            ? "I couldn't load this conversation's history, so I paused before answering or taking action. Please try again. This doesn't mean your saved history is empty."
+            : "Something went wrong on my end processing that - try again?";
         eventBus.emit(EventTypes.REQUEST_FAILED, { taskId, requestId, error: error.message, timestamp: Date.now(), duration: Date.now() - requestStart });
         return { reply: fallback, audio: null };
     }

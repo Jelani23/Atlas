@@ -1,5 +1,22 @@
 const supabase = require('../database/supabaseClient');
 
+function historyReadError(cause) {
+    const error = new Error('Conversation history could not be loaded.', { cause });
+    error.code = 'HISTORY_UNAVAILABLE';
+    return error;
+}
+
+async function readHistoryQuery(query) {
+    try {
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!Array.isArray(data)) throw new Error('Invalid history response');
+        return data;
+    } catch (error) {
+        throw historyReadError(error);
+    }
+}
+
 /**
  * ============================================================
  * WORKING MEMORY (chat log access layer)
@@ -67,17 +84,12 @@ async function getHistory(sessionId, limit = 20) {
         return [];
     }
 
-    const { data, error } = await supabase
+    const data = await readHistoryQuery(supabase
         .from('conversations')
         .select('role, content')
         .eq('session_id', sessionId)
         .order('id', { ascending: false })
-        .limit(limit);
-
-    if (error) {
-        console.error('Failed to load working memory history:', error.message);
-        return [];
-    }
+        .limit(limit));
 
     return data.reverse();
 }
@@ -111,14 +123,7 @@ async function getRelevant(keywords, { sessionId = null, projectKey = null, cros
         query = query.eq('project_key', projectKey);
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-        console.error('Failed to load relevant working memory:', error.message);
-        return [];
-    }
-
-    return data;
+    return readHistoryQuery(query);
 }
 
 async function clear(sessionId) {

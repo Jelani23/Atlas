@@ -90,7 +90,7 @@ function hasExtractableContent(summary, rawResults) {
     return hasVerifiedSearchEvidence(rawResults);
 }
 
-function buildPrompt(query, summary, rawResults) {
+function buildPrompt(query, summary, rawResults, allowedSubjects = [], maxMemories = 4) {
     // Raw material can be long (see webSearch.js) - cap what goes into
     // this prompt so extraction stays fast and focused on the clearest
     // signal, not padding out context with redundant scraped HTML text.
@@ -123,6 +123,10 @@ an organizational aid and may contain unsupported model output. Every
 fact you extract must be directly supported by the raw source material;
 if a claim appears only in the synthesized answer, do not extract it.
 Don't extract the same fact twice just because it appears in both.
+
+${allowedSubjects.length ? `This is a scoped background-learning job. Only extract facts whose subject is clearly one of these reviewed topics: ${allowedSubjects.join(', ')}. If the source page is unrelated, return an empty memories array.` : ''}
+
+Return no more than ${maxMemories} memories. Keep each value concise (one or two sentences) and do not repeat the same fact under different keys.
 
 WHAT COUNTS AS KNOWLEDGE
 - Durable facts, definitions, concepts, or relationships that would
@@ -196,13 +200,18 @@ function deriveFallbackTopics(m) {
     return [...new Set(candidates)];
 }
 
-function prepareExtractedMemories(memories, rawResults) {
+function prepareExtractedMemories(memories, rawResults, { allowedSubjects = [], sourceUrlPredicate } = {}) {
     const evidenceUrls = new Set(extractSourceUrls(rawResults));
+    const normalizedSubjects = allowedSubjects.map(value => String(value).toLowerCase().replace(/[^a-z0-9]+/g, '_'));
     return (memories || [])
         .filter(m => m && m.key && m.value && m.subject)
         .map(m => {
+            const normalizedSubject = String(m.subject).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            if (normalizedSubjects.length && !normalizedSubjects.some(term =>
+                normalizedSubject === term || normalizedSubject.includes(term) || term.includes(normalizedSubject)
+            )) return null;
             const supportingUrls = [...new Set(m.supporting_urls || [])]
-                .filter(url => evidenceUrls.has(url));
+                .filter(url => evidenceUrls.has(url) && (!sourceUrlPredicate || sourceUrlPredicate(url)));
             if (supportingUrls.length === 0) return null;
             return {
                 category: 'knowledge',
@@ -222,13 +231,13 @@ function prepareExtractedMemories(memories, rawResults) {
         .filter(Boolean);
 }
 
-async function extractAndSaveFromSearch({ query, summary, rawResults }) {
+async function extractAndSaveFromSearch({ query, summary, rawResults, allowedSubjects = [], sourceUrlPredicate, maxTokens = 900, maxMemories = 4 }) {
     if (!hasExtractableContent(summary, rawResults)) {
         return { saved: 0, reason: 'nothing_extractable' };
     }
 
     try {
-        const prompt = buildPrompt(query, summary, rawResults);
+        const prompt = buildPrompt(query, summary, rawResults, allowedSubjects, maxMemories);
 
         const response = await llmQueue.enqueue(() =>
             modelAdapter.complete(
@@ -246,7 +255,7 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
                 {
                     think: false,
                     temperature: 0.1,
-                    maxTokens: 900,
+                    maxTokens: Math.min(2_000, Math.max(300, Number(maxTokens) || 900)),
                     format: EXTRACTION_SCHEMA
                 }
             )
@@ -262,7 +271,10 @@ async function extractAndSaveFromSearch({ query, summary, rawResults }) {
             return { saved: 0, reason: 'no_memories_returned' };
         }
 
-        const memories = prepareExtractedMemories(parsed.memories, rawResults);
+        const memories = prepareExtractedMemories(parsed.memories, rawResults, {
+            allowedSubjects,
+            sourceUrlPredicate
+        });
 
         if (memories.length === 0) {
             return { saved: 0, reason: 'no_valid_memories' };

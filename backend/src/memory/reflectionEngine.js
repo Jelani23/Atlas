@@ -100,6 +100,9 @@ const REFLECTION_SYSTEM_PROMPT =
     'Do not replace an explicit comparison with the assistant\'s interpretation. ' +
     'Keep attribution exact: assistant suggestions, examples, and retrieved context are not things the user said. ' +
     'When the summary mentions assistant-added material, identify it as Alice\'s contribution. ' +
+    'Assistant factual answers are unverified statements unless supporting tool evidence is present. ' +
+    'Do not turn them into factual anchors or confirmed knowledge. Preserve a user challenge or correction ' +
+    'as a challenge or user-reported correction; omit the rejected factual claim from anchors and comparisons. ' +
     'Open loops must come from an unresolved user request or agreed follow-up. Do not treat assistant ' +
     'confusion, clarification requests, offers, or failed answers as user intent. ' +
     'Omit passwords, tokens, temporary ' +

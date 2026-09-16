@@ -35,12 +35,14 @@ class PermissionManager extends EventEmitter {
      * @returns {Promise<boolean>} Resolves true if approved, false if denied.
      */
     request(toolName, args) {
+        const scope = require('../planner/state').getSessionScope();
+        if (scope.closed) return Promise.resolve(false);
         return new Promise((resolve) => {
             const id = `req_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-            this.pendingRequests.set(id, { toolName, args, resolve });
+            this.pendingRequests.set(id, { toolName, args, resolve, scope });
             
             console.log(`[Permission] Requesting approval for ${toolName} (ID: ${id})`);
-            this.emit('permission.requested', { id, toolName, args });
+            this.emit('permission.requested', { id, toolName, args, sessionId: scope.id });
         });
     }
 
@@ -58,8 +60,11 @@ class PermissionManager extends EventEmitter {
 
         const decision = confirmationDecision(message);
         if (decision !== null) {
-            // Get the oldest pending request
-            const [id, request] = this.pendingRequests.entries().next().value;
+            const scope = require('../planner/state').getSessionScope();
+            const entry = [...this.pendingRequests.entries()].find(([, request]) =>
+                request.scope ? request.scope === scope && !scope.closed : scope.id == null);
+            if (!entry) return false;
+            const [id, request] = entry;
             console.log(`[Permission] Message "${message}" interpreted as ${decision ? 'APPROVE' : 'DENY'} for ${request.toolName} (ID: ${id})`);
             this.resolve(id, decision);
             return true;
@@ -68,12 +73,24 @@ class PermissionManager extends EventEmitter {
         return false;
     }
 
-    resolve(id, decision) {
+    cancelScope(scope) {
+        for (const [id, request] of this.pendingRequests) {
+            if (request.scope !== scope) continue;
+            this.pendingRequests.delete(id);
+            request.resolve(false);
+        }
+    }
+
+    resolve(id, decision, sessionId) {
         if (this.pendingRequests.has(id)) {
+            const request = this.pendingRequests.get(id);
+            const current = require('../planner/state').getSessionScope();
+            const owner = sessionId === undefined ? current.id : (sessionId == null ? null : String(sessionId));
+            if (request.scope && (request.scope.closed || request.scope.id !== owner)) return false;
             console.log(`[Permission] Request ${id} ${decision ? 'APPROVED' : 'DENIED'}.`);
             const { resolve: resolver } = this.pendingRequests.get(id);
             this.pendingRequests.delete(id);
-            resolver(decision);
+            resolver(decision === true);
         } else {
             console.warn(`[Permission] Received resolution for unknown ID: ${id}`);
         }

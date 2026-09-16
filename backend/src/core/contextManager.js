@@ -4,7 +4,8 @@ const hotSwapManager = require('./hotSwapManager');
 const projectRegistry = require('../memory/projectRegistry');
 const workingMemory = require('../memory/workingMemory');
 const sessionManager = require('../memory/sessionManager');
-const { resolveProfileRecall } = require('../memory/profileRecall');
+const { resolveProfileRecall, matchesProfileTopic, retrievalQuery } = require('../memory/profileRecall');
+const { selectTopics } = require('./capabilityContext');
 const {
     looksLikeTitleReference,
     resolveSessionTitleReference
@@ -72,9 +73,8 @@ const CONTEXT_PROFILES = {
     planning:     { personal: 180, project: 360, knowledge: 180, procedures: 160, devState: 160, reflections: 200, conversationHistory: 320 },
     search:       { personal: 80,  project: 0,   knowledge: 0,   procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 },
     memory:       { personal: 700, project: 360, knowledge: 360, procedures: 160, devState: 160, reflections: 480, conversationHistory: 500 },
-    // Capability questions ("can you read your own code?") are answered
-    // from the world model, assembled separately in contextBuilder.js -
-    // none of these budgets are the relevant source, so all stay at 0.
+    // The operating guide is assembled separately in contextBuilder.js.
+    // Relevant dev_state records accompany it as dated feature tracking.
     capability:   { personal: 0,   project: 0,    knowledge: 0,  procedures: 0,   devState: 0,   reflections: 0,   conversationHistory: 0 }
 };
 
@@ -319,6 +319,15 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         !reflectionScope.recentReference &&
         looksLikeTitleReference(userInput);
     const sessionStore = options.sessionStore || sessionManager;
+    const profileRecall = resolveProfileRecall(userInput, history);
+    const capabilityTopics = selectTopics(userInput, history, intent);
+    const capabilityQuestion = capabilityTopics.length > 0 && /\b(?:atlas|your|you|dev_state|dev state|features?|capabilities)\b/i.test(userInput);
+    const allProjects = await projectRegistry.getAllProjects();
+    const names = allProjects.flatMap(p => [p.name, p.project_key, ...(p.aliases || [])]).filter(Boolean);
+    const namesProject = names.some(name => new RegExp(`\\b${String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(userInput));
+    const profileOnly = Boolean(profileRecall) && !capabilityQuestion && !namesProject
+        && !reflectionScope.reason && !shouldResolveTitle && !/\b(?:search|procedure|workflow|knowledge|project)\b/i.test(userInput);
+    const readBank = bank => profileOnly ? Promise.resolve([]) : memoryCache.getMemory(bank);
 
     let profileReadFailed = false;
     const [personalIdx, projectsIdx, knowledgeIdx, featuresIdx, proceduresIdx, reflectionsIdx, titledSessions] = await Promise.all([
@@ -327,11 +336,11 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
             console.error('[ContextManager] User profile unavailable:', error.message);
             return [];
         }),
-        memoryCache.getMemory('project_memory'),
-        memoryCache.getMemory('knowledge_library'),
-        memoryCache.getMemory('dev_state'),
-        memoryCache.getMemory('procedural_memory'),
-        memoryCache.getMemory('reflections'),
+        readBank('project_memory'),
+        readBank('knowledge_library'),
+        readBank('dev_state'),
+        readBank('procedural_memory'),
+        readBank('reflections'),
         shouldResolveTitle ? sessionStore.listTitledSessions() : Promise.resolve([])
     ]);
 
@@ -353,17 +362,15 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     }
 
     const referencedSessionIds = reflectionScope.sessionIds;
-    const recentHistoryStr = history.slice(-5).map(m => m.content).join(' ');
     const keywordSource = referencedSessionIds.length > 0
         ? userInput
-        : `${userInput} ${recentHistoryStr}`;
+        : retrievalQuery(userInput, history);
     const keywords = extractKeywords(keywordSource);
 
     const lowerInput = userInput.toLowerCase();
     const userNoteType = classifyUserNote(userInput);
     const implementationQuestion = isImplementationQuestion(userInput);
     const trustedKnowledgeQuestion = isTrustedKnowledgeQuestion(userInput);
-    const profileRecall = resolveProfileRecall(userInput, history);
     const isAskingAboutSelf = Boolean(profileRecall);
     const profileKeywords = profileRecall ? extractKeywords(profileRecall.query) : keywords;
     const isAskingAboutAtlas = lowerInput.includes('what are you') || lowerInput.includes('what can you do') || lowerInput.includes('know about atlas') ;
@@ -396,7 +403,6 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     // auth?" while Atlas is the active project should still be able
     // to answer about Bindex specifically, without pulling in every
     // OTHER project's memories too.
-    const allProjects = await projectRegistry.getAllProjects();
 
     const projectNames = {};
     for (const p of allProjects) {
@@ -492,9 +498,13 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
 
     const profileName = isAskingAboutSelf ? 'memory' : (intent && intent.intent ? intent.intent : 'conversation');
     const budgetProfile = { ...(CONTEXT_PROFILES[profileName] || CONTEXT_PROFILES.conversation) };
+    if (capabilityQuestion) budgetProfile.devState = Math.max(budgetProfile.devState, 160);
     // Explicit recall needs more than the small personalization slice. Keep a
     // bounded budget, but do not silently cap a whole profile at eight rows.
     if (profileRecall) budgetProfile.personal = 1600;
+    if (profileOnly) {
+        for (const bank of ['project', 'knowledge', 'procedures', 'devState', 'reflections', 'conversationHistory']) budgetProfile[bank] = 0;
+    }
 
     // Identity/relationship essentials personalize every turn, but the core
     // Alice/ATLAS identity already lives in the system prompt. Keep only a
@@ -508,11 +518,11 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         }
         return scored;
     };
-    const essentialsScored = essentials.map(scoreProfile);
+    const essentialsScored = essentials.filter(item => matchesProfileTopic(item.data, profileRecall)).map(scoreProfile);
     const essentialsAlloc = allocateBudget(essentialsScored, Math.min(120, budgetProfile.personal), 4);
 
     // 3. Dynamic Personal: Only include if relevant OR if asking about self
-    let dynamicPersonalScored = dynamicPersonal.map(scoreProfile)
+    let dynamicPersonalScored = dynamicPersonal.filter(item => matchesProfileTopic(item.data, profileRecall)).map(scoreProfile)
         .filter(m => m._relevanceScore > 0 || isAskingAboutSelf);
         
     // 4. Projects: scope STRICTLY to the active project and/or any
@@ -560,16 +570,13 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         : [];
         
     let proceduresScored = proceduresIdx.map(item => scoreAndBoost('procedural_memory', item, keywords))
-        .filter(p => p._relevanceScore > 0 || proceduresIdx.length <= 5);
+        .filter(p => p._relevanceScore > 0);
 
-    const isDevRelevant = intent.action || intent.coding || intent.planning || isAskingAboutAtlas || isAskingAboutSelf || keywords.has('feature') || keywords.has('state');
-    let devScored = isDevRelevant ? featuresIdx.map(item => scoreAndBoost('dev_state', item, keywords)).filter(f => f._relevanceScore > 0 || featuresIdx.length <= 5) : [];
+    const isDevRelevant = capabilityQuestion || intent.action || intent.coding || intent.planning || isAskingAboutAtlas || keywords.has('feature') || keywords.has('state');
+    let devScored = isDevRelevant ? featuresIdx.map(item => scoreAndBoost('dev_state', item, keywords)).filter(f => f._relevanceScore > 0) : [];
 
-    // Reflections: same fallback pattern as knowledge/procedures (include
-    // everything when the table is small enough that "relevant" would
-    // otherwise mean "empty"), but capped lower (<=3 vs <=5) since a
-    // reflection is a whole-session recap - even the small-table fallback
-    // shouldn't casually dump many of them into every turn.
+    // Reflections require relevance or an explicit session selection.
+    // A small table is not evidence that its contents concern this request.
     const exactSessionReference = referencedSessionIds.length > 0;
     const recentSessionReference = reflectionScope.recentReference;
     const strictReflectionScope = exactSessionReference || recentSessionReference || reflectionScope.titleLookupAttempted;
@@ -607,7 +614,6 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     } else if (reflectionScope.enabled) {
         reflectionsScored = reflectionsScored.filter(r =>
             r._relevanceScore > 0 ||
-            reflectionsIdx.length <= 3 ||
             (recentSessionReference && r.id === latestReflectionId)
         );
     } else {
@@ -666,6 +672,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
     // duplicates from `history`, scores importance, and enforces a small
     // independent token budget before anything reaches the prompt.
     let conversationHistoryScored = [];
+    let conversationHistoryStatus = 'not_requested';
     const sessionId = options.sessionId || null;
     const conversationStore = options.workingMemory || workingMemory;
     if (!userNoteType && !implementationQuestion && budgetProfile.conversationHistory > 0 && sessionId && keywords.size > 0) {
@@ -676,10 +683,12 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
                 crossSession: false,
                 limit: 12
             });
+            conversationHistoryStatus = 'loaded';
             conversationHistoryScored = removeRecentConversationMessages(candidates, history)
                 .map(message => scoreConversationMessage(message, keywords))
                 .filter(message => message._relevanceScore > 0);
         } catch (error) {
+            conversationHistoryStatus = 'unavailable';
             console.error('[ContextManager] Failed to retrieve earlier conversation context:', error.message);
         }
     }
@@ -758,15 +767,18 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
 
     const profileCoverage = profileRecall ? {
         status: profileReadFailed ? 'unavailable' : 'loaded',
-        available: essentials.length + dynamicPersonal.length,
+        scope: profileRecall.topics.length ? 'topic' : 'full_profile',
+        topics: profileRecall.topics,
+        available: essentialsScored.length + dynamicPersonalScored.length,
+        excludedAsUnrelated: essentials.length + dynamicPersonal.length - essentialsScored.length - dynamicPersonalScored.length,
         selected: personalAlloc.selected.length,
-        omitted: essentials.length + dynamicPersonal.length - personalAlloc.selected.length
+        omitted: essentialsScored.length + dynamicPersonalScored.length - personalAlloc.selected.length
     } : null;
     if (profileCoverage) console.log('[ContextManager] Profile recall:', JSON.stringify(profileCoverage));
 
     return {
-        hotState: memoryCache.getHotState(),
-        state: stateScored,
+        hotState: profileOnly ? { activeProject: null, activeFiles: [], currentTask: null } : memoryCache.getHotState(),
+        state: profileOnly ? [] : stateScored,
         personal: personalAlloc.selected,
         profileCoverage,
         projects: projectAlloc.selected,
@@ -778,6 +790,7 @@ async function getRelevantContext(userInput, history, intent, options = {}) {
         features: devAlloc.selected,
         reflections: reflectionsAlloc.selected,
         conversationHistory: conversationHistoryAlloc.selected,
+        conversationHistoryStatus,
         reflectionScope: {
             reason: reflectionScope.reason,
             sessionIds: [...reflectionScope.sessionIds],

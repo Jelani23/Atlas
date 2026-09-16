@@ -18,6 +18,7 @@ const eventLogger = require('../events/eventLogger');
 const ollamaProvider = require('../models/providers/ollama');
 const modelRouter = require('../models/modelRouter');
 const reflectionWorker = require('../memory/reflectionWorker');
+const passiveLearningWorker = require('../learning/worker');
 const contextManager = require('../core/contextManager');
 
 class AtlasInterface extends EventEmitter {
@@ -130,6 +131,9 @@ class AtlasInterface extends EventEmitter {
             // backend process. Close/requeue it before creating this process's
             // session, then let the idle worker handle the durable jobs.
             reflectionWorker.initialize();
+            // Passive knowledge learning is opt-in and remains idle until the
+            // configured migration and source policy are present.
+            passiveLearningWorker.initialize();
             try {
                 const recovery = await sessionManager.recoverReflectionLifecycle();
                 if (recovery.supported && (recovery.recovered || recovery.abandoned)) {
@@ -159,6 +163,7 @@ class AtlasInterface extends EventEmitter {
             this.ready = true;
             this.emit('atlas.status', { phase: 'ready', sessionId: this.sessionId });
             reflectionWorker.schedule();
+            passiveLearningWorker.schedule();
             return this.sessionId;
         })();
 
@@ -192,6 +197,7 @@ class AtlasInterface extends EventEmitter {
 
     async _closeCurrentConversation() {
         const outgoingSessionId = this.sessionId;
+        if (outgoingSessionId != null) require('../planner/state').endSession(outgoingSessionId);
         if (!outgoingSessionId) {
             return { outgoingSessionId: null, closeResult: null };
         }
@@ -219,7 +225,22 @@ class AtlasInterface extends EventEmitter {
         return { outgoingSessionId, closeResult };
     }
 
-    async newConversation() {
+    _transitionConversation(change) {
+        if (this._shutdownPromise) return Promise.reject(new Error('Atlas is shutting down.'));
+        const previous = this._conversationTransition || Promise.resolve();
+        const pending = previous.catch(() => {}).then(change);
+        this._conversationTransition = pending;
+        const clear = () => { if (this._conversationTransition === pending) this._conversationTransition = null; };
+        pending.then(clear, clear);
+        return pending;
+    }
+
+    newConversation() { return this._transitionConversation(() => this._newConversation()); }
+    resumeConversation(id) { return this._transitionConversation(() => this._resumeConversation(id)); }
+    deleteConversation(id) { return this._transitionConversation(() => this._deleteConversation(id)); }
+    resetConversation() { return this._transitionConversation(() => this._resetConversation()); }
+
+    async _newConversation() {
         const outgoingSessionId = this.sessionId;
         console.log(`[AtlasInterface] New conversation requested | outgoing=${outgoingSessionId || 'none'}`);
         const { closeResult } = await this._closeCurrentConversation();
@@ -235,7 +256,7 @@ class AtlasInterface extends EventEmitter {
         return String(this.sessionId);
     }
 
-    async resumeConversation(sessionId) {
+    async _resumeConversation(sessionId) {
         if (!sessionId) throw new Error('A conversation id is required.');
         if (this.sessionId != null && String(this.sessionId) === String(sessionId)) {
             return String(this.sessionId);
@@ -258,10 +279,11 @@ class AtlasInterface extends EventEmitter {
         return String(this.sessionId);
     }
 
-    async deleteConversation(sessionId) {
+    async _deleteConversation(sessionId) {
         if (!sessionId) return { ok: false };
 
         const wasCurrent = this.sessionId != null && String(this.sessionId) === String(sessionId);
+        require('../planner/state').endSession(sessionId);
         await sessionManager.deleteSession(sessionId);
 
         let newSessionId = null;
@@ -294,14 +316,18 @@ class AtlasInterface extends EventEmitter {
         return this.mode;
     }
 
-    async resetConversation() {
+    async _resetConversation() {
         if (!this.sessionId) return;
+        require('../planner/state').endSession(this.sessionId);
         await memory.workingMemory.clear(this.sessionId);
         this.emit('atlas.status', { phase: 'conversation_reset' });
     }
 
     async sendMessage(text) {
+        if (this._shutdownPromise) throw new Error('Atlas is shutting down.');
         if (!this.ready) await this.initialize();
+        while (this._conversationTransition) await this._conversationTransition;
+        if (this._shutdownPromise) throw new Error('Atlas is shutting down.');
 
         const trimmed = (text || '').trim();
         if (!trimmed) return '';
@@ -354,15 +380,18 @@ class AtlasInterface extends EventEmitter {
     }
 
     resolvePermission(id, decision) {
-        permissionManager.resolve(id, decision);
+        if (this._conversationTransition || this._shutdownPromise) return false;
+        permissionManager.resolve(id, decision, this.sessionId);
     }
 
     async shutdown() {
         if (this._shutdownPromise) return this._shutdownPromise;
 
         this._shutdownPromise = (async () => {
+            while (this._conversationTransition) await this._conversationTransition.catch(() => {});
             if (this.sessionId) {
                 const sessionId = this.sessionId;
+                require('../planner/state').endSession(sessionId);
                 this.sessionId = null;
                 const lifecycleEnabled = await sessionManager.supportsReflectionLifecycle();
                 if (lifecycleEnabled) {
@@ -378,6 +407,7 @@ class AtlasInterface extends EventEmitter {
                 }
             }
             reflectionWorker.shutdown();
+            await passiveLearningWorker.shutdown();
             this.ready = false;
             this._initPromise = null;
             this.emit('atlas.status', { phase: 'shutdown' });

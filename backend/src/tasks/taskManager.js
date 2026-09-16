@@ -45,6 +45,10 @@ class TaskManager {
     }
 
     async createTask(type, workFn, parentTaskId = null, requestId = null, priority = TaskPriorities.NORMAL) {
+        // A deferred task may be released by an event in another async context.
+        // Preserve the original scope, including its closed flag, instead of
+        // reopening a conversation by ID when the callback eventually runs.
+        workFn = require('../planner/state').bindToSession(workFn);
         const taskId = `BG-${String(this.taskCounter++).padStart(4, '0')}`;
         const now = Date.now();
         

@@ -29,6 +29,7 @@ function planResult(execution) {
 }
 
 async function route(intent, message, history = [], taskId, requestId) {
+    if (state.isSessionClosed()) return { needsTool: false };
     // 0. Systemic Permission & Confirmation Boundary
     // Intercept Yes/No at the very top to resolve pending permissions or actions.
     const decision = confirmationDecision(message);
@@ -98,6 +99,7 @@ async function route(intent, message, history = [], taskId, requestId) {
             ? payload => semanticToolPlanner({ ...payload, requestId })
             : null
     });
+    if (state.isSessionClosed()) return { needsTool: false };
     if (compiled.status === 'ready') {
         console.log(`[Planner] Executing ${compiled.plan.steps.length}-step tool plan.`);
         const execution = await executeToolPlan(compiled.plan);

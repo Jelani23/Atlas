@@ -1,0 +1,14 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const migration = fs.readFileSync(path.join(__dirname, '../src/database/migrations/015_passive_knowledge_learning.sql'), 'utf8');
+assert.match(migration, /create extension if not exists pgcrypto/i);
+assert.match(migration, /knowledge_learning_jobs/i);
+assert.match(migration, /knowledge_learning_runs/i);
+assert.match(migration, /pg_advisory_xact_lock/i);
+assert.match(migration, /status='interrupted'/i);
+assert.match(migration, /security invoker/i);
+assert.match(migration, /grant execute on function public\.claim_knowledge_learning/i);
+assert.match(migration, /grant execute on function public\.finish_knowledge_learning/i);
+assert.doesNotMatch(migration, /grant .* to anon|grant .* to authenticated/i);
+console.log('passiveLearningMigration.test.js passed');

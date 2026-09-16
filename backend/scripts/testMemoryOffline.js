@@ -2,6 +2,9 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const tests = [
+    'codeEvidence.test.js',
+    'codeInspection.test.js',
+    'agentProfiles.test.js',
     'canonicalizationEvaluation.test.js', 'conversationContextRetrieval.test.js', 'generationCache.test.js',
     'knowledgeActiveFiltering.test.js', 'knowledgeAtomicityPlanner.test.js', 'knowledgeAuditReport.test.js',
     'knowledgeCleanupPlanner.test.js', 'knowledgeCleanupRepository.test.js', 'knowledgeDecompositionRepository.test.js',
@@ -21,7 +24,10 @@ const tests = [
     'modelRouting.test.js', 'reasoningPolicy.test.js', 'responseRecovery.test.js', 'thinkFilter.test.js',
     'multiToolPlan.test.js', 'plannerMultiToolRouting.test.js', 'plannerNormalizerGrounding.test.js', 'toolArguments.test.js',
     'arithmeticExpression.test.js', 'toolResultPresenter.test.js', 'profileRecall.test.js',
-    'toolRequestBoundary.test.js', 'unitConversion.test.js', 'personalityProfile.test.js'
+    'toolRequestBoundary.test.js', 'conversationActionScope.test.js', 'conversationTransition.test.js', 'unitConversion.test.js', 'personalityProfile.test.js',
+    'capabilityContext.test.js', 'ttsStatus.test.js', 'groundedAnswers.test.js', 'groundedAnswerRouting.test.js', 'preferenceAnswers.test.js', 'workingMemoryReadFailure.test.js', 'knowledgeAnswerBoundary.test.js', 'knowledgeAnswerRouting.test.js',
+    'neuroKnowledgeRepair.test.js', 'learningSources.test.js', 'learningCollector.test.js',
+    'passiveLearningWorker.test.js', 'passiveLearningMigration.test.js'
 ];
 const failures = [];
 for (const test of tests) {

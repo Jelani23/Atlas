@@ -9,20 +9,21 @@ async function searchCode(query) {
         const sttNormalizedQuery = lowerQuery.replace(/\s+/g, '');
         const matches = [];
         for (const filePath of tree) {
-            const content = projectCache.getFile(filePath);
+            const content = projectCache.getFile(filePath, { full: true });
             if (content) {
                 const lines = content.split('\n');
                 for (let i = 0; i < lines.length; i++) {
                     const lowerLine = lines[i].toLowerCase();
                     if (lowerLine.includes(lowerQuery) || lowerLine.includes(sttNormalizedQuery)) {
-                        matches.push(`${filePath} (Line ${i + 1}): ${lines[i].trim()}`);
+                        const line = lines[i].trim();
+                        matches.push(`${filePath} (Line ${i + 1}): ${line.slice(0, 600)}${line.length > 600 ? ' ... [line truncated]' : ''}`);
                         break;
                     }
                 }
             }
         }
-        if (matches.length === 0) return `No occurrences of "${query}" found in the project source.`;
-        return `Found ${matches.length} occurrence(s) for "${query}":\n${matches.join('\n')}`;
+        if (matches.length === 0) return `No occurrences of "${query}" found in the indexed project source files.`;
+        return `Found "${query}" in ${matches.length} indexed file(s) (first matching line per file):\n${matches.slice(0, 40).join('\n')}${matches.length > 40 ? `\n[${matches.length - 40} matching files omitted; narrow the search.]` : ''}`;
     } catch (error) {
         return `Error searching code: ${error.message}`;
     }

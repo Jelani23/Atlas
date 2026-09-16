@@ -32,6 +32,7 @@ async function executeStep(step, {
         return { queries, result };
     }
 } = {}) {
+    if (state.isSessionClosed()) throw new Error('The originating conversation is closed.');
     if (step.toolName === 'webSearch') {
         const { queries, result } = await runSearch(step.clause);
         state.lastSearchQuery = queries[0];

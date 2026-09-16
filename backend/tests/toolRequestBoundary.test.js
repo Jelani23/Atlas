@@ -14,15 +14,31 @@ const { validateSemanticPlan } = require('../src/planner/toolPlanning/toolPlanCo
 const { route } = require('../src/planner/planner');
 const state = require('../src/planner/state');
 const permissions = require('../src/permissions/permissionManager');
-const { confirmationDecision } = require('../src/intent/toolRequestBoundary');
+const { confirmationDecision, isNonExecutingToolMention } = require('../src/intent/toolRequestBoundary');
 
 async function main() {
     for (const message of [
         'Explain how to rename a variable in JavaScript',
+        'I was wondering how to rename the note called old plan to new plan',
+        'I was wondering how to delete a note',
+        'Before doing anything explain how to delete the note called scratchpad',
+        'I am curious how to calculate two plus two',
+        'Could you tell me how to delete a note',
+        '"Delete the note called scratchpad"',
         'What does character count mean',
         'I am not asking you to calculate anything explain what a percentage represents',
         'Explain how to delete the note called scratchpad',
         'Could you explain how to delete the note called scratchpad',
+        'What tools do you have',
+        'What are all the tools you have available?',
+        'Can you list all your tools',
+        'What arguments does appendNote need',
+        'How does searchKnowledge work',
+        'What tools do you have and what are their limitations',
+        'Do you have file access',
+        'Can you read your own code',
+        'You understand the current state of your TTS right',
+        'Do you have access to web search or only your training knowledge',
         'Do not delete the note called scratchpad',
         'I do not want you to delete the note called scratchpad',
         'Could you please not delete the note called scratchpad',
@@ -37,6 +53,8 @@ async function main() {
         assert.equal(state.pendingAction, null);
     }
     assert.equal(calls.length, 0);
+    assert.equal(isNonExecutingToolMention('I was wondering if you could rename the note called old to new'), false);
+    assert.equal(isNonExecutingToolMention('Could you calculate two plus two'), false);
     // A semantic model's high confidence cannot authorize a negated clause.
     assert.equal(validateSemanticPlan({ steps: [
         { toolName: 'calculate', args: ['2 + 2'], confidence: 1 },

@@ -1,4 +1,5 @@
 const { extractKeywords } = require('../utils/keywordExtractor');
+const { getKnowledgeOverviewTopic } = require('./knowledgeRequest');
 
 const GENERIC_TERMS = new Set([
     'latest', 'current', 'newest', 'recent', 'stable', 'release', 'released',
@@ -37,7 +38,10 @@ function tokenizeKnowledgeText(value) {
 }
 
 function getKnowledgeSearchTerms(query) {
-    return [...extractKeywords(query)]
+    const topic = getKnowledgeOverviewTopic(query) || query;
+    // Hyphens and underscores separate words in stored subjects too. Removing
+    // punctuation outright made Neuro-sama and Neuro sama different queries.
+    return [...extractKeywords(String(topic || '').replace(/[-_]/g, ' '))]
         .map(term => term.replace(/[^a-z0-9_-]/g, ''))
         .filter(Boolean)
         .slice(0, 12);
