@@ -35,7 +35,7 @@ const SAFE_AREA: Record<CloudAsset, string> = {
 // The raster artwork has different optical bounds than the fitted SVG shells.
 // Keep these adjustments WebP-only so the stable SVG comparison is untouched.
 const WEBP_FIT: Record<CloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
-  nav: { scaleX: 1.1, scaleY: 1.2, translateY: 1 },
+  nav: { scaleX: 1.13, scaleY: 1.25, translateY: -5 },
   chat: { scaleX: 1.08, scaleY: 1.16, translateY: 0 },
   panelWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
   panelSquare: { scaleX: 1, scaleY: 1, translateY: 0 },
@@ -133,9 +133,6 @@ export function CloudSurface({
   mirrorX = false,
   style,
 }: CloudSurfaceProps) {
-  const webpEnabled = useWebpCloudSkin()
-  const webpContentOffset = webpEnabled && asset === "nav" ? "translate-y-[7px]" : ""
-
   return (
     <div className={`relative isolate min-w-0 ${className}`} style={style}>
       <CloudSkin
@@ -144,7 +141,7 @@ export function CloudSurface({
         mirrorX={mirrorX}
         className={`inset-0 h-full w-full ${skinClassName}`}
       />
-      <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${webpContentOffset} ${contentClassName}`}>
+      <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${contentClassName}`}>
         {children}
       </div>
     </div>
