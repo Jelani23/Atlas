@@ -54,19 +54,52 @@ export function runViewTransition(update: () => void) {
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
   const transitionDocument = document as AtlasTransitionDocument
 
-  if (reducedMotion || !transitionDocument.startViewTransition) {
+  // Chrome aborts View Transitions with InvalidStateError while the document is
+  // hidden (for example during initial tab startup or when switching tabs).
+  // Apply the state change normally in that case instead of attempting animation.
+  if (
+    reducedMotion ||
+    document.visibilityState !== "visible" ||
+    !transitionDocument.startViewTransition
+  ) {
     update()
     return
   }
 
   ensureViewTransitionOverrides()
 
-  transitionDocument.startViewTransition(() => {
-    // React state updates are normally asynchronous. View Transitions need the
-    // destination DOM to exist before the browser captures the "new" snapshot,
-    // otherwise the previous bubble/panel can flash for a frame.
-    flushSync(update)
-  })
+  let applied = false
+
+  try {
+    const transition = transitionDocument.startViewTransition(() => {
+      // React state updates are normally asynchronous. View Transitions need the
+      // destination DOM to exist before the browser captures the "new" snapshot,
+      // otherwise the previous bubble/panel can flash for a frame.
+      flushSync(() => {
+        update()
+        applied = true
+      })
+    })
+
+    // The document can become hidden after startViewTransition() succeeds but
+    // before the transition finishes. Consume that browser abort so it does not
+    // surface as an unhandled rejection, and make sure the requested state update
+    // still happens if the transition was cancelled before its callback ran.
+    void transition.finished.catch(() => {
+      if (!applied) {
+        flushSync(() => {
+          update()
+          applied = true
+        })
+      }
+    })
+  } catch {
+    // A visibility change can also make startViewTransition throw synchronously.
+    // Falling back to the plain update keeps the UI responsive either way.
+    if (!applied) {
+      update()
+    }
+  }
 }
 
 export function viewTransitionStyle(name: string): CSSProperties {
