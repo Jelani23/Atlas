@@ -11,6 +11,12 @@ export type CloudAsset =
   | "drawerWide"
   | "edgeTab"
 
+type WebpCloudAsset =
+  | CloudAsset
+  | "atlasCloud"
+  | "verticalPanel"
+  | "thoughtsPanel"
+
 const SVG_ASSETS: Record<CloudAsset, string> = {
   nav: "/ui/clouds/nav-shell.svg",
   chat: "/ui/clouds/chat-shell.svg",
@@ -32,15 +38,19 @@ const SAFE_AREA: Record<CloudAsset, string> = {
   edgeTab: "px-2 py-3",
 }
 
-// The raster artwork has different optical bounds than the fitted SVG shells.
-// Keep these adjustments WebP-only so the stable SVG comparison is untouched.
-const WEBP_FIT: Record<CloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
-  nav: { scaleX: 1.13, scaleY: 1.25, translateY: -5 },
-  chat: { scaleX: 1.08, scaleY: 1.16, translateY: 0 },
+// The regenerated v2 raster shells already have roomier geometry, so they only
+// need light optical fitting. Thoughts intentionally keeps the previous artwork
+// and receives the slightly larger fit the user preferred.
+const WEBP_FIT: Record<WebpCloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
+  nav: { scaleX: 1.03, scaleY: 1.05, translateY: -2 },
+  chat: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
   panelWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
   panelSquare: { scaleX: 1, scaleY: 1, translateY: 0 },
-  drawerWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
+  drawerWide: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
   edgeTab: { scaleX: 1.06, scaleY: 1.1, translateY: 0 },
+  atlasCloud: { scaleX: 1.03, scaleY: 1.04, translateY: 0 },
+  verticalPanel: { scaleX: 1, scaleY: 1, translateY: 0 },
+  thoughtsPanel: { scaleX: 1.16, scaleY: 1.18, translateY: 0 },
 }
 
 function useWebpCloudSkin() {
@@ -62,7 +72,7 @@ function useWebpCloudSkin() {
 
 interface CloudSkinProps {
   asset: CloudAsset
-  webpAsset?: CloudAsset
+  webpAsset?: WebpCloudAsset
   className?: string
   mirrorX?: boolean
 }
@@ -109,16 +119,19 @@ interface CloudSurfaceProps {
   style?: CSSProperties
 }
 
-function webpAssetForSurface(asset: CloudAsset, style?: CSSProperties): CloudAsset {
+function webpAssetForSurface(asset: CloudAsset, style?: CSSProperties): WebpCloudAsset {
   const transitionName = (style as (CSSProperties & { viewTransitionName?: string }) | undefined)?.viewTransitionName
 
-  // Keep the stable SVG behavior exactly as-is, but let the WebP comparison use
-  // the roomier Cloud Open 2 artwork for the two denser connection popups.
-  if (
-    asset === "panelWide"
-    && (transitionName === "atlas-host-status" || transitionName === "atlas-cloud-status")
-  ) {
+  if (asset === "panelWide" && transitionName === "atlas-host-status") {
     return "drawerWide"
+  }
+
+  if (asset === "panelWide" && transitionName === "atlas-cloud-status") {
+    return "atlasCloud"
+  }
+
+  if (asset === "panelWide" && transitionName === "alice-thought-cloud") {
+    return "thoughtsPanel"
   }
 
   return asset
