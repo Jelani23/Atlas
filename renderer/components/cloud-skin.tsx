@@ -1,6 +1,7 @@
 "use client"
 
-import type { CSSProperties, ReactNode } from "react"
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
+import { CLOUD_WEBP_TEST_ASSETS } from "@/lib/cloud-webp-test"
 
 export type CloudAsset =
   | "nav"
@@ -10,7 +11,7 @@ export type CloudAsset =
   | "drawerWide"
   | "edgeTab"
 
-const ASSETS: Record<CloudAsset, string> = {
+const SVG_ASSETS: Record<CloudAsset, string> = {
   nav: "/ui/clouds/nav-shell.svg",
   chat: "/ui/clouds/chat-shell.svg",
   panelWide: "/ui/clouds/panel-wide.svg",
@@ -31,19 +32,51 @@ const SAFE_AREA: Record<CloudAsset, string> = {
   edgeTab: "px-2 py-3",
 }
 
+function useWebpCloudSkin() {
+  const [enabled, setEnabled] = useState(false)
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const params = new URLSearchParams(window.location.search)
+      setEnabled(params.get("cloudSkin")?.toLowerCase() === "webp")
+    }
+
+    syncFromUrl()
+    window.addEventListener("popstate", syncFromUrl)
+    return () => window.removeEventListener("popstate", syncFromUrl)
+  }, [])
+
+  return enabled
+}
+
 interface CloudSkinProps {
   asset: CloudAsset
+  webpAsset?: CloudAsset
   className?: string
   mirrorX?: boolean
 }
 
-export function CloudSkin({ asset, className = "", mirrorX = false }: CloudSkinProps) {
+export function CloudSkin({ asset, webpAsset = asset, className = "", mirrorX = false }: CloudSkinProps) {
+  const webpEnabled = useWebpCloudSkin()
+  const [webpFailed, setWebpFailed] = useState(false)
+
+  useEffect(() => {
+    setWebpFailed(false)
+  }, [asset, webpAsset, webpEnabled])
+
+  const src = webpEnabled && !webpFailed
+    ? CLOUD_WEBP_TEST_ASSETS[webpAsset]
+    : SVG_ASSETS[asset]
+
   return (
     <img
-      src={ASSETS[asset]}
+      src={src}
       alt=""
       aria-hidden="true"
       draggable={false}
+      onError={() => {
+        if (webpEnabled) setWebpFailed(true)
+      }}
       className={`pointer-events-none absolute select-none object-fill ${mirrorX ? "-scale-x-100" : ""} ${className}`}
     />
   )
@@ -59,6 +92,21 @@ interface CloudSurfaceProps {
   style?: CSSProperties
 }
 
+function webpAssetForSurface(asset: CloudAsset, style?: CSSProperties): CloudAsset {
+  const transitionName = (style as (CSSProperties & { viewTransitionName?: string }) | undefined)?.viewTransitionName
+
+  // Keep the stable SVG behavior exactly as-is, but let the WebP comparison use
+  // the roomier Cloud Open 2 artwork for the two denser connection popups.
+  if (
+    asset === "panelWide"
+    && (transitionName === "atlas-host-status" || transitionName === "atlas-cloud-status")
+  ) {
+    return "drawerWide"
+  }
+
+  return asset
+}
+
 export function CloudSurface({
   asset,
   children,
@@ -72,6 +120,7 @@ export function CloudSurface({
     <div className={`relative isolate min-w-0 ${className}`} style={style}>
       <CloudSkin
         asset={asset}
+        webpAsset={webpAssetForSurface(asset, style)}
         mirrorX={mirrorX}
         className={`inset-0 h-full w-full ${skinClassName}`}
       />
