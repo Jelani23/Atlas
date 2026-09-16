@@ -32,6 +32,17 @@ const SAFE_AREA: Record<CloudAsset, string> = {
   edgeTab: "px-2 py-3",
 }
 
+// The raster artwork has different optical bounds than the fitted SVG shells.
+// Keep these adjustments WebP-only so the stable SVG comparison is untouched.
+const WEBP_FIT: Record<CloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
+  nav: { scaleX: 1.1, scaleY: 1.2, translateY: 1 },
+  chat: { scaleX: 1.08, scaleY: 1.16, translateY: 0 },
+  panelWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
+  panelSquare: { scaleX: 1, scaleY: 1, translateY: 0 },
+  drawerWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
+  edgeTab: { scaleX: 1.06, scaleY: 1.1, translateY: 0 },
+}
+
 function useWebpCloudSkin() {
   const [enabled, setEnabled] = useState(false)
 
@@ -64,9 +75,14 @@ export function CloudSkin({ asset, webpAsset = asset, className = "", mirrorX = 
     setWebpFailed(false)
   }, [asset, webpAsset, webpEnabled])
 
-  const src = webpEnabled && !webpFailed
-    ? CLOUD_WEBP_TEST_ASSETS[webpAsset]
-    : SVG_ASSETS[asset]
+  const useWebp = webpEnabled && !webpFailed
+  const src = useWebp ? CLOUD_WEBP_TEST_ASSETS[webpAsset] : SVG_ASSETS[asset]
+  const fit = WEBP_FIT[webpAsset]
+  const transform = useWebp
+    ? `translate3d(0, ${fit.translateY}px, 0) scaleX(${(mirrorX ? -1 : 1) * fit.scaleX}) scaleY(${fit.scaleY})`
+    : mirrorX
+      ? "scaleX(-1)"
+      : undefined
 
   return (
     <img
@@ -77,7 +93,8 @@ export function CloudSkin({ asset, webpAsset = asset, className = "", mirrorX = 
       onError={() => {
         if (webpEnabled) setWebpFailed(true)
       }}
-      className={`pointer-events-none absolute select-none object-fill ${mirrorX ? "-scale-x-100" : ""} ${className}`}
+      style={{ transform, transformOrigin: "center" }}
+      className={`pointer-events-none absolute select-none object-fill ${className}`}
     />
   )
 }
@@ -116,6 +133,9 @@ export function CloudSurface({
   mirrorX = false,
   style,
 }: CloudSurfaceProps) {
+  const webpEnabled = useWebpCloudSkin()
+  const webpContentOffset = webpEnabled && asset === "nav" ? "translate-y-[7px]" : ""
+
   return (
     <div className={`relative isolate min-w-0 ${className}`} style={style}>
       <CloudSkin
@@ -124,7 +144,7 @@ export function CloudSurface({
         mirrorX={mirrorX}
         className={`inset-0 h-full w-full ${skinClassName}`}
       />
-      <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${contentClassName}`}>
+      <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${webpContentOffset} ${contentClassName}`}>
         {children}
       </div>
     </div>
