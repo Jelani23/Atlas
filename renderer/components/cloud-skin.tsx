@@ -17,6 +17,13 @@ type WebpCloudAsset =
   | "verticalPanel"
   | "thoughtsPanel"
 
+interface SkinBox {
+  width: string
+  height: string
+  left: string
+  top: string
+}
+
 const SVG_ASSETS: Record<CloudAsset, string> = {
   nav: "/ui/clouds/nav-shell.svg",
   chat: "/ui/clouds/chat-shell.svg",
@@ -38,21 +45,27 @@ const SAFE_AREA: Record<CloudAsset, string> = {
   edgeTab: "px-2 py-3",
 }
 
-// The v2 raster shells preserve the regenerated silhouettes, but at actual UI
-// size their geometry change is intentionally subtle. These WebP-only optical
-// fits make the roomier treatment visible without changing the stable SVG tab.
-// Thoughts keeps the previous artwork and gets the slightly larger treatment the
-// user preferred rather than being replaced with the vertical reserve asset.
-const WEBP_FIT: Record<WebpCloudAsset, { scaleX: number; scaleY: number; translateY: number }> = {
-  nav: { scaleX: 1.06, scaleY: 1.16, translateY: -4 },
-  chat: { scaleX: 1.05, scaleY: 1.14, translateY: 0 },
-  panelWide: { scaleX: 1.11, scaleY: 1.15, translateY: 0 },
-  panelSquare: { scaleX: 1, scaleY: 1, translateY: 0 },
-  drawerWide: { scaleX: 1.06, scaleY: 1.08, translateY: 0 },
-  edgeTab: { scaleX: 1.06, scaleY: 1.1, translateY: 0 },
-  atlasCloud: { scaleX: 1.07, scaleY: 1.09, translateY: 0 },
-  verticalPanel: { scaleX: 1, scaleY: 1, translateY: 0 },
-  thoughtsPanel: { scaleX: 1.18, scaleY: 1.2, translateY: 0 },
+const DEFAULT_SKIN_BOX: SkinBox = {
+  width: "100%",
+  height: "100%",
+  left: "0%",
+  top: "0%",
+}
+
+// Raster artwork needs its own optical box instead of being forced into the
+// exact SVG surface bounds. Content stays fixed; only the WebP artwork expands
+// around it. This keeps the A/B comparison honest and prevents us from making
+// the actual controls larger just to accommodate a cloud silhouette.
+const WEBP_SKIN_BOX: Record<WebpCloudAsset, SkinBox> = {
+  nav: { width: "112%", height: "142%", left: "-6%", top: "-23%" },
+  chat: { width: "108%", height: "134%", left: "-4%", top: "-17%" },
+  panelWide: { width: "108%", height: "110%", left: "-4%", top: "-5%" },
+  panelSquare: DEFAULT_SKIN_BOX,
+  drawerWide: { width: "110%", height: "116%", left: "-5%", top: "-8%" },
+  edgeTab: { width: "106%", height: "110%", left: "-3%", top: "-5%" },
+  atlasCloud: { width: "112%", height: "118%", left: "-6%", top: "-9%" },
+  verticalPanel: DEFAULT_SKIN_BOX,
+  thoughtsPanel: { width: "114%", height: "116%", left: "-7%", top: "-8%" },
 }
 
 function useWebpCloudSkin() {
@@ -89,12 +102,7 @@ export function CloudSkin({ asset, webpAsset = asset, className = "", mirrorX = 
 
   const useWebp = webpEnabled && !webpFailed
   const src = useWebp ? CLOUD_WEBP_TEST_ASSETS[webpAsset] : SVG_ASSETS[asset]
-  const fit = WEBP_FIT[webpAsset]
-  const transform = useWebp
-    ? `translate3d(0, ${fit.translateY}px, 0) scaleX(${(mirrorX ? -1 : 1) * fit.scaleX}) scaleY(${fit.scaleY})`
-    : mirrorX
-      ? "scaleX(-1)"
-      : undefined
+  const box = useWebp ? WEBP_SKIN_BOX[webpAsset] : DEFAULT_SKIN_BOX
 
   return (
     <img
@@ -105,7 +113,14 @@ export function CloudSkin({ asset, webpAsset = asset, className = "", mirrorX = 
       onError={() => {
         if (webpEnabled) setWebpFailed(true)
       }}
-      style={{ transform, transformOrigin: "center" }}
+      style={{
+        width: box.width,
+        height: box.height,
+        left: box.left,
+        top: box.top,
+        transform: mirrorX ? "scaleX(-1)" : undefined,
+        transformOrigin: "center",
+      }}
       className={`pointer-events-none absolute select-none object-fill ${className}`}
     />
   )
@@ -154,7 +169,7 @@ export function CloudSurface({
         asset={asset}
         webpAsset={webpAssetForSurface(asset, style)}
         mirrorX={mirrorX}
-        className={`inset-0 h-full w-full ${skinClassName}`}
+        className={skinClassName}
       />
       <div className={`relative z-10 min-w-0 ${SAFE_AREA[asset]} ${contentClassName}`}>
         {children}
