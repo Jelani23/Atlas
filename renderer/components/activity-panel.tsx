@@ -1,69 +1,94 @@
 "use client"
 
-import { Sparkles } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ChevronLeft, Sparkles } from "lucide-react"
+import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
 import { type AtlasState, STATE_LABEL } from "./atlas-state"
+import { CloudSurface } from "./cloud-skin"
 
 interface ActivityPanelProps {
   steps: string[]
   state: AtlasState
 }
 
+const TRANSITION_NAME = "alice-thought-cloud"
+
 export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   const active = state === "thinking" || state === "working"
+  const dormant = state === "dormant"
+  const [expanded, setExpanded] = useState(active)
+
+  useEffect(() => {
+    if (active && !expanded) {
+      runViewTransition(() => setExpanded(true))
+    }
+  }, [active, expanded])
+
+  if (!expanded) {
+    return (
+      <CloudSurface
+        asset="panelSquare"
+        className="pointer-events-auto h-14 w-14 transition-transform hover:-translate-y-0.5"
+        skinClassName="opacity-66"
+        contentClassName="flex h-full items-center justify-center"
+        style={viewTransitionStyle(TRANSITION_NAME)}
+      >
+        <button
+          type="button"
+          onClick={() => runViewTransition(() => setExpanded(true))}
+          className="flex h-full w-full items-center justify-center text-sky-deep/75 active:scale-95"
+          aria-label="Show Alice's current thoughts"
+          title="Alice's thoughts"
+        >
+          <Sparkles className="h-[17px] w-[17px]" strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </CloudSurface>
+    )
+  }
 
   return (
-    <div className="pointer-events-none w-[min(18rem,44vw)] select-none">
-      <div className="rounded-2xl border border-border/60 bg-card/55 p-3.5 backdrop-blur-md shadow-[0_8px_30px_-12px_rgba(80,130,190,0.35)]">
-        <div className="mb-2.5 flex items-center gap-2">
-          <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary ${
-              active ? "animate-pulse" : ""
-            }`}
+    <CloudSurface
+      asset="panelWide"
+      className="pointer-events-auto w-[min(20rem,48vw)] min-h-[9rem] select-none"
+      skinClassName="opacity-72"
+      style={viewTransitionStyle(TRANSITION_NAME)}
+    >
+      <div className="mb-2.5 flex items-center gap-2">
+        <Sparkles
+          className={`h-4 w-4 shrink-0 text-sky-deep/70 ${active ? "animate-pulse" : ""} ${dormant ? "opacity-35" : ""}`}
+          strokeWidth={1.8}
+          aria-hidden="true"
+        />
+        <span className="font-display text-[16px] leading-none text-foreground/76">Alice's thoughts</span>
+        <span className="ml-auto text-[11px] text-foreground/42">{STATE_LABEL[state]}</span>
+        {!active && (
+          <button
+            type="button"
+            onClick={() => runViewTransition(() => setExpanded(false))}
+            className="alice-icon-button -mr-1 flex h-7 w-7 shrink-0 items-center justify-center text-foreground/38 hover:bg-white/30 hover:text-foreground/65"
+            aria-label="Collapse thought panel"
           >
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-          <span className="text-xs font-medium tracking-wide text-muted-foreground">
-            Thought path
-          </span>
-          <span className="ml-auto text-[10px] font-medium uppercase tracking-[0.12em] text-primary/70">
-            {STATE_LABEL[state]}
-          </span>
-        </div>
-
-        <ul className="space-y-1.5">
-          {steps.length === 0 && (
-            <li className="text-xs leading-relaxed text-muted-foreground/70">
-              Alice is resting. Ask her anything.
-            </li>
-          )}
-          {steps.map((step, i) => {
-            const isLast = i === steps.length - 1
-            return (
-              <li
-                key={`${step}-${i}`}
-                className="flex animate-rise items-center gap-2 text-xs leading-relaxed"
-              >
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    isLast && active
-                      ? "bg-primary shadow-[0_0_0_3px_rgba(120,185,240,0.25)]"
-                      : "bg-muted-foreground/40"
-                  }`}
-                />
-                <span
-                  className={
-                    isLast
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground line-through decoration-muted-foreground/30"
-                  }
-                >
-                  {step}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
+            <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
-    </div>
+
+      <ul className="space-y-1.5">
+        {steps.length === 0 && (
+          <li className="text-xs leading-relaxed text-foreground/48">
+            {dormant ? "Alice is quiet while the host is offline." : "Nothing on her mind right now."}
+          </li>
+        )}
+        {!dormant && steps.map((step, i) => {
+          const isLast = i === steps.length - 1
+          return (
+            <li key={`${step}-${i}`} className="flex animate-rise items-center gap-2 text-xs leading-relaxed">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isLast && active ? "bg-sky-deep/65" : "bg-foreground/18"}`} />
+              <span className={isLast ? "font-medium text-foreground/72" : "text-foreground/38"}>{step}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </CloudSurface>
   )
 }
