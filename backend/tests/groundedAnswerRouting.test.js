@@ -48,10 +48,10 @@ const memory = { workingMemory: {
     },
     append: async message => { history.push(message); return history.length; }
 } };
-async function ask(input, reset = true) {
+async function ask(input, reset = true, mode = 'casual') {
     if (reset) history = [];
     const result = await handleMessage(input, {
-        memory, mode: 'casual', sessionId: 'grounded-test', taskId: 'test', requestId: 'test'
+        memory, mode, sessionId: 'grounded-test', taskId: 'test', requestId: 'test'
     });
     assert(!events.some(([type]) => type === 'request_failed'), JSON.stringify(events));
     assert.equal(history.at(-1).content, result.reply);
@@ -68,6 +68,10 @@ async function main() {
     assert.equal(await ask('Based on that code, what happens if the database read fails after a profile was already cached?', false), 'A contextual answer.');
     assert.match(modelPrompt, /PREVIOUS CODE-READ EVIDENCE/);
     assert.match(modelPrompt, /cached_database/);
+    await ask('Review that code for bugs and suggest tests', false, 'analysis');
+    assert.equal(modelOptions.model, require('../src/models/modelRouter').getModelForTask('analyze_and_suggest').model);
+    assert.equal(modelOptions.think, false);
+    assert.match(modelPrompt, /Distinguish source observations from hypotheses/);
     await ask('Different topic: tell me about penguins', false);
     assert.doesNotMatch(modelPrompt, /PREVIOUS CODE-READ EVIDENCE/);
     assert.match(await ask('Based on that code, what happens if the database read fails after a profile was already cached?', false), /verified implementation evidence/);

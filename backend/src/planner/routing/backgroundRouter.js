@@ -4,8 +4,11 @@ const { createModelAdapter } = require('../../models/modelAdapter');
 const modelRouter = require('../../models/modelRouter');
 const taskManager = require('../../tasks/taskManager');
 const state = require('../state');
+const { usableSource } = require('../../reasoning/codeAnalysis');
+const { inspectSource } = require('../../reasoning/sourceInspection');
+const { runValidatedAnalysis } = require('../../reasoning/validatedAnalysis');
 
-const INTERNAL_TASK_PROMPT = "You are Alice, an AI companion operating on the ATLAS OS. Execute the requested internal task directly and concisely. Provide the technical output without conversational filler or asking for permission. Your user prefers direct action over confirmation.";
+const INTERNAL_TASK_PROMPT = "You are Alice, an AI companion operating on the ATLAS OS. Provide the requested technical output. Analysis is not execution or permission to change files. Respect the supplied source limits and do not claim unperformed tests or writes.";
 const modelAdapter = createModelAdapter();
 
 async function handleTask(task, message, parentTaskId, requestId) {
@@ -27,18 +30,17 @@ async function handleTask(task, message, parentTaskId, requestId) {
                     }
                 }
                 
-                if (analyzeFilename) codeToAnalyze = await execute('readCode', [analyzeFilename]);
+                if (analyzeFilename) codeToAnalyze = await inspectSource(execute, analyzeFilename, isCancelled);
                 else if (task.dir) codeToAnalyze = await execute('readCodeDirectory', [task.dir]);
                 
-                if (codeToAnalyze && !codeToAnalyze.toLowerCase().startsWith('error:')) {
+                if (usableSource(codeToAnalyze)) {
                     updateProgress(30, 'Analyzing code');
                     if (isCancelled()) throw new Error("Task cancelled before LLM analysis.");
                     
-                    const analysisPrompt = `You are tasked with analyzing the following source code. The entire file content is provided below. Your job is to suggest improvements directly.\n\nCRITICAL INSTRUCTIONS:\n- The code IS provided below. Do NOT claim it is missing or that you lack access.\n- Base your analysis STRICTLY on the provided code.\n- Do NOT invent metrics or reference external logs.\n- Respond in 3-6 short bullet points only.\n\nSource Code:\n\`\`\`javascript\n${codeToAnalyze}\n\`\`\``;
-                    const analysis = await modelAdapter.complete([
-                        { role: 'system', content: INTERNAL_TASK_PROMPT },
-                        { role: 'user', content: analysisPrompt }
-                    ], { think: false, temperature: 0.3, maxTokens: 400, ...modelRouter.getModelForTask(task.intent) });
+                    const analysis = await runValidatedAnalysis({request:message, source:codeToAnalyze,
+                        complete:(messages, options) => modelAdapter.complete(messages, options),
+                        isCancelled, onProgress:updateProgress,
+                        runChecks:Boolean(require('../../reasoning/controlledChecks').checkRequest(message))});
                     
                     updateProgress(100, 'Analysis complete');
                     return `Code Analysis & Suggestions:\n${analysis}`;
@@ -50,25 +52,26 @@ async function handleTask(task, message, parentTaskId, requestId) {
 
         case 'analyze_and_save':
             console.log('[Planner] Executing Background Plan: analyze_and_save');
-            const saveBgTaskId = await taskManager.createTask('analyze_and_save', async ({ updateProgress }) => {
+            const saveBgTaskId = await taskManager.createTask('analyze_and_save', async ({ updateProgress, isCancelled }) => {
                 updateProgress(10, 'Reading code');
                 let codeToAnalyze2 = "";
                 if (task.dir) codeToAnalyze2 = await execute('readCodeDirectory', [task.dir]);
-                else if (task.target_filename) codeToAnalyze2 = await execute('readCode', [task.target_filename]);
+                else if (task.target_filename) codeToAnalyze2 = await inspectSource(execute, task.target_filename, isCancelled);
                 
-                if (codeToAnalyze2 && !codeToAnalyze2.toLowerCase().startsWith('error:')) {
+                if (usableSource(codeToAnalyze2)) {
                     updateProgress(30, 'Analyzing code');
-                    const analysisPrompt2 = `You are tasked with analyzing your OWN internal source code and suggesting improvements directly. Do not ask for confirmation.\n\nCRITICAL INSTRUCTIONS:\n- The code IS provided below. Do NOT claim it is missing or that you lack access.\n- Base your analysis STRICTLY on the provided code.\n- Do NOT invent metrics or reference external logs.\n\nSource Code:\n\`\`\`javascript\n${codeToAnalyze2}\n\`\`\``;
-                    const analysis2 = await modelAdapter.complete([
-                        { role: 'system', content: INTERNAL_TASK_PROMPT },
-                        { role: 'user', content: analysisPrompt2 }
-                    ], { think: false, temperature: 0.3, maxTokens: 600, ...modelRouter.getModelForTask(task.intent) });
+                    const analysis2 = await runValidatedAnalysis({request:message, source:codeToAnalyze2,
+                        complete:(messages, options) => modelAdapter.complete(messages, options), onProgress:updateProgress, isCancelled});
                     
                     updateProgress(80, 'Saving analysis to note');
+                    if (isCancelled?.()) throw new Error('Analysis cancelled before saving.');
                     let saveFilename = task.filename || `analysis_${Date.now()}`;
-                    await execute('writeNote', [saveFilename, analysis2]);
+                    const saved = await execute('writeNote', [saveFilename, analysis2]);
+                    if (typeof saved !== 'string' || !saved.startsWith('Successfully saved the note to notes/')) {
+                        throw new Error('Analysis finished, but the note was not confirmed saved.');
+                    }
                     updateProgress(100, 'Analysis saved');
-                    return `Successfully analyzed the code and saved the suggestions to ${saveFilename}.txt`;
+                    return `Analysis completed. ${saved}`;
                 } else {
                     throw new Error("Could not read code for analysis.");
                 }
@@ -91,7 +94,7 @@ async function handleTask(task, message, parentTaskId, requestId) {
                     2. Provide the SPECIFIC corrected code block (not the whole file).
 
                     CRITICAL INSTRUCTIONS:
-                    - The code IS provided below in full. Do NOT claim it is missing or incomplete.
+                    - The source may be a truncated preview. State that limit; do not infer omitted implementation or claim tests ran.
                     - In the <code> block, output ONLY the specific function or block that contains the fix.
                     - Return your response in this exact format:
                     <reason>Brief explanation of the problem and fix</reason>

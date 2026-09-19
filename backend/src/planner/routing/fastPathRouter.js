@@ -208,10 +208,10 @@ async function route(intent, message, history) {
             return { needsTool: true, toolName: 'listNotes', toolResult: await execute('listNotes', []) };
         }
         
-        const fileMatch = message.match(/([\w\/]+\.\w+)/i);
-        if (fileMatch && (lowerMessage.includes('read') || lowerMessage.includes('look at') || lowerMessage.includes('open') || lowerMessage.includes('send me') || lowerMessage.includes('contents'))) {
+        const sourceParams = require('../../intent/sourceRequest').parseSourceRead(message);
+        if (sourceParams) {
             console.log('[Planner] Executing Read Code tool (Fast Path - Extension)');
-            return { needsTool: true, toolName: 'readCode', toolResult: await execute('readCode', [fileMatch[1]]) };
+            return { needsTool: true, toolName: 'readCode', toolResult: await execute('readCode', sourceParams) };
         }
         
         if (lowerMessage.includes('directory tree') || lowerMessage.includes('full tree') || lowerMessage.includes('tree view')) {

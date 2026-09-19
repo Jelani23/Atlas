@@ -190,13 +190,8 @@ function fastRegexNormalizer(message) {
     if (lowerMessage.includes('source files') || lowerMessage.includes('source code') || lowerMessage.includes('list code')) return { intent: 'list_code', dir: 'src' };
     if (lowerMessage.includes('project structure') || lowerMessage.includes('full directory') || lowerMessage.includes('project folder')) return { intent: 'list_code', dir: '' };
     
-    if (lowerMessage.includes('read') || lowerMessage.includes('look at') || lowerMessage.includes('open') || lowerMessage.includes('inspect') || lowerMessage.includes('contents in')) {
-        const fileMatches = message.match(/([\w\/]+\.\w+)/gi);
-        if (fileMatches && fileMatches.length > 0) {
-            const filename = fileMatches.length === 1 ? fileMatches[0] : fileMatches;
-            return { intent: 'read_code', filename: filename };
-        }
-    }
+    const sourceParams = require('../intent/sourceRequest').parseSourceRead(message);
+    if (sourceParams) return { intent: 'read_code', filename: sourceParams[0] };
 
     // Only trigger web search for explicit web queries to stop hijacking "find file"
     if (lowerMessage.startsWith('search web for') || lowerMessage.startsWith('look up online') || lowerMessage.startsWith('google') || lowerMessage.startsWith('search the web')) {

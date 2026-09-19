@@ -5,6 +5,14 @@ const route = { needsTool: true, toolName: 'readCode', toolResult: 'Content of e
 const saved = capture(route, 'alice', 10);
 const query = 'Based on that code, what happens?';
 assert(saved);
+const huge = capture({...route,toolResult:'Content of src/x.js:\n1: first\n2: '+ 'x'.repeat(13000)},'alice');
+assert(huge.toolResult.length < 12000);
+assert(!huge.toolResult.includes('2: '),'Never retain a partial numbered source line');
+assert(capture({...route,toolResult:'Content of '+ 'x'.repeat(14000)},'alice').toolResult.length < 12000);
+assert.equal(followUp('Read the next page', saved, 'alice', 11), saved);
+const ranged = capture({...route, toolResult: 'Content of src/example.js:\n[Source coverage: ' + JSON.stringify({path:'src/example.js',version:'a'.repeat(64),nextLine:81}) + ']\n1: source'}, 'alice', 10);
+assert.equal(ranged.coverage.nextLine, 81);
+assert.equal(capture({...route, toolResult: 'Content of src/example.js:\n[Source coverage: invalid]\nsource'}, 'alice').coverage, null);
 assert.equal(followUp(query, saved, 'alice', 11), saved);
 assert.equal(followUp(query, saved, 'bob', 11), null);
 assert.equal(followUp(query, saved, 'alice', 600011), null);

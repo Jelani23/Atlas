@@ -43,8 +43,8 @@ const CODE_SEMANTIC_TASKS = new Set([
  *   Pass undefined/null when no tool fired (plain conversation).
  * @returns {{provider: string, model: string, supportsThinking: boolean, keepAlive: string|undefined, reason: string}}
  */
-function getModelForTask(taskName) {
-  if (taskName && CODE_SEMANTIC_TASKS.has(taskName)) {
+function getModelForTask(taskName, { analysis = false } = {}) {
+  if (analysis || (taskName && CODE_SEMANTIC_TASKS.has(taskName))) {
     return { ...CODER_DECISION };
   }
   if (taskName === 'search_web' || taskName === 'webSearch') {

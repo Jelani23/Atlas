@@ -9,6 +9,7 @@ try {
     assert.equal(router().getDefaultModel().model, 'qwen3.5:4b');
     assert.equal(buildRequestBody([], {}).model, 'qwen3.5:4b');
     assert.equal(router().getModelForTask('generate_code').model, 'qwen2.5-coder:7b');
+    assert.equal(router().getModelForTask(null, {analysis:true}).model, 'qwen2.5-coder:7b');
     process.env.OLLAMA_MODEL = 'shared-fixture';
     assert.equal(router().getDefaultModel().model, 'shared-fixture', 'Shared configuration must reach conversation routing');
     assert.equal(router().getModelForTask('search_web').model, 'shared-fixture');

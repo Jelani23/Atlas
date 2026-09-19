@@ -192,7 +192,7 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         intent.intent = deriveIntentCategory({ toolResult });
 
         const reasoningDepth = reasoningController.getReasoningOptions(intent, null, userInput, modelRouter.getDefaultModel().model);
-        const responseStyle = responseController.getResponseStyle(intent);
+        let responseStyle = responseController.getResponseStyle(intent);
 
         let effectiveMode = mode;
         if (mode === 'auto' || !mode) {
@@ -226,8 +226,24 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
             });
         }
 
-        const modelChoice = modelRouter.getModelForTask(ranWebSearch ? 'search_web' : toolResult.toolName);
-        const reasoning = { ...reasoningDepth, ...modelChoice };
+        const { isAnalysisRequest, analysisOptions } = require('../reasoning/codeAnalysis');
+        const analysisRequested = isAnalysisRequest(userInput, mode)
+            && Boolean(priorCodeEvidence || codeEvidence.capture(toolResult, agent.agentId));
+        if (analysisRequested) {
+            effectiveMode = 'analysis';
+            responseStyle = responseController.getResponseStyle({ intent: 'coding' });
+            if (/\b(?:review|bugs?|defects?|suggest (?:fixes|improvements))\b/i.test(userInput)) {
+                const evidence = priorCodeEvidence || codeEvidence.capture(toolResult, agent.agentId);
+                const reply = await require('../reasoning/validatedAnalysis').runValidatedAnalysis({
+                    request:userInput, source:evidence.toolResult,
+                    complete:(messages, options) => modelAdapter.complete(messages, options),
+                    isCancelled:() => sessionScope.isSessionClosed()
+                });
+                return finishImmediateReply(reply, {memory, sessionId, taskId, requestId, requestStart});
+            }
+        }
+        const modelChoice = modelRouter.getModelForTask(ranWebSearch ? 'search_web' : toolResult.toolName, { analysis: analysisRequested });
+        const reasoning = analysisRequested ? analysisOptions() : { ...reasoningDepth, ...modelChoice };
         // Keep concise informational answers stable. Rich personality and
         // creative turns retain their existing sampling settings.
         if (effectiveMode !== 'creative' && personalityEngine.usesConciseProfile(agent.profile, { userInput, history })) {

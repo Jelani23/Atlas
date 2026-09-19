@@ -7,6 +7,7 @@
 const { atlasState } = require('./atlasState');
 
 const MODE_GUIDANCE = {
+  analysis: 'Ground findings in source evidence. Distinguish observations, hypotheses and proposals, explain tradeoffs, and give concrete validation steps without claiming they ran.',
   coding: 'Be precise and implementation-focused. Surface real correctness, safety, and design risks.',
   planning: 'Be analytical and compact. Surface important tradeoffs, dependencies, and edge cases.',
   research: 'Be evidence-oriented. Synthesize the supplied sources and distinguish facts from uncertainty.',

@@ -91,6 +91,7 @@ function resolve(message) {
     };
 
     for (const schema of schemas) {
+        if (schema.matchesRequest && !schema.matchesRequest(message)) continue;
         let score = 0;
         let matchedTriggers = 0;
 

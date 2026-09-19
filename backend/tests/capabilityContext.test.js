@@ -8,6 +8,9 @@ const catalog = getCatalog();
 const { isToolInventoryRequest } = require('../src/intent/capabilityRequest');
 
 async function main() {
+    const timeGuide = buildCapabilityContext({userInput:'Explain convertTime and its inputs'});
+    assert.doesNotMatch(timeGuide, /TTS configuration:|Text generation configured|Agent profile source|Passive learning configuration/);
+    assert.match(timeGuide, /targetZone/);
     assert.deepEqual(selectTopics('Where are your own personality and preferences stored, compared with my preferences?'), ['memory']);
     assert.deepEqual(selectTopics('What are your favorite games?'), []);
     const profileGuide = buildCapabilityContext({ userInput: 'Where is your personality stored?',

@@ -153,13 +153,14 @@ function buildCapabilityContext({ userInput, history, intent, runtime = {}, cata
     const entries = catalog || getCatalog();
     const model = runtime.model || getDefaultModel();
     const tts = runtime.tts || { enabled: ttsConfig.enabled, provider: ttsConfig.provider, voice: ttsConfig.voice, health: 'unknown', checkedAt: null };
+    const needs = (...groups) => groups.some(group => topics.includes(group));
     const snapshot = [
-        runtime.agentProfile ? `Agent profile source this turn: ${runtime.agentProfile.source}; agent ID ${runtime.agentProfile.agentId}; revision ${runtime.agentProfile.revision ?? 'seed'}.` : 'Agent profile runtime source was not supplied; do not claim a database read succeeded.',
-        `Passive learning configuration: ${process.env.KNOWLEDGE_LEARNING_ENABLED === 'true' ? 'enabled' : 'disabled'}. Configuration is not evidence of a completed collection.`,
-        `Text generation configured for this turn: ${model.provider}/${model.model}. Coding specialist configured: ${getModelForTask('analyze_and_suggest').model}.`,
-        `TTS configuration: ${tts.enabled ? 'enabled' : 'disabled'}; provider ${tts.provider}; voice ${tts.voice}; last observed health ${tts.health || 'unknown'}${tts.checkedAt ? ` at ${tts.checkedAt}` : ' (not checked)'}.`,
-        'Report the supplied observation when asked about TTS state: available means the last check succeeded, unavailable means it failed, and unknown means unconfirmed. Implemented, configured and enabled do not mean working or ready to synthesize. With unknown health, say readiness is unconfirmed. A later playback can still fail; that caveat should not replace the actual observation. Do not infer a failure cause or elapsed time from this snapshot. Text cleanup and chunk queueing belong to Atlas; Kokoro synthesizes the supplied chunks.'
-    ];
+        needs('memory','system') && (runtime.agentProfile ? `Agent profile source this turn: ${runtime.agentProfile.source}; agent ID ${runtime.agentProfile.agentId}; revision ${runtime.agentProfile.revision ?? 'seed'}.` : 'Agent profile runtime source was not supplied; do not claim a database read succeeded.'),
+        needs('memory','search','system') && `Passive learning configuration: ${process.env.KNOWLEDGE_LEARNING_ENABLED === 'true' ? 'enabled' : 'disabled'}. Configuration is not evidence of a completed collection.`,
+        needs('system') && `Text generation configured for this turn: ${model.provider}/${model.model}. Coding specialist configured: ${getModelForTask('analyze_and_suggest').model}.`,
+        needs('voice','system') && `TTS configuration: ${tts.enabled ? 'enabled' : 'disabled'}; provider ${tts.provider}; voice ${tts.voice}; last observed health ${tts.health || 'unknown'}${tts.checkedAt ? ` at ${tts.checkedAt}` : ' (not checked)'}.`,
+        needs('voice','system') && 'Report the supplied observation when asked about TTS state: available means the last check succeeded, unavailable means it failed, and unknown means unconfirmed. Implemented, configured and enabled do not mean working or ready to synthesize. With unknown health, say readiness is unconfirmed. A later playback can still fail; that caveat should not replace the actual observation. Do not infer a failure cause or elapsed time from this snapshot. Text cleanup and chunk queueing belong to Atlas; Kokoro synthesizes the supplied chunks.'
+    ].filter(Boolean);
     const overview = topics.length === Object.keys(GROUPS).length
         ? 'For this broad overview cover the supported families: notes, web research, stored-knowledge lookup, code/file inspection and checks, arithmetic/text/conversion utilities, time and task status. Voice is a separate pipeline, not a callable text-model skill. Mention limitations without enumerating internal argument names unless asked.' : '';
     const memoryFlow = topics.includes('memory') || topics.includes('system')

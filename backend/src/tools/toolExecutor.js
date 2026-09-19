@@ -35,7 +35,7 @@ async function execute(toolName, args = [], options = {}) {
         console.log(`[ToolExecutor] Executing ${toolName}...`);
         
         // If args is an array (from the new Intent Resolver), spread it directly
-        if (args.length === 1 && Array.isArray(args[0])) {
+        if (toolName !== 'readCode' && args.length === 1 && Array.isArray(args[0])) {
             return await toolFunction(...args[0]);
         }
         

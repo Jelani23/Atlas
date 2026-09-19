@@ -10,7 +10,7 @@ function isNonExecutingToolMention(message) {
         .replace(/^(?:i (?:was|am) (?:just )?(?:wondering|curious)(?: about)?|i(?:'m| am) (?:just )?(?:curious|trying to (?:understand|learn))|i(?:'d| would) like to (?:know|understand|learn))\s+(?=(?:how|what|why|whether)\b)/, '')
         .replace(/^(?:can|could|would) you (?:please )?(?:tell|show|teach) me\s+(?=(?:how|what|why)\b)/, '');
     if (/^["“][\s\S]*["”][.!?]*$/.test(text)) return true;
-    return isToolInventoryRequest(text)
+    return require('./sourceRequest').isSourceDiscussion(text) || isToolInventoryRequest(text)
         || /^(?:how to|whether (?:i|we|you) (?:can|should))\b/.test(text)
         || /^(?:(?:can|could|would) you )?(?:explain|describe|teach me|tell me)\s+(?:how|what|why)\b/.test(text)
         || /^(?:(?:can|could|would) you )?walk me through\b/.test(text)

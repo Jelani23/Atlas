@@ -94,6 +94,43 @@ async function route(intent, message, history = [], taskId, requestId) {
 
     if (isNonExecutingToolMention(message)) return { needsTool: false };
 
+    const checkedAnalysis = require('../reasoning/controlledChecks').checkRequest(message);
+    if (checkedAnalysis) {
+        const result = await require('./routing/backgroundRouter').handleTask(
+            {intent:'analyze_and_suggest',filename:checkedAnalysis[1]}, message, taskId, requestId);
+        return {needsTool:true, toolName:'analyze_and_suggest', toolResult:result, shortCircuit:true};
+    }
+
+    // Explicit bounded reads take precedence over filename-only normalizers.
+    // Tool execution still goes through the ordinary permission checks.
+    const { isContinuation, capture } = require('../core/codeEvidence');
+    const sequence = require('../intent/sourceRequest').parseReadSequence(message);
+    if (sequence) {
+        const first = await execute('readCode', sequence);
+        const evidence = capture({needsTool:true,toolName:'readCode',toolResult:first}, 'sequence');
+        if (!evidence) return {needsTool:true,toolName:'readCode',toolResult:first,shortCircuit:true};
+        if (!evidence.coverage) return {needsTool:true,toolName:'readCode',toolResult:first + '\n[No next source page is available.]',shortCircuit:true};
+        const c = evidence.coverage;
+        const second = await execute('readCode', [c.path,c.nextLine,80,c.version]);
+        return {needsTool:true,toolName:'readCode',toolResult:first + '\n\n' + second,
+            codeEvidenceResult:second,shortCircuit:true};
+    }
+    if (isContinuation(message)) {
+        const evidence = state.codeEvidence;
+        const coverage = evidence?.coverage;
+        const result = coverage && Date.now() - evidence.capturedAt <= 600000
+            ? await execute('readCode', [coverage.path, coverage.nextLine, 80, coverage.version])
+            : 'No current, unambiguous next source page is available. Please specify a filename and line range.';
+        return { needsTool: true, toolName: 'readCode', toolResult: result, shortCircuit: true };
+    }
+    if (/^(?:please\s+)?(?:read|show|open|inspect)\b/i.test(message.trim())
+        && /\s+lines?\s+\d+\s*(?:-|through|to)\s*\d+\s*\??$/i.test(message)) {
+        const params = require('../tools/files/readCode').intentSchema.extractParams(message);
+        if (params[0] && !/\b(?:and|then)\b/i.test(params[0])) {
+            return { needsTool: true, toolName: 'readCode', toolResult: await execute('readCode', params), shortCircuit: true };
+        }
+    }
+
     const compiled = await compileToolPlan(message, {
         semanticPlanner: isSemanticPlanningEnabled()
             ? payload => semanticToolPlanner({ ...payload, requestId })
