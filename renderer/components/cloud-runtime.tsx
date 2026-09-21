@@ -185,7 +185,7 @@ export function CloudRuntime({ children }: { children: ReactNode }) {
     <div className="relative h-dvh overflow-hidden">
       {children}
       <aside
-        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(0rem,env(safe-area-inset-left))] z-[110]"
+        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(1.25rem,calc(env(safe-area-inset-left)+0.75rem))] z-[110]"
         aria-live="polite"
       >
         <CloudStatusCard state={state} />
