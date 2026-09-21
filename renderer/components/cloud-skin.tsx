@@ -61,11 +61,11 @@ const WEBP_SKIN_BOX: Record<WebpCloudAsset, SkinBox> = {
   chat: { width: "114%", height: "142%", left: "1%", top: "-21%" },
   panelWide: { width: "108%", height: "110%", left: "-4%", top: "-5%" },
   panelSquare: DEFAULT_SKIN_BOX,
-  drawerWide: { width: "110%", height: "116%", left: "-5%", top: "-8%" },
+  drawerWide: { width: "116%", height: "122%", left: "-8%", top: "-11%" },
   edgeTab: { width: "106%", height: "110%", left: "-3%", top: "-5%" },
   atlasCloud: { width: "112%", height: "118%", left: "-6%", top: "-9%" },
   verticalPanel: DEFAULT_SKIN_BOX,
-  thoughtsPanel: { width: "120%", height: "124%", left: "-10%", top: "-12%" },
+  thoughtsPanel: { width: "120%", height: "124%", left: "-10%", top: "-22%" },
 }
 
 function useWebpCloudSkin() {
