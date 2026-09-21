@@ -15,7 +15,7 @@ export const CLOUD_WEBP_TEST_ASSETS = {
   chat,
   panelWide,
   panelSquare,
-  drawerWide: host,
+  drawerWide: panelWide,
   edgeTab,
   atlasCloud,
   verticalPanel: panelWide,
