@@ -60,7 +60,7 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
       asset="panelWide"
       className="pointer-events-auto w-[min(94vw,430px)]"
       skinClassName="opacity-74"
-      contentClassName="overflow-hidden"
+      contentClassName="overflow-hidden -translate-x-4"
       style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="flex items-start gap-3">
