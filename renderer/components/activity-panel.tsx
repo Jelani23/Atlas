@@ -49,7 +49,7 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="pointer-events-auto w-[min(20rem,48vw)] min-h-[9rem] select-none"
+      className="pointer-events-auto w-[min(23rem,54vw)] min-h-[10.5rem] select-none"
       skinClassName="opacity-72"
       style={viewTransitionStyle(TRANSITION_NAME)}
     >
