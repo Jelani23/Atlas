@@ -57,7 +57,7 @@ const DEFAULT_SKIN_BOX: SkinBox = {
 // around it. This keeps the A/B comparison honest and prevents us from making
 // the actual controls larger just to accommodate a cloud silhouette.
 const WEBP_SKIN_BOX: Record<WebpCloudAsset, SkinBox> = {
-  nav: { width: "124%", height: "160%", left: "0%", top: "-46%" },
+  nav: { width: "132%", height: "178%", left: "-4%", top: "-56%" },
   chat: { width: "114%", height: "142%", left: "1%", top: "-21%" },
   panelWide: { width: "108%", height: "110%", left: "-4%", top: "-5%" },
   panelSquare: DEFAULT_SKIN_BOX,
