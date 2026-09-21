@@ -65,7 +65,7 @@ const WEBP_SKIN_BOX: Record<WebpCloudAsset, SkinBox> = {
   edgeTab: { width: "106%", height: "110%", left: "-3%", top: "-5%" },
   atlasCloud: { width: "112%", height: "118%", left: "-6%", top: "-9%" },
   verticalPanel: DEFAULT_SKIN_BOX,
-  thoughtsPanel: { width: "114%", height: "116%", left: "-7%", top: "-8%" },
+  thoughtsPanel: { width: "120%", height: "124%", left: "-10%", top: "-12%" },
 }
 
 function useWebpCloudSkin() {
