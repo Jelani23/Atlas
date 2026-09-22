@@ -58,14 +58,14 @@ const DEFAULT_SKIN_BOX: SkinBox = {
 // the actual controls larger just to accommodate a cloud silhouette.
 const WEBP_SKIN_BOX: Record<WebpCloudAsset, SkinBox> = {
   nav: { width: "124%", height: "160%", left: "0%", top: "-56%" },
-  chat: { width: "114%", height: "142%", left: "1%", top: "-21%" },
+  chat: { width: "114%", height: "142%", left: "1%", top: "-27%" },
   panelWide: { width: "108%", height: "110%", left: "-4%", top: "-5%" },
   panelSquare: DEFAULT_SKIN_BOX,
-  drawerWide: { width: "116%", height: "122%", left: "-8%", top: "-11%" },
+  drawerWide: { width: "116%", height: "122%", left: "2%", top: "-11%" },
   edgeTab: { width: "106%", height: "110%", left: "-3%", top: "-5%" },
   atlasCloud: { width: "112%", height: "118%", left: "-6%", top: "-9%" },
   verticalPanel: DEFAULT_SKIN_BOX,
-  thoughtsPanel: { width: "120%", height: "124%", left: "-10%", top: "-22%" },
+  thoughtsPanel: { width: "126%", height: "130%", left: "-13%", top: "-25%" },
 }
 
 function useWebpCloudSkin() {
