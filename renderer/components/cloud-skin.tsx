@@ -74,7 +74,7 @@ function useWebpCloudSkin() {
   useEffect(() => {
     const syncFromUrl = () => {
       const params = new URLSearchParams(window.location.search)
-      setEnabled(params.get("cloudSkin")?.toLowerCase() === "webp")
+      setEnabled(params.get("cloudSkin")?.toLowerCase() !== "svg")
     }
 
     syncFromUrl()
