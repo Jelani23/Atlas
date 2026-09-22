@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 900" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="historyFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".62"/>
+      <stop offset=".55" stop-color="#edf8ff" stop-opacity=".54"/>
+      <stop offset="1" stop-color="#d9efff" stop-opacity=".46"/>
+    </linearGradient>
+    <linearGradient id="historyEdge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#82c8f5" stop-opacity=".72"/>
+    </linearGradient>
+    <filter id="historyGlow" x="-20%" y="-10%" width="150%" height="120%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <path d="M0 14 H264
+    C298 14 318 33 316 64
+    C342 77 354 104 344 131
+    C358 153 355 185 338 202
+    C353 225 351 258 333 274
+    C350 299 346 333 328 348
+    C348 374 345 410 326 425
+    C348 450 345 487 327 503
+    C348 527 345 564 327 579
+    C348 606 345 643 327 658
+    C348 683 344 719 327 735
+    C346 758 342 792 322 807
+    C330 842 303 882 263 884
+    H0 Z"
+    fill="#79bff0" opacity=".16" filter="url(#historyGlow)"/>
+  <path d="M0 8 H260
+    C292 8 310 28 309 58
+    C336 70 347 98 337 124
+    C351 147 347 177 331 194
+    C346 217 343 248 326 265
+    C343 291 340 322 322 339
+    C341 365 338 398 319 414
+    C340 439 337 474 320 489
+    C339 514 337 549 320 565
+    C340 592 337 628 319 644
+    C339 669 336 704 319 720
+    C338 744 333 777 315 792
+    C323 827 297 867 258 868
+    H0 Z"
+    fill="url(#historyFill)" stroke="url(#historyEdge)" stroke-width="2"/>
+  <path d="M0 32 H252 C278 32 291 49 291 72" fill="none" stroke="#fff" stroke-opacity=".58" stroke-width="2"/>
+</svg>
