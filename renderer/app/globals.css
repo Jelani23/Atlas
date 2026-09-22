@@ -456,47 +456,57 @@
     linear-gradient(
       to bottom,
       rgb(255 255 255 / 0) 0%,
-      rgb(255 255 255 / 0.055) 8%,
-      rgb(255 255 255 / 0.10) 18%,
-      rgb(255 255 255 / 0.10) 82%,
-      rgb(255 255 255 / 0.055) 92%,
+      rgb(255 255 255 / 0.045) 6%,
+      rgb(255 255 255 / 0.08) 12%,
+      rgb(255 255 255 / 0.10) 22%,
+      rgb(255 255 255 / 0.10) 78%,
+      rgb(255 255 255 / 0.08) 88%,
+      rgb(255 255 255 / 0.045) 94%,
       rgb(255 255 255 / 0) 100%
     );
   -webkit-mask-image:
     radial-gradient(
-      85% 42px at 50% 0,
-      transparent 0,
-      black 70%
+      92% 72px at 50% 0,
+      transparent 0%,
+      transparent 18%,
+      black 72%
     ),
     radial-gradient(
-      85% 42px at 50% 100%,
-      transparent 0,
-      black 70%
+      92% 72px at 50% 100%,
+      transparent 0%,
+      transparent 18%,
+      black 72%
     ),
     linear-gradient(
       to bottom,
-      transparent 0,
-      black 7%,
-      black 93%,
+      transparent 0%,
+      rgb(0 0 0 / 0.45) 4%,
+      black 10%,
+      black 90%,
+      rgb(0 0 0 / 0.45) 96%,
       transparent 100%
     );
   -webkit-mask-composite: source-over, source-over, source-in;
   mask-image:
     radial-gradient(
-      85% 42px at 50% 0,
-      transparent 0,
-      black 70%
+      92% 72px at 50% 0,
+      transparent 0%,
+      transparent 18%,
+      black 72%
     ),
     radial-gradient(
-      85% 42px at 50% 100%,
-      transparent 0,
-      black 70%
+      92% 72px at 50% 100%,
+      transparent 0%,
+      transparent 18%,
+      black 72%
     ),
     linear-gradient(
       to bottom,
-      transparent 0,
-      black 7%,
-      black 93%,
+      transparent 0%,
+      rgb(0 0 0 / 0.45) 4%,
+      black 10%,
+      black 90%,
+      rgb(0 0 0 / 0.45) 96%,
       transparent 100%
     );
   mask-composite: add, add, intersect;
