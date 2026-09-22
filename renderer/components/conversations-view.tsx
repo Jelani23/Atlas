@@ -177,7 +177,7 @@ export function ConversationsView({
   const viewingConversation = conversations.find((conversation) => conversation.id === viewingId)
 
   return (
-    <div className="relative flex min-h-0 flex-1 gap-3 overflow-hidden px-2 pb-3 pt-1 md:gap-5 md:px-4 md:pb-4">
+    <div className="relative flex min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-3 pt-1 md:gap-3 md:px-3 md:pb-4">
       <aside className="conversation-history-cloud relative -ml-4 flex w-[18.5rem] shrink-0 flex-col pl-5 pr-7 pt-5 md:w-[20rem] md:pl-7 md:pr-8">
         <div className="flex items-center justify-between pb-2">
           <div>
@@ -298,13 +298,13 @@ export function ConversationsView({
         </>
       )}
 
-      <section className="conversation-workspace-cloud relative flex min-h-0 min-w-0 flex-1 flex-col px-7 pb-6 pt-6 md:px-10 md:pb-7 md:pt-7">
-        <div className="relative z-20 flex min-h-[2.25rem] shrink-0 items-start justify-between gap-2 px-3">
+      <section className="conversation-workspace-cloud relative -mr-2 flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
+        <div className="relative z-20 flex min-h-[1.9rem] shrink-0 items-start justify-between gap-2 px-2">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
               {isViewingPast ? "Conversation archive" : "Current conversation"}
             </p>
-            <h1 className="truncate font-display text-[16px] leading-tight text-foreground/78">
+            <h1 className="truncate font-display text-[15px] leading-[1.05] text-foreground/78">
               {isViewingPast ? viewingConversation?.title || "Past conversation" : "Conversations"}
             </h1>
             {isViewingPast && viewingId && (
@@ -313,11 +313,11 @@ export function ConversationsView({
           </div>
 
           {isViewingPast ? (
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
                 onClick={returnToCurrent}
-                className="alice-nav-item cursor-pointer bg-white/28 px-3 py-1.5 text-xs text-foreground/58 transition hover:bg-white/48 hover:text-foreground/78"
+                className="alice-nav-item cursor-pointer bg-white/28 px-2.5 py-1 text-[11px] text-foreground/58 transition hover:bg-white/48 hover:text-foreground/78"
               >
                 ← Back to current
               </button>
@@ -325,7 +325,7 @@ export function ConversationsView({
                 type="button"
                 onClick={() => void resumeConversation()}
                 disabled={resuming || resumeBlocked}
-                className="alice-nav-item flex items-center gap-1.5 bg-white/42 px-3 py-1.5 text-xs text-sky-deep/72 transition enabled:cursor-pointer enabled:hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40"
+                className="alice-nav-item flex items-center gap-1.5 bg-white/42 px-2.5 py-1 text-[11px] text-sky-deep/72 transition enabled:cursor-pointer enabled:hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                 {resuming ? "Opening…" : hostAvailable ? "Resume conversation" : "Alice offline"}
@@ -338,7 +338,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="conversation-thread-viewport relative z-0 -mt-6 -mb-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
+        <div className="conversation-thread-viewport relative z-0 -mt-3 -mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
           <ConversationThread
             messages={shownMessages}
             typing={isViewingPast ? false : typing}
@@ -353,12 +353,12 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-4 pt-1.5">
+        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-3 pt-1">
           {isViewingPast ? (
-            <div className="flex min-h-[3.4rem] items-center justify-between gap-2.5 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-3.5">
+            <div className="flex min-h-[2.9rem] items-center justify-between gap-2 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-3">
               <div>
-                <p className="font-display text-[12px] text-foreground/60">Viewing a saved conversation</p>
-                <p className="mt-0.5 text-[9px] text-foreground/38">Resume it to continue talking from this session.</p>
+                <p className="font-display text-[11px] text-foreground/60">Viewing a saved conversation</p>
+                <p className="mt-0 text-[8px] text-foreground/38">Resume it to continue talking from this session.</p>
               </div>
               <button
                 type="button"
