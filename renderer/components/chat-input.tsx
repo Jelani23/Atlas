@@ -116,7 +116,7 @@ export function ChatInput({
   return (
     <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
       {embedded ? (
-        <div className={`flex min-h-[3.4rem] w-full items-center gap-1.5 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/45 bg-white/26 px-2.5 backdrop-blur-sm transition-colors focus-within:bg-white/38 ${disabled ? "opacity-55" : ""}`}>
+        <div className={`flex min-h-[3rem] w-full items-center gap-1.5 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/45 bg-white/26 px-2 backdrop-blur-sm transition-colors focus-within:bg-white/38 ${disabled ? "opacity-55" : ""}`}>
           {controls}
         </div>
       ) : (
