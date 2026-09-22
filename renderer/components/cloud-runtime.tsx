@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { Cloud, CloudOff, KeyRound, LoaderCircle, LockKeyhole, LogOut, X } from "lucide-react"
 import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
+import { getAtlasActiveTab, subscribeAtlasActiveTab } from "@/lib/active-tab"
 import { CloudSurface } from "./cloud-skin"
 import {
   getAtlasCloudState,
@@ -174,6 +175,9 @@ function CloudStatusCard({ state }: { state: AtlasCloudState }) {
 
 export function CloudRuntime({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AtlasCloudState>(() => getAtlasCloudState())
+  const [activeTab, setActiveTab] = useState(() => getAtlasActiveTab())
+
+  useEffect(() => subscribeAtlasActiveTab(setActiveTab), [])
 
   useEffect(() => {
     const unsubscribe = subscribeAtlasCloud(setState)
@@ -184,12 +188,14 @@ export function CloudRuntime({ children }: { children: ReactNode }) {
   return (
     <div className="relative h-dvh overflow-hidden">
       {children}
-      <aside
-        className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(1.25rem,calc(env(safe-area-inset-left)+0.75rem))] z-[110]"
-        aria-live="polite"
-      >
-        <CloudStatusCard state={state} />
-      </aside>
+      {activeTab === "home" && (
+        <aside
+          className="pointer-events-none fixed bottom-[max(0.85rem,env(safe-area-inset-bottom))] left-[max(1.25rem,calc(env(safe-area-inset-left)+0.75rem))] z-[110]"
+          aria-live="polite"
+        >
+          <CloudStatusCard state={state} />
+        </aside>
+      )}
     </div>
   )
 }
