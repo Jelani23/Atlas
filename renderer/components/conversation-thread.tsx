@@ -36,7 +36,7 @@ export function ConversationThread({ messages, typing, focusMessageId }: Convers
   }
 
   return (
-    <div className="conversation-thread-scroll flex min-h-0 w-full flex-1 flex-col gap-5 overflow-y-auto px-4 pb-20 pt-20 themed-scroll">
+    <div className="conversation-thread-scroll flex min-h-0 w-full flex-1 flex-col gap-5 overflow-y-auto px-5 pb-14 pt-14 themed-scroll">
       {messages.map((m) => (
         <div
           key={m.id}
