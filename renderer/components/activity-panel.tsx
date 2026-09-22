@@ -49,8 +49,9 @@ export function ActivityPanel({ steps, state }: ActivityPanelProps) {
   return (
     <CloudSurface
       asset="panelWide"
-      className="pointer-events-auto w-[min(23rem,54vw)] min-h-[10.5rem] select-none"
+      className="pointer-events-auto w-[min(24rem,56vw)] min-h-[11rem] select-none"
       skinClassName="opacity-72"
+      contentClassName="-translate-x-4"
       style={viewTransitionStyle(TRANSITION_NAME)}
     >
       <div className="mb-2.5 flex items-center gap-2">
