@@ -36,28 +36,28 @@ export function ConversationThread({ messages, typing, focusMessageId }: Convers
   }
 
   return (
-    <div className="conversation-thread-scroll flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto px-4 pb-12 pt-12 themed-scroll">
+    <div className="conversation-thread-scroll flex min-h-0 w-full flex-1 flex-col gap-2.5 overflow-y-auto px-6 pb-9 pt-9 themed-scroll">
       {messages.map((m) => (
         <div
           key={m.id}
           ref={m.id === focusMessageId ? focusRef : undefined}
-          className={`flex flex-col gap-0.5 rounded-2xl px-3.5 py-2.5 ${
+          className={`flex flex-col gap-0.5 rounded-2xl px-3 py-2 ${
             m.role === "atlas"
               ? "self-start bg-card/70 border border-border/60"
               : "self-end bg-primary/10"
-          } max-w-[90%] ${m.id === focusMessageId ? "ring-2 ring-primary/40" : ""}`}
+          } max-w-[86%] ${m.id === focusMessageId ? "ring-2 ring-primary/40" : ""}`}
         >
           <span className="text-[9px] font-medium uppercase tracking-[0.12em] text-primary/70">
             {m.role === "atlas" ? "Alice" : "You"}
           </span>
-          <p className="whitespace-pre-wrap text-pretty text-[14px] leading-[1.5] text-foreground">
+          <p className="whitespace-pre-wrap text-pretty text-[13.5px] leading-[1.45] text-foreground">
             {m.text}
           </p>
         </div>
       ))}
 
       {typing && (
-        <div className="flex items-center gap-1.5 self-start rounded-2xl border border-border/60 bg-card/70 px-3.5 py-2.5">
+        <div className="flex items-center gap-1.5 self-start rounded-2xl border border-border/60 bg-card/70 px-3 py-2">
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.2s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.1s]" />
           <span className="h-2 w-2 animate-bounce rounded-full bg-primary/60" />
