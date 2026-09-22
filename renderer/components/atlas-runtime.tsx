@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { LoaderCircle, RefreshCw, Wifi, WifiOff, X } from "lucide-react"
 import { runViewTransition, viewTransitionStyle } from "@/lib/view-transition"
+import { getAtlasActiveTab, subscribeAtlasActiveTab } from "@/lib/active-tab"
 import { AtlasApp } from "./atlas-app"
 import { CloudSurface } from "./cloud-skin"
 import {
@@ -171,6 +172,9 @@ export function AtlasRuntime() {
   const [nativeDesktop] = useState(() => typeof window !== "undefined" && Boolean(window.windowControls))
   const [bridgeReady, setBridgeReady] = useState(false)
   const [connectionState, setConnectionState] = useState<AtlasConnectionState>("connecting")
+  const [activeTab, setActiveTab] = useState(() => getAtlasActiveTab())
+
+  useEffect(() => subscribeAtlasActiveTab(setActiveTab), [])
 
   useEffect(() => {
     ensureAtlasBridge()
@@ -204,7 +208,7 @@ export function AtlasRuntime() {
     <div className="relative h-dvh overflow-hidden">
       <style>{CLOUD_TRANSITION_SNAPSHOT_FIX}</style>
       <AtlasApp key={bridgeReady ? "bridge-ready" : "bridge-booting"} hostConnectionState={connectionState} />
-      {!nativeDesktop && (
+      {!nativeDesktop && activeTab === "home" && (
         <aside
           className="pointer-events-none fixed right-[max(0rem,env(safe-area-inset-right))] top-[max(6.4rem,calc(env(safe-area-inset-top)+5.8rem))] z-[100]"
           aria-live="polite"
