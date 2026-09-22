@@ -453,7 +453,7 @@
 .conversation-thread-viewport {
   position: relative;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.075);
 }
 
 .conversation-thread-viewport::before,
@@ -463,32 +463,37 @@
   left: 0;
   right: 0;
   z-index: 4;
-  height: 54px;
   pointer-events: none;
 }
 
+/* The transcript overlaps the header by 40px. Fade only inside that hidden overlap,
+   ending exactly where the readable transcript begins. */
 .conversation-thread-viewport::before {
   top: 0;
+  height: 40px;
   background: linear-gradient(
     to bottom,
-    rgb(240 249 255 / 0.92) 0%,
-    rgb(240 249 255 / 0.72) 28%,
-    rgb(240 249 255 / 0.34) 62%,
+    rgb(240 249 255 / 0.94) 0%,
+    rgb(240 249 255 / 0.76) 32%,
+    rgb(240 249 255 / 0.34) 68%,
     rgb(240 249 255 / 0) 100%
   );
-  border-radius: 0 0 52% 48% / 0 0 46% 38%;
+  border-radius: 0 0 58% 42% / 0 0 72% 48%;
 }
 
+/* The transcript overlaps the bottom controls by 36px. Fade only inside that hidden
+   overlap so messages appear to pass behind the chat/archive bar. */
 .conversation-thread-viewport::after {
   bottom: 0;
+  height: 36px;
   background: linear-gradient(
     to top,
-    rgb(240 249 255 / 0.92) 0%,
-    rgb(240 249 255 / 0.72) 28%,
-    rgb(240 249 255 / 0.34) 62%,
+    rgb(240 249 255 / 0.94) 0%,
+    rgb(240 249 255 / 0.76) 32%,
+    rgb(240 249 255 / 0.34) 68%,
     rgb(240 249 255 / 0) 100%
   );
-  border-radius: 48% 52% 0 0 / 38% 46% 0 0;
+  border-radius: 58% 42% 0 0 / 72% 48% 0 0;
 }
 
 .conversation-thread-scroll {
