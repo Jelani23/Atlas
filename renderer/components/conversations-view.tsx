@@ -299,7 +299,7 @@ export function ConversationsView({
       )}
 
       <section className="conversation-workspace-cloud relative flex min-h-0 min-w-0 flex-1 flex-col px-7 pb-7 pt-6 md:px-10 md:pb-8 md:pt-7">
-        <div className="flex min-h-[3.25rem] shrink-0 items-start justify-between gap-4 px-1">
+        <div className="relative z-20 flex min-h-[3.25rem] shrink-0 items-start justify-between gap-4 px-1">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
               {isViewingPast ? "Conversation archive" : "Current conversation"}
@@ -338,7 +338,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="conversation-thread-viewport mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
+        <div className="conversation-thread-viewport relative z-0 -mt-10 -mb-9 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
           <ConversationThread
             messages={shownMessages}
             typing={isViewingPast ? false : typing}
@@ -353,7 +353,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="mt-3 shrink-0 border-t border-sky-deep/10 px-2 pt-3">
+        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-2 pt-3">
           {isViewingPast ? (
             <div className="flex min-h-[4.5rem] items-center justify-between gap-4 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-4">
               <div>
