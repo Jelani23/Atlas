@@ -177,10 +177,13 @@ export function ConversationsView({
   const viewingConversation = conversations.find((conversation) => conversation.id === viewingId)
 
   return (
-    <div className="relative flex min-h-0 flex-1 overflow-hidden">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-border/60 bg-card/30 md:w-72">
-        <div className="flex items-center justify-between px-4 pb-2 pt-3 md:pt-4">
-          <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">History</h2>
+    <div className="relative flex min-h-0 flex-1 gap-3 overflow-hidden px-2 pb-3 pt-1 md:gap-5 md:px-4 md:pb-4">
+      <aside className="conversation-history-cloud relative -ml-4 flex w-[18.5rem] shrink-0 flex-col pl-5 pr-7 pt-5 md:w-[20rem] md:pl-7 md:pr-8">
+        <div className="flex items-center justify-between pb-2">
+          <div>
+            <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">Conversation memory</p>
+            <h2 className="font-display text-[17px] leading-none text-foreground/76">History</h2>
+          </div>
           <button
             type="button"
             disabled={!hostAvailable}
@@ -189,7 +192,7 @@ export function ConversationsView({
               setViewingId(null)
               onNewConversation()
             }}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:bg-secondary enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            className="alice-icon-button flex h-8 w-8 items-center justify-center bg-white/22 text-sky-deep/58 transition enabled:cursor-pointer enabled:hover:bg-white/44 enabled:hover:text-sky-deep disabled:cursor-not-allowed disabled:opacity-30"
             aria-label={hostAvailable ? "Start a new conversation" : "Alice is offline"}
             title={hostAvailable ? "New conversation" : "Alice is offline"}
           >
@@ -197,10 +200,10 @@ export function ConversationsView({
           </button>
         </div>
 
-        <div className="themed-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {listLoading && <p className="px-2.5 py-3 text-xs text-muted-foreground/60">Loading…</p>}
+        <div className="conversation-history-scroll min-h-0 flex-1 overflow-y-auto pb-8 pr-1">
+          {listLoading && <p className="px-1 py-3 text-xs text-muted-foreground/60">Loading…</p>}
           {!listLoading && conversations.length === 0 && (
-            <p className="px-2.5 py-3 text-xs leading-relaxed text-muted-foreground/60">
+            <p className="px-1 py-3 text-xs leading-relaxed text-muted-foreground/60">
               Nothing logged yet. Conversations show up here as you talk to Alice.
             </p>
           )}
@@ -210,6 +213,7 @@ export function ConversationsView({
             const isSelected = isViewingPast ? conversation.id === viewingId : isCurrent
             const isRenaming = renamingId === conversation.id
             const label = conversation.title || (conversation.preview ? previewLine(conversation.preview, 56) : "Empty conversation")
+
             return (
               <div
                 key={conversation.id}
@@ -226,8 +230,10 @@ export function ConversationsView({
                   event.preventDefault()
                   setContextMenu({ id: conversation.id, x: event.clientX, y: event.clientY })
                 }}
-                className={`mb-1 flex w-full cursor-pointer flex-col gap-0.5 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                  isSelected ? "bg-primary/10" : "hover:bg-secondary/70"
+                className={`mb-1.5 flex w-full cursor-pointer flex-col gap-0.5 rounded-[1.2rem_1.55rem_1.25rem_1.65rem] px-3 py-2.5 text-left transition-all ${
+                  isSelected
+                    ? "bg-white/44 shadow-[0_7px_18px_-16px_rgba(49,103,154,0.6)]"
+                    : "hover:bg-white/24"
                 }`}
               >
                 <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-primary/70">
@@ -251,10 +257,10 @@ export function ConversationsView({
                       }
                     }}
                     onBlur={() => void commitRename(conversation.id)}
-                    className="w-full rounded-md border border-primary/40 bg-background/80 px-1.5 py-0.5 text-xs text-foreground outline-none"
+                    className="w-full rounded-md border border-primary/30 bg-white/50 px-1.5 py-0.5 text-xs text-foreground outline-none"
                   />
                 ) : (
-                  <span className="truncate text-xs leading-relaxed text-foreground/80">{label}</span>
+                  <span className="truncate text-xs leading-relaxed text-foreground/76">{label}</span>
                 )}
               </div>
             )
@@ -292,20 +298,26 @@ export function ConversationsView({
         </>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-2 md:px-8 md:pt-4">
-          <h1 className="font-display text-base font-semibold text-foreground">
-            {isViewingPast ? viewingConversation?.title || "Past conversation" : "Conversations"}
+      <section className="conversation-workspace-cloud relative flex min-h-0 min-w-0 flex-1 flex-col px-7 pb-7 pt-6 md:px-10 md:pb-8 md:pt-7">
+        <div className="flex min-h-[3.25rem] shrink-0 items-start justify-between gap-4 px-1">
+          <div className="min-w-0">
+            <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
+              {isViewingPast ? "Conversation archive" : "Current conversation"}
+            </p>
+            <h1 className="truncate font-display text-[18px] leading-tight text-foreground/78">
+              {isViewingPast ? viewingConversation?.title || "Past conversation" : "Conversations"}
+            </h1>
             {isViewingPast && viewingId && (
-              <span className="ml-2 font-sans text-[10px] font-medium text-muted-foreground/60">Session {viewingId}</span>
+              <span className="mt-0.5 block text-[9px] font-medium text-muted-foreground/48">Session {viewingId}</span>
             )}
-          </h1>
+          </div>
+
           {isViewingPast ? (
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 onClick={returnToCurrent}
-                className="cursor-pointer text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                className="alice-nav-item cursor-pointer bg-white/28 px-3 py-1.5 text-xs text-foreground/58 transition hover:bg-white/48 hover:text-foreground/78"
               >
                 ← Back to current
               </button>
@@ -313,47 +325,62 @@ export function ConversationsView({
                 type="button"
                 onClick={() => void resumeConversation()}
                 disabled={resuming || resumeBlocked}
-                className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors enabled:cursor-pointer enabled:hover:bg-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
+                className="alice-nav-item flex items-center gap-1.5 bg-white/42 px-3 py-1.5 text-xs text-sky-deep/72 transition enabled:cursor-pointer enabled:hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                {resuming ? "Opening…" : hostAvailable ? "Continue conversation" : "Alice offline"}
+                {resuming ? "Opening…" : hostAvailable ? "Resume conversation" : "Alice offline"}
               </button>
             </div>
           ) : (
-            <span className={`text-[10px] font-medium uppercase tracking-[0.12em] text-primary/70 ${active ? "animate-pulse" : ""}`}>
+            <span className={`mt-1 shrink-0 text-[10px] font-medium uppercase tracking-[0.14em] text-primary/65 ${active ? "animate-pulse" : ""}`}>
               {STATE_LABEL[state]}
             </span>
           )}
         </div>
 
-        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-4 pb-3 md:px-6">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-border/60 bg-card/40 backdrop-blur-md shadow-[0_12px_40px_-18px_rgba(80,130,190,0.4)]">
-            <ConversationThread
-              messages={shownMessages}
-              typing={isViewingPast ? false : typing}
-              focusMessageId={isViewingPast ? null : focusMessageId}
-            />
-            {threadLoading && (
-              <div className="flex items-center justify-center gap-1.5 pb-4">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.2s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.1s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60" />
-              </div>
-            )}
-          </div>
+        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem] bg-white/10">
+          <ConversationThread
+            messages={shownMessages}
+            typing={isViewingPast ? false : typing}
+            focusMessageId={isViewingPast ? null : focusMessageId}
+          />
+          {threadLoading && (
+            <div className="flex items-center justify-center gap-1.5 pb-4">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.2s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60 [animation-delay:-0.1s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary/60" />
+            </div>
+          )}
         </div>
 
-        {!isViewingPast && (
-          <div className="relative z-30 mx-auto w-full max-w-3xl px-4 pb-6 md:px-6 md:pb-8">
+        <div className="mt-3 shrink-0 border-t border-sky-deep/10 px-2 pt-3">
+          {isViewingPast ? (
+            <div className="flex min-h-[4.5rem] items-center justify-between gap-4 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-4">
+              <div>
+                <p className="font-display text-[13px] text-foreground/60">Viewing a saved conversation</p>
+                <p className="mt-0.5 text-[10px] text-foreground/38">Resume it to continue talking from this session.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void resumeConversation()}
+                disabled={resuming || resumeBlocked}
+                className="alice-nav-item flex shrink-0 items-center gap-1.5 bg-white/42 px-3 py-2 text-xs text-sky-deep/72 transition enabled:cursor-pointer enabled:hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                {resuming ? "Opening…" : "Resume"}
+              </button>
+            </div>
+          ) : (
             <ChatInput
+              embedded
               onSend={onSend}
               listening={listening}
               onToggleMic={onToggleMic}
               disabled={!hostAvailable}
             />
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }
