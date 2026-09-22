@@ -1,6 +1,6 @@
 "use client"
 
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
+import { Fragment, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
 import { ArrowUp, Mic, Paperclip } from "lucide-react"
 import { CloudSurface } from "./cloud-skin"
 
@@ -54,7 +54,7 @@ export function ChatInput({
   }
 
   const controls = (
-    <div className={`flex items-center gap-2 ${embedded ? "min-h-[4.5rem] px-1" : "min-h-[5.75rem] translate-y-[2px] overflow-hidden"}`}>
+    <Fragment>
       <button
         type="button"
         disabled={disabled}
@@ -110,13 +110,13 @@ export function ChatInput({
       >
         <ArrowUp className="h-[17px] w-[17px]" strokeWidth={2} aria-hidden="true" />
       </button>
-    </div>
+    </Fragment>
   )
 
   return (
     <form onSubmit={handleSubmit} className="w-full" aria-disabled={disabled}>
       {embedded ? (
-        <div className={`rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/45 bg-white/26 px-4 backdrop-blur-sm transition-colors focus-within:bg-white/38 ${disabled ? "opacity-55" : ""}`}>
+        <div className={`flex min-h-[4.5rem] w-full items-center gap-2 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/45 bg-white/26 px-4 backdrop-blur-sm transition-colors focus-within:bg-white/38 ${disabled ? "opacity-55" : ""}`}>
           {controls}
         </div>
       ) : (
