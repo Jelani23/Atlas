@@ -14,6 +14,7 @@ import { TitleBarControls } from "./title-bar-controls"
 import { type AtlasState } from "./atlas-state"
 import type { AtlasEvent } from "@/lib/atlas-events"
 import { attachAudioElement, setPlaying as setSpeechPlaying, setVisemeSource } from "@/lib/audio-level"
+import { setAtlasActiveTab } from "@/lib/active-tab"
 import { setEmotion, emotionState } from "@/lib/emotion"
 import type { PhonemeTimestamp } from "@/lib/visemes"
 import type { Message } from "@/lib/types"
@@ -89,6 +90,10 @@ export function AtlasApp({ hostConnectionState }: AtlasAppProps) {
   const [listening, setListening] = useState(false)
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setAtlasActiveTab(tab)
+  }, [tab])
 
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const audioIdleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
