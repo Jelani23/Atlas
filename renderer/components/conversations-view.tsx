@@ -338,7 +338,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem] bg-white/10">
+        <div className="conversation-thread-viewport mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
           <ConversationThread
             messages={shownMessages}
             typing={isViewingPast ? false : typing}
