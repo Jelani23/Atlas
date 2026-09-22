@@ -448,3 +448,36 @@
 .conversation-history-scroll::-webkit-scrollbar-thumb:hover {
   background: rgb(80 154 208 / 0.58);
 }
+
+
+.conversation-thread-viewport {
+  position: relative;
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 0) 0%,
+      rgb(255 255 255 / 0.055) 8%,
+      rgb(255 255 255 / 0.10) 18%,
+      rgb(255 255 255 / 0.10) 82%,
+      rgb(255 255 255 / 0.055) 92%,
+      rgb(255 255 255 / 0) 100%
+    );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 6%,
+    black 94%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 6%,
+    black 94%,
+    transparent 100%
+  );
+}
+
+.conversation-thread-scroll {
+  scroll-padding-block: 2.5rem;
+}
