@@ -298,8 +298,8 @@ export function ConversationsView({
         </>
       )}
 
-      <section className="conversation-workspace-cloud relative flex min-h-0 min-w-0 flex-1 flex-col px-7 pb-7 pt-6 md:px-10 md:pb-8 md:pt-7">
-        <div className="relative z-20 flex min-h-[3.25rem] shrink-0 items-start justify-between gap-4 px-1">
+      <section className="conversation-workspace-cloud relative flex min-h-0 min-w-0 flex-1 flex-col px-5 pb-5 pt-5 md:px-7 md:pb-6 md:pt-6">
+        <div className="relative z-20 flex min-h-[3rem] shrink-0 items-start justify-between gap-4 px-2">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
               {isViewingPast ? "Conversation archive" : "Current conversation"}
@@ -353,7 +353,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-2 pt-3">
+        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-3 pt-2.5">
           {isViewingPast ? (
             <div className="flex min-h-[4.5rem] items-center justify-between gap-4 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-4">
               <div>
