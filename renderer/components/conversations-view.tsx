@@ -299,6 +299,7 @@ export function ConversationsView({
       )}
 
       <section className="conversation-workspace-cloud relative -mr-2 flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
+        <div className="flex min-h-0 flex-1 flex-col mx-[clamp(2.25rem,3.5vw,4.25rem)]">
         <div className="relative z-20 flex min-h-[1.9rem] shrink-0 items-start justify-between gap-2 px-2">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
@@ -379,6 +380,7 @@ export function ConversationsView({
               disabled={!hostAvailable}
             />
           )}
+        </div>
         </div>
       </section>
     </div>
