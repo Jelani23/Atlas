@@ -31,6 +31,7 @@
     "dotenv": "^16.6.1",
     "ollama": "^0.6.3",
     "openai": "^4.104.0",
+    "typescript": "5.9.3",
     "ws": "^8.21.3"
   },
   "devDependencies": {

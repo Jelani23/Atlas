@@ -1,0 +1,65 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+const {createService,localRepository,detect}=require('../src/memory/projectUnderstanding');
+globalThis.fetch=async()=>{throw new Error('Network forbidden');};
+async function main() {
+    const directory=await fs.mkdtemp(path.join(os.tmpdir(),'atlas-understanding-'));
+    try {
+        const repository=localRepository(directory);
+        let version='a'.repeat(64), calls=0, changed=false;
+        const read=async()=>({path:'src/example.js',version,complete:true,text:'1: function answer() { return 42; }'});
+        const complete=async()=>{calls++;if(changed)version='b'.repeat(64);return JSON.stringify({observations:[{text:'Returns 42.',line:1,quote:'function answer() { return 42; }'}],behaviors:[{symbol: 'example', precondition: 'No prior state', input: 'example()', expectedResult: '42', line: 1, quote: 'function answer() { return 42; }'}],questions:[]});};
+        const options={agentId:'alice',complete};
+        const learn={action:'learn',filename:'src/example.js'};
+        const recall={...learn,action:'recall'};
+        let service=createService({repository,read});
+        assert.match(await service.handle(recall,options),/No stored/);
+        assert.match(await service.handle(learn,options),/Saved local/);
+        assert.equal(calls,1);
+        service=createService({repository:localRepository(directory),read});
+        assert.match(await service.handle(recall,options),/Recalled stored/);
+        assert.match(await service.handle(learn,options),/unchanged/);
+        assert.equal(calls,1,'Recall and unchanged learning must not generate');
+        assert.match(await service.handle({...learn,action:'relearn'},options),/Refreshed/);
+        assert.equal(calls,2);
+        const revised=createService({repository,read,contract:'new method'});
+        assert.match(await revised.handle(recall,options),/stale/);
+        assert.match(await revised.handle(learn,options),/Refreshed/);
+        assert.equal(calls,3);
+        assert.match(await service.handle(recall,options),/stale/);
+        await service.handle(learn,options);
+        const newModel=createService({repository,read,modelOptions:{model:'different'}});
+        assert.match(await newModel.handle(recall,options),/stale/);
+        const withStructure=createService({repository,read,includeStructure:true});
+        assert.match(await withStructure.handle(recall,options),/stale/);
+        let structuredPrompt;
+        await withStructure.handle(learn,{...options,complete:async(messages)=>{structuredPrompt=messages;return complete();}});
+        assert.match(structuredPrompt[1].content,/Syntax map/);
+        assert.match(structuredPrompt[1].content,/"owner":"answer"/);
+        assert.match(await service.handle(recall,options),/stale/);
+        await service.handle(learn,options);
+        assert.match(await service.handle(recall,{...options,agentId:'bob'}),/No stored/);
+        version='c'.repeat(64);
+        assert.match(await service.handle(recall,options),/stale/);
+        assert.match(await service.handle(learn,options),/Refreshed/);
+        version='e'.repeat(64);
+        assert.match(await service.handle(learn,{...options,complete:async()=>JSON.stringify({observations:[{text:'Returns 42.',line:99,quote:'function answer() { return 42; }'}],behaviors:[{symbol: 'example', precondition: 'No prior state', input: 'example()', expectedResult: '42', line: 1, quote: 'function answer() { return 42; }'}],questions:[]})}),/Source line 1:/);
+        version='d'.repeat(64);changed=true;
+        await assert.rejects(service.handle(learn,options),/changed/);
+        assert.match(await service.handle(recall,options),/stale/);
+        changed=false;
+        await assert.rejects(service.handle(learn,{...options,complete:async()=>'{"observations":[],"questions":[]}'}),/not saved/);
+        await assert.rejects(service.handle(learn,{...options,complete:async()=>JSON.stringify({observations:[{text:'Fake',line:1,quote:'invented'}],behaviors:[{symbol: 'example', precondition: 'No prior state', input: 'example()', expectedResult: '42', line: 1, quote: 'function answer() { return 42; }'}],questions:[]})}),/not saved/);
+        await assert.rejects(service.handle(learn,{...options,isCancelled:()=>true}),/cancelled/);
+        await assert.rejects(createService({repository,read:async()=>({...await read(),complete:false})}).handle(learn,options),/complete file/);
+        await assert.rejects(createService({repository,read,timeoutMs:5}).handle(learn,{...options,complete:()=>new Promise(()=>{})}),/timed out/);
+        await assert.rejects(createService({repository:{get:async()=>null,put:async()=>{throw new Error('disk full');}},read}).handle(learn,options),/disk full/);
+        assert.deepEqual(detect('Learn Atlas file src/agents/agentProfiles.js'),{action:'learn',filename:'src/agents/agentProfiles.js'});
+        for(const input of ['Do not learn Atlas file src/a.js','Explain how to learn Atlas file src/a.js','Recall another project file src/a.js']) assert.equal(detect(input),null);
+        console.log('Project understanding: persistent recall, skip, stale/refresh, ownership and failure boundaries passed.');
+    } finally {await fs.rm(directory,{recursive:true,force:true});}
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});
+

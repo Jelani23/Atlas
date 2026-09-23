@@ -46,7 +46,7 @@ let lastEmittedModel = null;
 // Source-backed extraction is enabled by default. Set the flag to false to pause it.
 const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = isSearchKnowledgePersistenceEnabled();
 
-async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart }) {
+async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart, speech }) {
     await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
     taskManager.endRequest(taskId);
     eventBus.emit(EventTypes.REQUEST_COMPLETED, {
@@ -58,7 +58,7 @@ async function finishImmediateReply(reply, { memory, sessionId, taskId, requestI
     });
 
     try {
-        const cleanReply = prepareForTTS(responseProcessor.removeThinkingTraces(reply));
+        const cleanReply = prepareForTTS(responseProcessor.removeThinkingTraces(speech ?? reply));
         if (cleanReply) ttsManager.enqueue(cleanReply, { requestId });
     } catch (error) {
         console.error('[TTS] Deterministic generation failed:', error.message);
@@ -164,6 +164,47 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         sessionScope.codeEvidence = priorCodeEvidence;
         console.log(`[AgentProfile] ${agent.agentId}: ${agent.source}, revision ${agent.revision ?? 'seed'}${agent.degraded ? ' (degraded)' : ''}`);
         const userMessageId = await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
+
+        // Explicit single-file learning pilot; never triggered by ordinary discussion.
+        const understanding = require('../memory/projectUnderstanding');
+        const understandingCommand = understanding.detect(userInput);
+        if (understandingCommand) {
+            sessionScope.projectQuestion=null;
+            let reply;
+            try {
+                reply = await understanding.handle(understandingCommand, {
+                    agentId: agent.agentId,
+                    complete: (messages, options) => modelAdapter.complete(messages, options),
+                    isCancelled: () => sessionScope.isSessionClosed()
+                });
+            } catch (error) {
+                reply = `Project understanding could not complete: ${error.message}`;
+            }
+            return finishImmediateReply(reply, {memory, sessionId, taskId, requestId, requestStart});
+        }
+
+        const projectQuestion=require('../reasoning/projectQuestion');
+        const question=projectQuestion.detect(userInput,sessionScope.projectQuestion,agent.agentId);
+        sessionScope.projectQuestion=null;
+        if(question){
+            let reply,speech;
+            if(question.choices){
+                reply='I found several matching source files: '+question.choices.join(', ')+'. Please include the folder name to distinguish them.';
+                speech='I found several matching files. Please include the folder name to distinguish them.';
+                return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech});
+            }
+            try{
+                const permission=require('../permissions/permissionManager').check('readCode');
+                if(!permission.allowed||permission.requiresApproval)throw new Error('Source reading is not permitted.');
+                const result=await projectQuestion.createService({repository:understanding.configuredRepository()}).answer(question,{
+                    agentId:agent.agentId,requestId,complete:(messages,options)=>modelAdapter.complete(messages,options),isCancelled:()=>sessionScope.isSessionClosed()
+                });
+                sessionScope.projectQuestion={path:result.path,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question};
+                reply=result.reply;
+                speech=result.speech;
+            }catch(error){reply=`Project question could not complete: ${error.message}`;}
+            return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech});
+        }
 
         // Phase 3C.2: Fetch rolling working context
         const workingContext = await sessionManager.getWorkingContext(sessionId);

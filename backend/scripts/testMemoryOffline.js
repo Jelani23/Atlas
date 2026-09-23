@@ -2,6 +2,12 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const tests = [
+    'projectQuestion.test.js',
+    'profileEvidence.test.js',
+    'focusedAnalysis.test.js',
+    'sourceStructure.test.js',
+    'projectUnderstanding.test.js',
+    'projectUnderstandingDatabase.test.js',
     'explanationDepthOracles.test.js',
     'sourceConversationRouting.test.js',
     'controlledChecks.test.js',
