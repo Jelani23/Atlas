@@ -456,49 +456,29 @@
 .conversation-thread-viewport {
   position: relative;
   overflow: hidden;
-  background: rgb(255 255 255 / 0.075);
+  background: transparent;
 }
 
-.conversation-thread-viewport::before,
-.conversation-thread-viewport::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 4;
-  pointer-events: none;
-}
-
-/* The transcript overlaps the header by 40px. Fade only inside that hidden overlap,
-   ending exactly where the readable transcript begins. */
-.conversation-thread-viewport::before {
-  top: 0;
-  height: 40px;
-  background: linear-gradient(
-    to bottom,
-    rgb(240 249 255 / 0.94) 0%,
-    rgb(240 249 255 / 0.76) 32%,
-    rgb(240 249 255 / 0.34) 68%,
-    rgb(240 249 255 / 0) 100%
-  );
-  border-radius: 0 0 58% 42% / 0 0 72% 48%;
-}
-
-/* The transcript overlaps the bottom controls by 36px. Fade only inside that hidden
-   overlap so messages appear to pass behind the chat/archive bar. */
-.conversation-thread-viewport::after {
-  bottom: 0;
-  height: 36px;
-  background: linear-gradient(
-    to top,
-    rgb(240 249 255 / 0.94) 0%,
-    rgb(240 249 255 / 0.76) 32%,
-    rgb(240 249 255 / 0.34) 68%,
-    rgb(240 249 255 / 0) 100%
-  );
-  border-radius: 58% 42% 0 0 / 72% 48% 0 0;
-}
-
+/* The transcript overlaps the header and footer by 0.75rem (-mt-3 / -mb-3).
+   Fade only the transcript itself inside those overlap zones, so the visible
+   transition ends exactly at the bottom of the header and starts exactly at
+   the top divider/chat bar. No tinted overlay is painted over the cloud. */
 .conversation-thread-scroll {
+  --conversation-seam-overlap: 0.75rem;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--conversation-seam-overlap),
+    black calc(100% - var(--conversation-seam-overlap)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--conversation-seam-overlap),
+    black calc(100% - var(--conversation-seam-overlap)),
+    transparent 100%
+  );
   scroll-padding-block: 2.5rem;
 }
+
