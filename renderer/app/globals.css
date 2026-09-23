@@ -459,26 +459,11 @@
   background: transparent;
 }
 
-/* The transcript overlaps the header and footer by 0.75rem (-mt-3 / -mb-3).
-   Fade only the transcript itself inside those overlap zones, so the visible
-   transition ends exactly at the bottom of the header and starts exactly at
-   the top divider/chat bar. No tinted overlay is painted over the cloud. */
+/* The cloud is a stable shell: only the transcript scrolls inside its safe
+   content area, while the header and footer keep their own fixed rows. */
 .conversation-thread-scroll {
-  --conversation-seam-overlap: 0.75rem;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    black var(--conversation-seam-overlap),
-    black calc(100% - var(--conversation-seam-overlap)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    black var(--conversation-seam-overlap),
-    black calc(100% - var(--conversation-seam-overlap)),
-    transparent 100%
-  );
-  scroll-padding-block: 2.5rem;
+  min-height: 0;
+  overscroll-behavior: contain;
+  scroll-padding-block: 1.5rem;
 }
 
