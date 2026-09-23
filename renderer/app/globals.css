@@ -459,31 +459,26 @@
   background: transparent;
 }
 
-/* Header and composer float inside the same cloud instead of taking layout
-   height away from the transcript. Messages scroll beneath those layers and
-   fade naturally at the seams, preserving the full conversation viewport. */
+/* The transcript overlaps the header and footer by 0.75rem (-mt-3 / -mb-3).
+   Fade only the transcript itself inside those overlap zones, so the visible
+   transition ends exactly at the bottom of the header and starts exactly at
+   the top divider/chat bar. No tinted overlay is painted over the cloud. */
 .conversation-thread-scroll {
-  --conversation-header-safe: 4.25rem;
-  --conversation-footer-safe: 4.6rem;
-  min-height: 0;
-  overscroll-behavior: contain;
-  padding-top: var(--conversation-header-safe);
-  padding-bottom: var(--conversation-footer-safe);
-  scroll-padding-top: var(--conversation-header-safe);
-  scroll-padding-bottom: var(--conversation-footer-safe);
+  --conversation-seam-overlap: 0.75rem;
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black 3.25rem,
-    black calc(100% - 3.55rem),
+    black var(--conversation-seam-overlap),
+    black calc(100% - var(--conversation-seam-overlap)),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    black 3.25rem,
-    black calc(100% - 3.55rem),
+    black var(--conversation-seam-overlap),
+    black calc(100% - var(--conversation-seam-overlap)),
     transparent 100%
   );
+  scroll-padding-block: 2.5rem;
 }
 
