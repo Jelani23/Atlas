@@ -178,7 +178,7 @@ export function ConversationsView({
 
   return (
     <div className="relative flex min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-3 pt-1 md:gap-3 md:px-3 md:pb-4">
-      <aside className="conversation-history-cloud relative -ml-4 grid w-[18.5rem] shrink-0 grid-rows-[auto_minmax(0,1fr)] pl-5 pr-7 pt-5 md:w-[20rem] md:pl-7 md:pr-8">
+      <aside className="conversation-history-cloud relative -ml-4 flex w-[18.5rem] shrink-0 flex-col pl-5 pr-7 pt-5 md:w-[20rem] md:pl-7 md:pr-8">
         <div className="flex items-center justify-between pb-2">
           <div>
             <p className="text-[8px] font-medium uppercase tracking-[0.16em] text-primary/55">Conversation memory</p>
@@ -298,8 +298,8 @@ export function ConversationsView({
         </>
       )}
 
-      <section className="conversation-workspace-cloud relative -mr-2 min-h-0 min-w-0 flex-1 overflow-hidden px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
-        <div className="conversation-workspace-header absolute left-6 right-6 top-5 z-20 flex min-h-[1.9rem] items-start justify-between gap-2 px-2 md:left-8 md:right-8 md:top-6">
+      <section className="conversation-workspace-cloud relative -mr-2 flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
+        <div className="relative z-20 flex min-h-[1.9rem] shrink-0 items-start justify-between gap-2 px-2">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
               {isViewingPast ? "Conversation archive" : "Current conversation"}
@@ -338,7 +338,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="conversation-thread-viewport absolute inset-x-6 bottom-5 top-5 z-0 flex min-h-0 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem] md:inset-x-8 md:bottom-6 md:top-6">
+        <div className="conversation-thread-viewport relative z-0 -mt-3 -mb-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem]">
           <ConversationThread
             messages={shownMessages}
             typing={isViewingPast ? false : typing}
@@ -353,7 +353,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="conversation-workspace-footer absolute bottom-5 left-6 right-6 z-20 border-t border-sky-deep/10 px-3 pt-1 md:bottom-6 md:left-8 md:right-8">
+        <div className="relative z-20 mt-0 shrink-0 border-t border-sky-deep/10 px-3 pt-1">
           {isViewingPast ? (
             <div className="flex min-h-[2.9rem] items-center justify-between gap-2 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-3">
               <div>
