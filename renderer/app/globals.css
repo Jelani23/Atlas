@@ -464,19 +464,23 @@
    transition ends exactly at the bottom of the header and starts exactly at
    the top divider/chat bar. No tinted overlay is painted over the cloud. */
 .conversation-thread-scroll {
-  --conversation-seam-overlap: 0.75rem;
+  --conversation-seam-overlap: 1.35rem;
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
+    rgba(0, 0, 0, 0.35) 0.45rem,
     black var(--conversation-seam-overlap),
     black calc(100% - var(--conversation-seam-overlap)),
+    rgba(0, 0, 0, 0.35) calc(100% - 0.45rem),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
+    rgba(0, 0, 0, 0.35) 0.45rem,
     black var(--conversation-seam-overlap),
     black calc(100% - var(--conversation-seam-overlap)),
+    rgba(0, 0, 0, 0.35) calc(100% - 0.45rem),
     transparent 100%
   );
   scroll-padding-block: 2.5rem;
