@@ -298,8 +298,8 @@ export function ConversationsView({
         </>
       )}
 
-      <section className="conversation-workspace-cloud relative -mr-2 grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
-        <div className="relative z-20 flex min-h-[1.9rem] shrink-0 items-start justify-between gap-2 px-2">
+      <section className="conversation-workspace-cloud relative -mr-2 min-h-0 min-w-0 flex-1 overflow-hidden px-6 pb-5 pt-5 md:-mr-3 md:px-8 md:pb-6 md:pt-6">
+        <div className="conversation-workspace-header absolute left-6 right-6 top-5 z-20 flex min-h-[1.9rem] items-start justify-between gap-2 px-2 md:left-8 md:right-8 md:top-6">
           <div className="min-w-0">
             <p className="text-[9px] font-medium uppercase tracking-[0.18em] text-primary/55">
               {isViewingPast ? "Conversation archive" : "Current conversation"}
@@ -338,7 +338,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="conversation-thread-viewport relative z-0 mx-2 my-2 flex min-h-0 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem] md:mx-3">
+        <div className="conversation-thread-viewport absolute inset-x-6 bottom-5 top-5 z-0 flex min-h-0 flex-col overflow-hidden rounded-[2rem_2.45rem_2.05rem_2.3rem] md:inset-x-8 md:bottom-6 md:top-6">
           <ConversationThread
             messages={shownMessages}
             typing={isViewingPast ? false : typing}
@@ -353,7 +353,7 @@ export function ConversationsView({
           )}
         </div>
 
-        <div className="relative z-20 shrink-0 border-t border-sky-deep/10 px-3 pt-2">
+        <div className="conversation-workspace-footer absolute bottom-5 left-6 right-6 z-20 border-t border-sky-deep/10 px-3 pt-1 md:bottom-6 md:left-8 md:right-8">
           {isViewingPast ? (
             <div className="flex min-h-[2.9rem] items-center justify-between gap-2 rounded-[1.4rem_1.75rem_1.5rem_1.85rem] border border-white/30 bg-white/16 px-3">
               <div>
