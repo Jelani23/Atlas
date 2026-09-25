@@ -35,6 +35,8 @@ async function main(){
     assert.equal(detect('Can you delete src/example.js?'),null);
     assert.equal(detect('Do not read src/example.js'),null);
     const prior={path:source.path,agentId:'alice',at:100};
+    assert.equal(detect('What does that file do if the normalizer returns null?',prior,'alice',200,['src/planner/normalizer.js']).filename,source.path);
+    assert.equal(detect('What does src/other.js do compared with that file?',prior,'alice',200).filename,'src/other.js');
     assert(detect('What does that file do?',prior,'alice',200));
     assert.equal(detect('What does that file do?',prior,'bob',200),null);
     assert.equal(detect('What does that file do?',prior,'alice',600100),null);

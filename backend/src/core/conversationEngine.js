@@ -196,10 +196,10 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
             try{
                 const permission=require('../permissions/permissionManager').check('readCode');
                 if(!permission.allowed||permission.requiresApproval)throw new Error('Source reading is not permitted.');
-                const result=await projectQuestion.createService({repository:understanding.configuredRepository()}).answer(question,{
+                const result=await projectQuestion.createService({repository:understanding.configuredRepository(),evidenceBundle:question.analysisMode===true}).answer(question,{
                     agentId:agent.agentId,requestId,complete:(messages,options)=>modelAdapter.complete(messages,options),isCancelled:()=>sessionScope.isSessionClosed()
                 });
-                sessionScope.projectQuestion={path:result.path,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question};
+                sessionScope.projectQuestion={path:result.path,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question,analysisMode:question.analysisMode===true,targetSymbol:result.coverage?.target?.name};
                 reply=result.reply;
                 speech=result.speech;
             }catch(error){reply=`Project question could not complete: ${error.message}`;}

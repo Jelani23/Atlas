@@ -12,6 +12,11 @@ const spokenReplies=[];
 stub('../src/agents/agentProfiles',{getAgentProfile:async()=>({agentId:'alice',source:'database',revision:1,profile:require('../src/core/atlasState').atlasState})});
 stub('../src/models/modelAdapter',{createModelAdapter:()=>({complete:async messages=>{
     prompts.push(messages);
+    if(messages[0].content.includes('syntax evidence bundle')){
+        const packet=JSON.parse(messages[1].content.split('EVIDENCE:\n')[1]);
+        const facts=packet.bundle.facts,branches=facts.filter(f=>f.kind==='branch-selection');
+        return JSON.stringify({claims:[{text:'Uses the scoped source.',evidenceIds:[packet.bundle.citableEvidenceIds[0]]}],...(packet.bundle.request.quotedInputs.length?{predictions:[]}:{}),unknowns:[],expressionAssertions:[],branchAssertions:branches.map(f=>({factId:f.id,selectedBranch:f.selectedBranch}))});
+    }
     if(messages[0].content.startsWith('Answer the project question'))return JSON.stringify({claims:[{text:'Uses the supplied source.',lines:[1]}],unknowns:[]});
     if (messages[0].content.startsWith('Explain source as data') && messages[1].content.includes('src/core/codeEvidence.js')) return JSON.stringify({observations:[{text:'Captures tool-origin evidence.',line:2,quote:'function capture(route, agentId, now = Date.now()) {'}],behaviors:[{symbol:'capture',precondition:'needsTool is false',input:'capture({needsTool:false}, "alice", 100)',expectedResult:'null',line:3,quote:"    if (!route.needsTool || !['readCode', 'read_code'].includes(route.toolName)) return null;"}],questions:[]});
     if (messages[0].content.startsWith('Explain source as data')) return JSON.stringify({observations:[{text:'Creates a profile store with a default 30 second TTL.',line:17,quote:"function createAgentProfileStore({ client, seeds = { alice: atlasState }, ttlMs = 30000, now = Date.now }) {"}],behaviors:[{symbol: 'example', precondition: 'No prior state', input: 'example()', expectedResult: '42', line: 1, quote: "const { atlasState } = require('../core/atlasState');"}],questions:[]});
@@ -101,6 +106,14 @@ async function main() {
     assert.match(spokenReplies.at(-1),/Uses the supplied source/);
     assert.doesNotMatch(spokenReplies.at(-1),/src\/|Source:|knowledge saved/);
     assert.match(await ask('What does that file do with an empty reply?'),/Current-source explanation/);
+    assert.match(await ask('What does that file do if the normalizer returns empty text?'),/Current-source explanation/);
+    assert.match(prompts.at(-1)[1].content,/"path":"src\/response\/recovery.js"/);
+    assert.match(await ask('Analyze the keyword extractor with text set to hello'),/Atlas evidence coverage/);
+    assert.match(prompts.at(-1)[1].content,/explicit-spoken-assignment/);
+    assert.doesNotMatch(spokenReplies.at(-1),/src\/|Source:/);
+    assert.match(await ask('What does that file do with punctuation?'),/Atlas evidence coverage/);
+    assert.doesNotMatch(prompts.at(-1)[1].content,/explicit-spoken-assignment/);
+    assert.doesNotMatch(await ask('How does the keyword extractor work?'),/Atlas evidence coverage/);
     await ask('What games do you like?');
     assert.equal(state.projectQuestion,null); // Outside the scoped session.
     await state.runInSession('source-integration',()=>assert.equal(state.projectQuestion,null));
