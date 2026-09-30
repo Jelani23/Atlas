@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" preserveAspectRatio="none">
+  <defs>
+    <radialGradient id="fill" cx="45%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.94"/>
+      <stop offset="1" stop-color="#dcefff" stop-opacity="0.76"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="7" stdDeviation="10" flood-color="#68a9e6" flood-opacity="0.34"/></filter>
+  </defs>
+  <path filter="url(#glow)" d="M95 396 C45 365 49 312 72 285 C37 248 46 190 78 166 C57 111 102 70 151 78 C184 34 241 36 270 78 C317 55 371 78 379 126 C429 136 443 189 412 224 C438 261 422 310 395 329 C409 374 376 414 331 403 C294 432 244 419 222 404 C184 429 132 416 113 399 C107 399 101 398 95 396 Z" fill="url(#fill)" stroke="#83baf0" stroke-width="5"/>
+  <path d="M111 365 C76 344 82 307 96 287 C71 254 80 211 100 193 C89 150 117 119 153 122 C185 88 228 91 257 122 C296 104 337 122 347 158 C383 168 392 203 371 229" fill="none" stroke="#fff" stroke-opacity="0.74" stroke-width="3" stroke-linecap="round"/>
+</svg>

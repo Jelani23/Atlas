@@ -1,13 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Quicksand } from 'next/font/google'
+import { Quicksand } from 'next/font/google'
 import './globals.css'
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
 
 const quicksand = Quicksand({
   subsets: ['latin'],
@@ -21,6 +15,16 @@ export const metadata: Metadata = {
   description:
     'Alice is a calm, elegant personal AI companion running on Atlas OS. A living presence in the sky, always ready to help.',
   generator: 'v0.app',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'Atlas',
+  appleWebApp: {
+    capable: true,
+    title: 'Atlas',
+    statusBarStyle: 'black-translucent',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: [
       {
@@ -43,6 +47,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'light',
   themeColor: '#dcecfb',
+  viewportFit: 'cover',
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
@@ -53,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`light ${inter.variable} ${quicksand.variable} bg-background`}
+      className={`light ${quicksand.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         {children}

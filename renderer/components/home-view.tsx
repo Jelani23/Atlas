@@ -10,6 +10,7 @@ import type { Message } from "@/lib/types"
 
 interface HomeViewProps {
   state: AtlasState
+  hostAvailable: boolean
   steps: string[]
   messages: Message[]
   typing: boolean
@@ -21,6 +22,7 @@ interface HomeViewProps {
 
 export function HomeView({
   state,
+  hostAvailable,
   steps,
   messages,
   typing,
@@ -29,56 +31,91 @@ export function HomeView({
   onToggleMic,
   onOpenConversations,
 }: HomeViewProps) {
+  const visualState: AtlasState = hostAvailable ? state : "dormant"
+  const dormant = visualState === "dormant"
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* floating layer — thought path top-left, recent conversation top-right.
-          `absolute` takes both fully out of the page's flow, onto their own
-          stacking layer, so neither one's size can ever push/shrink anything
-          else on the page. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 px-6 pt-2 md:px-10 md:pt-5">
-        <ActivityPanel steps={steps} state={state} />
+    <div className="animate-alice-page-in relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* Home-only ambient layer. The global sky supplies the atmosphere; these
+          smaller forms make Alice's immediate space feel inhabited. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className={`animate-drift-slow absolute left-[12%] top-[37%] transition-opacity duration-700 ${dormant ? "opacity-10" : "opacity-20"}`}>
+          <span className="absolute h-8 w-12 rounded-full bg-white/42 blur-[2px]" />
+          <span className="absolute -left-3 top-3 h-6 w-8 rounded-full bg-white/34 blur-[2px]" />
+        </div>
+        <div className={`animate-drift absolute right-[13%] top-[33%] transition-opacity duration-700 ${dormant ? "opacity-8" : "opacity-18"}`}>
+          <span className="absolute h-7 w-11 rounded-full bg-white/40 blur-[2px]" />
+          <span className="absolute left-7 top-3 h-5 w-7 rounded-full bg-white/30 blur-[2px]" />
+        </div>
+      </div>
+
+      {/* Secondary information stays tucked at the edges until it is useful. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 px-5 pt-2 md:px-10 md:pt-5">
+        <ActivityPanel steps={hostAvailable ? steps : []} state={visualState} />
         <div className="pointer-events-auto">
           <RecentConversation messages={messages} onOpen={onOpenConversations} />
         </div>
       </div>
 
-      {/* stage + chat bar, as two independent grid rows (1fr / auto) instead
-          of a centered flex column. A grid row's size only ever depends on
-          its own content, never on a sibling row's — so the chat bar growing
-          as you type can never push the stage (cloud + response) upward. */}
       <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] overflow-hidden">
-        {/* stage — three independent grid rows (1fr / auto / 1fr). The top
-            1fr is a pure spacer that pushes the cloud row down to the
-            vertical center of the stage; the cloud's own row is sized only
-            by its fixed height classes, so it can never be nudged by its
-            neighbors. The bottom 1fr — the same size as the spacer above,
-            so the cloud lands dead-center — is exactly the space between
-            the cloud and the chat bar, and that's where the response lives,
-            scrolling within its own row instead of growing it. Same "own
-            container space" pattern as the floating layer above; reuse it
-            for any future stage element. */}
         <div className="grid min-h-0 grid-rows-[1fr_auto_1fr] overflow-hidden px-4">
           <div aria-hidden="true" />
 
-          <div className="mx-auto w-full max-w-4xl">
-            <div className="mx-auto h-[26vh] max-h-[300px] min-h-[160px] w-full">
-              <AliceCloud state={state} />
+          {/* Alice is the visual anchor. The soft ring and neighboring puffs are
+              environmental, not panels or status indicators. */}
+          <div className="relative mx-auto w-full max-w-4xl">
+            <div
+              aria-hidden="true"
+              className={`absolute left-1/2 top-1/2 h-[72%] w-[54%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/18 bg-white/[0.035] blur-[0.3px] transition-opacity duration-700 ${
+                dormant ? "opacity-25" : "opacity-70"
+              }`}
+            />
+            <div
+              aria-hidden="true"
+              className={`animate-drift-slow absolute left-[17%] top-[42%] h-8 w-14 rounded-[52%_48%_58%_42%/48%_55%_45%_52%] bg-white/24 blur-[1px] transition-opacity duration-700 ${
+                dormant ? "opacity-15" : "opacity-55"
+              }`}
+            />
+            <div
+              aria-hidden="true"
+              className={`animate-drift absolute right-[18%] top-[49%] h-7 w-12 rounded-[46%_54%_44%_56%/56%_44%_52%_48%] bg-white/22 blur-[1px] transition-opacity duration-700 ${
+                dormant ? "opacity-10" : "opacity-45"
+              }`}
+            />
+
+            <div className="relative mx-auto h-[27vh] max-h-[310px] min-h-[165px] w-full">
+              <AliceCloud state={visualState} />
             </div>
           </div>
 
           <div className="flex min-h-0 flex-col overflow-hidden">
-            <HomeResponse
-              messages={messages}
-              typing={typing}
-              onContinueInConversations={onOpenConversations}
-            />
+            {hostAvailable ? (
+              <HomeResponse
+                messages={messages}
+                typing={typing}
+                onContinueInConversations={onOpenConversations}
+              />
+            ) : (
+              <div className="animate-rise flex min-h-0 flex-1 flex-col items-center justify-start px-6 pt-3 text-center">
+                <p className="font-display text-[23px] leading-none text-foreground/70">Alice is offline</p>
+                <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-foreground/40">
+                  She'll wake back up when the ATLAS host returns. Your saved chats and workspace are still here.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* quick input — its own grid row, free to grow as you type without
-            ever affecting the stage row above it */}
         <div className="relative z-30 mx-auto w-full max-w-2xl px-4 pb-6 md:pb-8">
-          <ChatInput onSend={onSend} listening={listening} onToggleMic={onToggleMic} />
+          <div className="animate-alice-page-in [animation-delay:90ms]">
+            <ChatInput
+              onSend={onSend}
+              listening={listening}
+              onToggleMic={onToggleMic}
+              disabled={!hostAvailable}
+              disabledPlaceholder="Alice is offline for now"
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import type { LucideIcon } from "lucide-react"
+import { type LucideIcon } from "lucide-react"
 
 interface ComingSoonProps {
   icon: LucideIcon
@@ -14,9 +14,7 @@ export function ComingSoon({ icon: Icon, label }: ComingSoonProps) {
         <Icon className="h-6 w-6" aria-hidden="true" />
       </span>
       <p className="font-display text-lg font-medium text-muted-foreground/80">{label}</p>
-      <p className="max-w-xs text-sm text-muted-foreground/60">
-        This part of Atlas is still being built.
-      </p>
+      <p className="max-w-xs text-sm text-muted-foreground/60">This part of Atlas is still being built.</p>
     </div>
   )
 }

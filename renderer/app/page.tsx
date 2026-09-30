@@ -1,11 +1,14 @@
-import { AtlasApp } from "@/components/atlas-app"
+import { AtlasRuntime } from "@/components/atlas-runtime"
+import { CloudRuntime } from "@/components/cloud-runtime"
 import { SkyBackground } from "@/components/sky-background"
 
 export default function Page() {
   return (
     <div className="relative h-dvh overflow-hidden">
       <SkyBackground />
-      <AtlasApp />
+      <CloudRuntime>
+        <AtlasRuntime />
+      </CloudRuntime>
     </div>
   )
 }

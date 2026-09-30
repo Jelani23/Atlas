@@ -1,9 +1,10 @@
 // The standardized event vocabulary Atlas's backend speaks over the Electron
-// bridge. The UI should only ever depend on these shapes — never on the
-// names of backend files/functions that produced them.
+// or browser bridge. The UI should only ever depend on these shapes — never on
+// the names of backend files/functions that produced them.
 
 export type AtlasEventType =
   | "user.message"
+  | "atlas.request_started"
   | "atlas.thinking"
   | "atlas.tool_started"
   | "atlas.tool_progress"
@@ -12,8 +13,9 @@ export type AtlasEventType =
   | "atlas.error"
   | "atlas.status"
   | "atlas.model_changed"
-  // One LLM token, streamed live as the backend generates it (payload: { token: string }).
   | "atlas.streaming"
+  | "atlas.audio_chunk"
+  | "permission.requested"
 
 export interface AtlasEvent {
   type: AtlasEventType
@@ -32,6 +34,8 @@ export interface AtlasBridge {
   resumeConversation: (sessionId: string) => Promise<{ ok: boolean; sessionId: string }>
   deleteConversation: (sessionId: string) => Promise<{ ok: boolean; newSessionId: string | null }>
   renameConversation: (sessionId: string, title: string) => Promise<{ ok: boolean; title: string | null }>
+  transcribeAudio: (base64Audio: string) => Promise<{ ok: boolean; text?: string; error?: string }>
+  interrupt: () => Promise<{ ok: boolean; error?: string }>
   onEvent: (callback: (event: AtlasEvent) => void) => () => void
 }
 
