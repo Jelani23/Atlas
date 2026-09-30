@@ -178,7 +178,7 @@ export function ConversationsView({
 
   return (
     <div className="relative flex min-h-0 flex-1 gap-2 overflow-hidden px-2 pb-3 pt-1 md:gap-3 md:px-3 md:pb-4">
-      <aside className="conversation-history-cloud relative -ml-4 flex w-[18.5rem] shrink-0 flex-col pl-5 pr-7 pt-5 md:w-[20rem] md:pl-7 md:pr-8">
+      <aside className="conversation-history-cloud relative -ml-2 flex w-[22rem] shrink-0 flex-col pl-5 pr-7 pt-5 md:-ml-3 md:w-[23rem] md:pl-7 md:pr-8">
         <div className="flex items-center justify-between pb-2">
           <div>
             <p className="text-[8px] font-medium uppercase tracking-[0.16em] text-primary/55">Conversation memory</p>
