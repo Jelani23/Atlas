@@ -329,8 +329,8 @@ class AtlasInterface extends EventEmitter {
         this.emit('atlas.status', { phase: 'conversation_reset' });
     }
 
-    async sendMessage(text, interaction) {
-        return this.evidencePilot.foreground(() => this._sendMessage(text, interaction));
+    async sendMessage(text, interaction, attachments = {}) {
+        return this.evidencePilot.foreground(() => this._sendMessage(text, interaction, attachments));
     }
 
     reanalyzeConnectedEvidence(focus) {
@@ -338,7 +338,7 @@ class AtlasInterface extends EventEmitter {
         return this.evidencePilot.reanalyze(focus);
     }
 
-    async _sendMessage(text, interaction) {
+    async _sendMessage(text, interaction, attachments = {}) {
         if (this._shutdownPromise) throw new Error('Atlas is shutting down.');
         if (!this.ready) await this.initialize();
         while (this._conversationTransition) await this._conversationTransition;
@@ -357,7 +357,9 @@ class AtlasInterface extends EventEmitter {
                 sessionId: this.sessionId,
                 taskId,
                 requestId,
-                interaction
+                interaction,
+                screenCapture: attachments.screenCapture,
+                screenRequestError: attachments.screenRequestError
             });
             return resultObj; 
         } catch (err) {

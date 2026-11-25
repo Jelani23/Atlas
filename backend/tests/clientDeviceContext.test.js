@@ -17,7 +17,7 @@ async function main() {
     assert.match(context, /"displayName":"MacBook"/);
     assert.match(context, /"os":"macos"/);
     assert.match(context, /Backend host OS:/);
-    assert.match(context, /not implemented in Phase 1/);
+    assert.match(context, /Camera capture is not implemented/);
     const unknown = await buildContext(base);
     assert.match(unknown, /Client device: unknown/);
     assert(!unknown.includes('MacBook'), 'A previous client must not leak into the next context');

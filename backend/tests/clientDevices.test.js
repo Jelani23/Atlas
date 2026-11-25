@@ -52,7 +52,8 @@ async function main() {
         const origin = registry.snapshot(a.connectionId);
         assert(Object.isFrozen(origin.client.capabilities.microphone));
         assert.equal(registry.resolveTarget(origin, 'textInput').transport.name, 'pc socket');
-        assert.equal(registry.resolveTarget(origin, 'screenshot').reason, 'unsupported');
+        assert.equal(registry.resolveTarget(origin, 'screenshot').reason, 'permission-unavailable');
+        assert.equal(registry.resolveTarget(origin, 'camera').reason, 'unsupported');
         assert.equal(registry.resolveTarget(origin, 'microphone').reason, 'permission-unavailable');
         assert.equal(registry.resolveTarget({ ...origin, client: mac }, 'textInput').reason, 'unknown-client');
         const voice = await a.dispatch('transcribeAudio', ['audio'], atlas);

@@ -16,7 +16,7 @@ interface ConversationsViewProps {
   focusMessageId: string | null
   /** id of the live/current session, so the sidebar can mark it and hydrate its own preview */
   sessionId: string | null
-  onSend: (text: string) => void
+  onSend: (text: string, options?: { screenDisplayId?: string }) => void | Promise<void>
   onToggleMic: () => void
   onNewConversation: () => void
   onResumeConversation: (sessionId: string) => Promise<void>

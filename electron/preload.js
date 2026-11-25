@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('atlasBridge', {
     sendMessage: (text, options) => ipcRenderer.invoke('atlas:sendMessage', text, options),
     getClientDevice: () => ipcRenderer.invoke('atlas:getClientDevice'),
+    listScreens: () => ipcRenderer.invoke('atlas:listScreens'),
     getState: () => ipcRenderer.invoke('atlas:getState'),
     listModes: () => ipcRenderer.invoke('atlas:listModes'),
     setMode: (mode) => ipcRenderer.invoke('atlas:setMode', mode),

@@ -165,7 +165,7 @@ function handleMessage(userInput, options) {
     });
 }
 
-async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId, turn, interaction }) {
+async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId, turn, interaction, screenCapture, screenRequestError }) {
     const requestStart = Date.now();
 
     try {
@@ -193,6 +193,33 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         sessionScope.codeEvidence = priorCodeEvidence;
         console.log(`[AgentProfile] ${agent.agentId}: ${agent.source}, revision ${agent.revision ?? 'seed'}${agent.degraded ? ' (degraded)' : ''}`);
         const userMessageId = await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
+
+        if (screenRequestError) {
+            return finishImmediateReply(screenRequestError, { memory, sessionId, taskId, requestId, requestStart });
+        }
+        if (screenCapture) {
+            let reply;
+            try {
+                // Previous visual descriptions are not evidence of these pixels.
+                // Keep Alice's character, but exclude retrieval/history that can
+                // anchor a fresh screenshot answer to the previous monitor.
+                const context = personalityEngine.getSystemPrompt(
+                    mode === 'auto' ? personalityEngine.DEFAULT_MODE : mode,
+                    undefined, null, agent.profile, { userInput, history: [] }
+                );
+                reply = await require('../devices/screenAnalysis').analyzeScreen({
+                    capture: screenCapture, prompt: userInput, context, requestId,
+                    isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
+                });
+            } catch (error) {
+                reply = `I couldn't analyze that screenshot: ${error.message}`;
+            }
+            if (turn.superseded || sessionScope.isSessionClosed()) {
+                taskManager.cancelTask(taskId);
+                return { reply: '', audio: null };
+            }
+            return finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart });
+        }
 
         // Explicit single-file learning pilot; never triggered by ordinary discussion.
         const understanding = require('../memory/projectUnderstanding');

@@ -14,7 +14,7 @@ interface HomeViewProps {
   messages: Message[]
   typing: boolean
   listening: boolean
-  onSend: (text: string) => void
+  onSend: (text: string, options?: { screenDisplayId?: string }) => void | Promise<void>
   onToggleMic: () => void
   onOpenConversations: () => void
 }

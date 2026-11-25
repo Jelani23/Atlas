@@ -26,7 +26,7 @@ function loadClientIdentity(directory, { platform = process.platform, env = proc
             textInput: { supported: true, permission: 'not-required' },
             audioPlayback: { supported: true, permission: 'not-required' },
             microphone: { supported: true, permission: 'unknown' },
-            screenshot: { supported: false, permission: 'unknown' },
+            screenshot: { supported: true, permission: 'prompt' },
             camera: { supported: false, permission: 'unknown' },
         },
     };

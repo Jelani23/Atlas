@@ -106,6 +106,10 @@ export function AtlasApp() {
     }
 
     const unsubscribe = bridge.onEvent((event) => {
+      if (event.type === 'atlas.screen_captured') {
+        setSteps(prev => [...prev, `Captured ${String(event.payload.displayLabel)} at ${new Date(Number(event.payload.capturedAt)).toLocaleTimeString()}`])
+        return // Local-only pixels are handled by ScreenControl; never log them.
+      }
       if (event.type === 'atlas.status' && event.payload.phase === 'client_connection') {
         setConnected(event.payload.status === 'ready')
         if (event.payload.status !== 'ready') setClientLabel(null)
@@ -335,7 +339,7 @@ export function AtlasApp() {
   }, [])
 
   const latestFlowRef = useRef(0)
-  const runFlow = useCallback(async (userText: string, options?: { transcriptionId?: string }) => {
+  const runFlow = useCallback(async (userText: string, options?: { transcriptionId?: string; screenDisplayId?: string }) => {
     const flowId = ++latestFlowRef.current
     clearTimeout(settleTimer.current)
     

@@ -14,6 +14,7 @@ export type AtlasEventType =
   | "atlas.model_changed"
   // One LLM token, streamed live as the backend generates it (payload: { token: string }).
   | "atlas.streaming"
+  | "atlas.screen_captured"
 
 export interface AtlasEvent {
   type: AtlasEventType
@@ -21,7 +22,8 @@ export interface AtlasEvent {
 }
 
 export interface AtlasBridge {
-  sendMessage: (text: string, options?: { transcriptionId?: string }) => Promise<{ ok: boolean; reply?: string; error?: string }>
+  sendMessage: (text: string, options?: { transcriptionId?: string; screenDisplayId?: string }) => Promise<{ ok: boolean; reply?: string; error?: string }>
+  listScreens: () => Promise<ScreenInventory>
   getClientDevice: () => Promise<{ connectionId: string; inputSource: string; client: null | {
     schemaVersion: number; deviceId: string; displayName: string; os: string;
     clientType: string; deviceKind: string; trust: 'self-reported';
@@ -38,6 +40,13 @@ export interface AtlasBridge {
   deleteConversation: (sessionId: string) => Promise<{ ok: boolean; newSessionId: string | null }>
   renameConversation: (sessionId: string, title: string) => Promise<{ ok: boolean; title: string | null }>
   onEvent: (callback: (event: AtlasEvent) => void) => () => void
+}
+
+export interface ScreenInventory {
+  selectedDisplayId?: string | null
+  observedAt: number
+  permission: string
+  displays: Array<{ id: string; label: string; primary: boolean; current: boolean; width: number; height: number; scaleFactor: number; rotation: number }>
 }
 
 declare global {

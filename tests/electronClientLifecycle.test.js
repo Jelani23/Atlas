@@ -7,7 +7,7 @@ const shared = require('../atlas.config.json');
 
 async function exercise(role) {
     const calls = [], ipc = new Map();
-    let socket, quits = 0;
+    let socket, quits = 0, inventoryFails = false;
     const app = new EventEmitter();
     Object.assign(app, { isPackaged: false, getPath: () => '/fixture', whenReady: () => Promise.resolve(), quit: () => { quits++; } });
     class Window extends EventEmitter {
@@ -35,6 +35,7 @@ async function exercise(role) {
             if (request === 'ws') return Socket;
             if (request === 'fs') return { existsSync: () => true };
             if (request === './clientIdentity') return { loadClientIdentity: () => ({ deviceId: 'local-device' }) };
+            if (request === './screenAwareness') return { isScreenRequest: () => false, createScreenAwareness: () => ({ inventory: () => { if (inventoryFails) throw new Error('Fixture inventory unavailable'); return null; } }) };
             if (request === './launchConfig') return { readConfig: () => shared, resolveLaunchConfig: () => actualConfig.resolveLaunchConfig({ config: shared, env: { ATLAS_ROLE: role } }) };
         }
         return originalLoad.call(this, request, parent, ...args);
@@ -47,6 +48,10 @@ async function exercise(role) {
         assert.equal(calls[0].args[0].deviceId, 'local-device');
         await ipc.get('atlas:sendMessage')({}, 'hello');
         assert.equal(calls[1].method, 'sendMessage');
+        inventoryFails = true;
+        await ipc.get('atlas:sendMessage')({}, 'chat still works');
+        assert.equal(calls[2].method, 'sendMessage');
+        assert.equal(calls[2].args[1].screens, null, 'Monitor enumeration failure must not block chat');
         app.emit('before-quit', { preventDefault() {} });
         await new Promise(resolve => setImmediate(resolve));
         assert.equal(calls.some(c => c.method === 'shutdown'), role === 'host', 'Only host shutdown may end the backend session');

@@ -157,3 +157,7 @@ Environment overrides are `ATLAS_ROLE=auto|host|client`, `ATLAS_WS_URL`, and `AT
 Configuration precedence is environment, local file, shared file. Host mode connects only to its local backend port; use client mode for a remote destination. If explicitly converting a client installation to a host, run `npm --prefix backend install` and configure its backend services first. Tailscale and the host backend must be running for client communication; an offline host does not cause clients to start a replacement backend.
 
 This launcher change covers source/development startup (`npm run dev`). Packaged Electron retains its existing external-backend requirement; it now selects the correct connection and shutdown behavior, but does not bundle a new backend-service supervisor. Live Mac startup and voice checks remain part of the device-awareness acceptance test.
+
+### Screen and monitor awareness
+
+The chatbar's **paperclip → Screen** menu lists this client's monitors and lets you share one selected screenshot with Alice. The menu remembers the monitor and shows the last captured image. Ask **“Can you tell me what's going on in my screen?”** by text or voice, or click Share, to capture directly without ATLAS permission popups. Operating-system Screen Recording permission still applies. There is no background recording. See [Phase 2 setup, limitations, tests and live acceptance checks](docs/screen-monitor-awareness.md). Run `npm run test:screens` for the focused offline suites.

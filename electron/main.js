@@ -1,5 +1,5 @@
 // electron/main.js
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, desktopCapturer, systemPreferences } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
@@ -8,6 +8,8 @@ const { readConfig, resolveLaunchConfig } = require('./launchConfig');
 const launchConfig = resolveLaunchConfig({ config: readConfig(path.join(__dirname, '..')) });
 let clientIdentity;
 let registrationReady = null;
+const { createScreenAwareness, isScreenRequest } = require('./screenAwareness');
+const screenAwareness = createScreenAwareness({ screen, desktopCapturer, systemPreferences });
 
 // Marker file that tells us whether Atlas has ever launched on this machine
 // before. Lives in Electron's per-user data dir, so it survives app updates
@@ -175,7 +177,41 @@ function createWindow() {
 }
 
 // IPC surface: renderer -> Electron -> Atlas Backend (via WS)
-ipcMain.handle('atlas:sendMessage', async (_event, text, options) => callAtlas('sendMessage', [text, options]));
+ipcMain.handle('atlas:listScreens', () => screenAwareness.inventory(mainWindow));
+ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
+    const originSocket = ws;
+    if (!originSocket || originSocket.readyState !== WebSocket.OPEN) throw new Error('Connect to the backend before sharing a screen or sending a message.');
+    // Renderer cannot supply pixels or fabricated monitor metadata. Only this
+    // explicit client-side request path can capture. OS permissions still apply.
+    let capture = null, requestedMonitorUnavailable, requestedOtherMonitorIssue;
+    try {
+        if (options.screenDisplayId !== undefined || isScreenRequest(text)) {
+            capture = await screenAwareness.capture(mainWindow, options.screenDisplayId, { requested: options.screenDisplayId === undefined && isScreenRequest(text), text });
+        }
+    } catch (error) {
+        if (error.code === 'SCREEN_RANGE') requestedMonitorUnavailable = error.requestedMonitor;
+        else if (error.code === 'SCREEN_OTHER') requestedOtherMonitorIssue = true;
+        else throw error;
+    }
+    if (ws !== originSocket || originSocket.readyState !== WebSocket.OPEN) throw new Error('Connection changed while sharing; please try again.');
+    if (capture) mainWindow?.webContents.send('atlas:event', { type: 'atlas.screen_captured', payload: {
+        displayId: capture.displayId, displayLabel: capture.displayLabel, capturedAt: capture.capturedAt,
+        imageHash: capture.imageHash, dataUrl: `data:image/jpeg;base64,${capture.data}`,
+    } });
+    let screens = null;
+    try { screens = screenAwareness.inventory(mainWindow); }
+    catch (error) {
+        if (capture) throw error;
+        console.warn('[Electron] Monitor inventory unavailable:', error.message);
+    }
+    return callAtlas('sendMessage', [text, {
+        transcriptionId: options.transcriptionId,
+        screens,
+        requestedMonitorUnavailable,
+        requestedOtherMonitorIssue,
+        ...(capture ? { screenCapture: { ...capture, observationOnly: isScreenRequest(text) } } : {}),
+    }]);
+});
 ipcMain.handle('atlas:getClientDevice', () => callAtlas('getClientDevice'));
 ipcMain.handle('atlas:getState', () => callAtlas('getState'));
 ipcMain.handle('atlas:listModes', () => callAtlas('listModes'));

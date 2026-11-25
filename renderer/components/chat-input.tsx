@@ -1,10 +1,11 @@
 "use client"
 
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react"
-import { ArrowUp, Mic, Paperclip } from "lucide-react"
+import { ArrowUp, Mic } from "lucide-react"
+import { ScreenControl } from './screen-control'
 
 interface ChatInputProps {
-  onSend: (text: string) => void
+  onSend: (text: string, options?: { screenDisplayId?: string }) => void | Promise<void>
   listening: boolean
   onToggleMic: () => void
 }
@@ -54,13 +55,7 @@ export function ChatInput({ onSend, listening, onToggleMic }: ChatInputProps) {
   return (
     <form onSubmit={handleSubmit} className="w-full">
       <div className="group flex items-end gap-2 rounded-[1.75rem] border border-border/70 bg-card/70 p-2 pl-4 backdrop-blur-xl shadow-[0_12px_40px_-16px_rgba(80,130,190,0.45)] transition-colors focus-within:border-primary/50 focus-within:bg-card/90">
-        <button
-          type="button"
-          className="mb-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          aria-label="Attach a file"
-        >
-          <Paperclip className="h-[18px] w-[18px]" aria-hidden="true" />
-        </button>
+        <ScreenControl disabled={listening} onShare={(text, displayId) => onSend(text, { screenDisplayId: displayId })} />
 
         <label htmlFor="alice-input" className="sr-only">
           Message Alice
