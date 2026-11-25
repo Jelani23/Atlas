@@ -7,10 +7,13 @@
   "scripts": {
     "dev:renderer": "npm --prefix renderer run dev",
     "dev:backend": "nodemon --watch backend/src --exec \"node backend/src/server.js\" --ext js,json",
-    "dev": "concurrently -k -n RENDERER,BACKEND,ELECTRON -c blue,magenta,green \"npm run dev:renderer\" \"npm run dev:backend\" \"wait-on http://localhost:3000 && wait-on http://localhost:7341/health && cross-env ATLAS_RENDERER_URL=http://localhost:3000 electron .\"",
+    "dev": "node scripts/dev.js",
+    "dev:host": "node scripts/dev.js --role=host",
+    "dev:client": "node scripts/dev.js --role=client",
+    "test:launch": "node tests/launchConfig.test.js && node tests/electronClientLifecycle.test.js",
     "build:renderer": "npm --prefix renderer run build",
     "build": "npm run build:renderer && electron-builder",
-    "postinstall": "npm --prefix backend install && npm --prefix renderer install"
+    "postinstall": "node scripts/installDependencies.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -28,6 +31,7 @@
     "productName": "Atlas",
     "files": [
       "electron/**/*",
+      "atlas.config.json",
       "renderer/out/**/*",
       "backend/**/*",
       "!backend/node_modules/better-sqlite3/build/**/*.o"

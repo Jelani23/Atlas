@@ -89,4 +89,12 @@ Passed automated checks:
 
 The real PC/MacBook demonstration and live model/audio checks remain pending. Automated tests do not prove the installed model will always describe its context correctly.
 
-The existing shared active conversation, broadcast response/audio events, global interrupt behavior, and Electron shutdown RPC remain unchanged. This is per-interaction identity, not independent concurrent user sessions or output isolation. Device context is not written into historical conversation rows. Screenshot/camera availability is not actively probed; those clients and handlers belong to later phases.
+The existing shared active conversation, broadcast response/audio events, and global interrupt behavior remain unchanged. This is per-interaction identity, not independent concurrent user sessions or output isolation. Device context is not written into historical conversation rows. Screenshot/camera availability is not actively probed; those clients and handlers belong to later phases.
+
+## Follow-up: one-branch host/client launch
+
+`npm run dev` now detects the configured Windows host `DESKTOP-ALHAOC4`; other machines run only the local frontend and Electron and connect to `ws://100.120.153.51:7341`. The supplied `100.71.243.117` entry identified the Mac and is not used as the backend destination. The Mac no longer needs a separate branch or a manually exported backend address for this setup.
+
+Added `atlas.config.json`, `electron/launchConfig.js`, and `scripts/dev.js`, `scripts/startElectron.js`, `scripts/installDependencies.js`. Updated root npm scripts and Electron exit handling: only host mode sends the shutdown RPC. Local overrides live in ignored `atlas.local.json`; see the root README for precedence and commands. No backend credentials are copied to clients.
+
+Validation: `tests/launchConfig.test.js` covers the designated PC, Mac/Linux/other Windows clients, process plans, invalid configuration and explicit overrides. `tests/electronClientLifecycle.test.js` exercises the real Electron main module against app/socket fixtures and verifies client registration, messaging and host-only shutdown. Host/client dry runs and device/transport/resume regressions passed. A live Mac launch is still pending. Packaged-app backend-service startup remains outside this source-launch change.

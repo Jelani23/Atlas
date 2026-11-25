@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const { loadClientIdentity } = require('./clientIdentity');
+const { readConfig, resolveLaunchConfig } = require('./launchConfig');
+const launchConfig = resolveLaunchConfig({ config: readConfig(path.join(__dirname, '..')) });
 let clientIdentity;
 let registrationReady = null;
 
@@ -27,7 +29,7 @@ function markFirstLaunchComplete() {
 
 const isDev = !app.isPackaged;
 const RENDERER_DEV_URL = process.env.ATLAS_RENDERER_URL || 'http://localhost:3000';
-const BACKEND_WS_URL = process.env.ATLAS_WS_URL || 'ws://localhost:7341';
+const BACKEND_WS_URL = launchConfig.backendUrl;
 // DevTools used to auto-open every single dev launch. That's a deliberate
 // opt-in now — set ATLAS_DEVTOOLS=1 when you actually want it.
 const OPEN_DEVTOOLS = process.env.ATLAS_DEVTOOLS === '1';
@@ -243,7 +245,7 @@ app.on('before-quit', (event) => {
 
     (async () => {
         try {
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (launchConfig.shutdownBackendOnExit && ws && ws.readyState === WebSocket.OPEN) {
                 // The shutdown RPC durably closes the current session and
                 // marks its reflection pending. It should be fast; retain a
                 // timeout so an unreachable or wedged backend cannot block

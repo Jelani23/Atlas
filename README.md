@@ -126,8 +126,34 @@ Use `Checked analyze src/<file>.js function <name> with <parameter> set to <valu
 The normal chat and analysis modes keep their existing behavior. See the [live test checklist](docs/checked-analysis-live-check-2026-10-08.md) for examples, limitations and offline results.
 
 ```bash
-npm install       # installs root, backend, and renderer deps
-npm run dev       # runs renderer + backend + Electron together
+npm install       # installs dependencies for this machine's role
+npm run dev       # automatically selects host or client mode
 ```
 
 `npm run build` produces a packaged Electron app via `electron-builder`.
+
+### One branch, host and client launches
+
+Source launches use `atlas.config.json` to recognize `DESKTOP-ALHAOC4` on Windows as the host. On that machine, `npm run dev` starts the backend, local renderer, and Electron. On the Mac (and other machines), the same command starts only a local renderer and Electron, connecting to `ws://100.120.153.51:7341` over Tailscale. Client dependency installation skips the backend; the Mac does not need backend credentials, Ollama, or Python voice services.
+
+Run the updated checkout locally on each device. The Mac's Electron process owns its persistent device ID and microphone input. Opening or remotely controlling the PC's app does not create a Mac client. Closing a client disconnects it without sending the host a shutdown request.
+
+```sh
+npm run dev -- --dry-run  # inspect detected role and processes without launching
+npm run dev:host          # explicit override
+npm run dev:client        # explicit override
+npm run test:launch       # offline role and Electron lifecycle tests
+```
+
+Environment overrides are `ATLAS_ROLE=auto|host|client`, `ATLAS_WS_URL`, and `ATLAS_PORT`. For persistent machine-specific overrides, create an ignored `atlas.local.json`, for example:
+
+```json
+{
+  "role": "client",
+  "backendUrl": "ws://100.120.153.51:7341"
+}
+```
+
+Configuration precedence is environment, local file, shared file. Host mode connects only to its local backend port; use client mode for a remote destination. If explicitly converting a client installation to a host, run `npm --prefix backend install` and configure its backend services first. Tailscale and the host backend must be running for client communication; an offline host does not cause clients to start a replacement backend.
+
+This launcher change covers source/development startup (`npm run dev`). Packaged Electron retains its existing external-backend requirement; it now selects the correct connection and shutdown behavior, but does not bundle a new backend-service supervisor. Live Mac startup and voice checks remain part of the device-awareness acceptance test.
