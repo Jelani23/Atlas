@@ -25,3 +25,14 @@ assert.strictEqual(regular.stream, false);
 assert.strictEqual(regular.format, schema);
 
 console.log('✓ structured format is forwarded by streaming and complete Ollama requests');
+async function metadata(){
+    const provider=require('../src/models/providers/ollama');
+    const old=global.fetch;
+    const envelope={done:true,done_reason:'length',message:{role:'assistant',content:'partial',thinking:'native'}};
+    try{
+        global.fetch=async()=>({ok:true,json:async()=>envelope});
+        assert.deepStrictEqual(await provider.completeEnvelope(messages),envelope);
+        assert.strictEqual(await provider.complete(messages),'partial','Existing callers keep the string-return API.');
+    }finally{global.fetch=old;}
+}
+metadata().catch(error=>{console.error(error);process.exitCode=1;});

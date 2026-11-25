@@ -89,14 +89,19 @@ function start() {
 
         child.on('error', error => {
             console.error('[Kokoro Process] Failed to start:', error.message);
-            kokoroProcess = null;
-            startingPromise = null;
+            if (kokoroProcess === child) {
+                kokoroProcess = null;
+                startingPromise = null;
+            }
             reject(error);
         });
 
         child.on('exit', (code, signal) => {
             console.log(`[Kokoro Process] Exited (code=${code}, signal=${signal})`);
-            kokoroProcess = null;
+            if (kokoroProcess === child) {
+                kokoroProcess = null;
+                startingPromise = null;
+            }
         });
 
         // The process being spawned does NOT mean Kokoro is ready.
@@ -104,7 +109,10 @@ function start() {
         resolve();
     });
 
-    return startingPromise;
+    const attempt = startingPromise;
+    const clearAttempt = () => { if (startingPromise === attempt) startingPromise = null; };
+    attempt.then(clearAttempt, clearAttempt);
+    return attempt;
 }
 
 function stop() {

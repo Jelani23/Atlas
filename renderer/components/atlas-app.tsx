@@ -82,6 +82,7 @@ export function AtlasApp() {
   const [tab, setTab] = useState("home")
   const [listening, setListening] = useState(false)
   const [connected, setConnected] = useState(true)
+  const [clientLabel, setClientLabel] = useState<string | null>(null)
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   
@@ -105,6 +106,14 @@ export function AtlasApp() {
     }
 
     const unsubscribe = bridge.onEvent((event) => {
+      if (event.type === 'atlas.status' && event.payload.phase === 'client_connection') {
+        setConnected(event.payload.status === 'ready')
+        if (event.payload.status !== 'ready') setClientLabel(null)
+      }
+      if (event.type === 'atlas.status' && event.payload.phase === 'client_registered') {
+        const device = event.payload.device as { client?: { displayName?: string } }
+        setClientLabel(device.client?.displayName || null)
+      }
       console.log("[Frontend] Received event:", event.type, event.payload);
       
       // Phase 11.6 & 11.7: Track request lifecycle
@@ -193,6 +202,8 @@ export function AtlasApp() {
     let cancelled = false
     ;(async () => {
       try {
+        const device = await bridge.getClientDevice()
+        if (!cancelled) setClientLabel(device.client?.displayName || null)
         const current = await bridge.getState()
         if (cancelled || !current.sessionId) return
         setSessionId(current.sessionId)
@@ -323,7 +334,9 @@ export function AtlasApp() {
     setVisemeSource(null)
   }, [])
 
-  const runFlow = useCallback(async (userText: string) => {
+  const latestFlowRef = useRef(0)
+  const runFlow = useCallback(async (userText: string, options?: { transcriptionId?: string }) => {
+    const flowId = ++latestFlowRef.current
     clearTimeout(settleTimer.current)
     
     // Phase 10.1: Kill active audio immediately
@@ -352,8 +365,15 @@ export function AtlasApp() {
       return
     }
 
-    const result = await bridge.sendMessage(userText)
+    const result: { ok: boolean; reply?: string; error?: string } = await bridge.sendMessage(userText, options)
+      .catch((error: Error) => ({ ok: false, error: error.message }))
+    // An interrupted request must not append a reply or reset the newer turn's UI.
+    if (flowId !== latestFlowRef.current) return
     setTyping(false)
+    if (result.ok && !result.reply?.trim()) {
+      setState("idle")
+      return
+    }
 
     if (result.ok) {
       setState("speaking") // Assume speaking (if no audio chunks arrive, the fallback timer handles it)
@@ -443,7 +463,7 @@ export function AtlasApp() {
           try {
             const result = await (window.atlasBridge as any).transcribeAudio(base64Audio)
             if (result.ok && result.text.trim()) {
-              runFlow(result.text)
+              runFlow(result.text, { transcriptionId: result.transcriptionId })
             } else {
               setTyping(false)
               setState("idle")
@@ -620,6 +640,11 @@ export function AtlasApp() {
           {!connected && (
             <span className="ml-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
               Offline
+            </span>
+          )}
+          {connected && clientLabel && (
+            <span className="hidden max-w-32 truncate text-xs text-muted-foreground md:inline" title={`Current client: ${clientLabel}`}>
+              {clientLabel}
             </span>
           )}
         </div>

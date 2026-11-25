@@ -54,4 +54,14 @@ function formatImmediateToolReply(toolResult) {
     return [intro, ...sentences].join(separator);
 }
 
-module.exports = { formatImmediateToolReply, presentResult };
+function formatImmediateToolSpeech(toolResult) {
+    const speakFantasy = require('../integrations/espnFantasyPresenter').formatSpeech;
+    if (toolResult.toolName === 'espnFantasy') return speakFantasy(toolResult.toolResult);
+    if (toolResult.toolName === 'multi_tool' && Array.isArray(toolResult.toolResults)) {
+        return formatImmediateToolReply({ ...toolResult, toolResults: toolResult.toolResults.map(step =>
+            step.toolName === 'espnFantasy' ? { ...step, result: speakFantasy(step.result) } : step) });
+    }
+    return formatImmediateToolReply(toolResult);
+}
+
+module.exports = { formatImmediateToolReply, formatImmediateToolSpeech, presentResult };

@@ -18,8 +18,10 @@ const sessions = {
     async supportsReflectionLifecycle() { return true; }
 };
 const dispatched = [];
+const removedWordleSaves = [];
+stub('../src/puzzles/wordleStore', { remove(id) { removedWordleSaves.push(id); } });
 stub('../src/core/conversationEngine', { async handleMessage(text, options) {
-    dispatched.push({ text, id: options.sessionId }); return 'Simulated reply';
+    dispatched.push({ text, id: options.sessionId, ...(options.interaction ? { interaction: options.interaction } : {}) }); return 'Simulated reply';
 } });
 stub('../src/memory/sessionManager', sessions);
 stub('../src/memory', { workingMemory: { async clear() {} } });
@@ -34,8 +36,32 @@ const { AtlasInterface } = require('../src/interface/atlasInterface');
 
 async function main() {
     const app = new AtlasInterface();
+    const errors=[];
+    app.on('atlas.error', payload=>errors.push(payload.message));
+    const bus=require('../src/events/eventBus').eventBus;
+    const types=require('../src/events/eventTypes');
+    bus.emit(types.REQUEST_FAILED,{error:'Already returned',reply:'Already returned'});
+    assert.deepEqual(errors,[]);
+    bus.emit(types.REQUEST_FAILED,{error:'Transport failed'});
+    assert.deepEqual(errors,['Transport failed']);
     app.ready = true;
     app.sessionId = 'old';
+    let releasePilot;
+    let pilotGate = new Promise(resolve => { releasePilot = resolve; });
+    let holds = 0, pilotStopped = false;
+    app.evidencePilot = {
+        async foreground(fn) { holds++; try { await pilotGate; return await fn(); } finally { holds--; } },
+        async stop() { pilotStopped = true; }, status() { return { enabled: true }; }
+    };
+    const interaction = Object.freeze({ connectionId: 'pc-connection', client: { deviceId: 'pc' } });
+    const gatedMessage = app.sendMessage('pilot gate', interaction);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dispatched.length, 0, 'Real interface must await pilot settlement before routing.');
+    releasePilot(); await gatedMessage; pilotGate = null;
+    assert.equal(holds, 0);
+    const gatedDispatch = dispatched.pop();
+    assert.equal(gatedDispatch.text, 'pilot gate');
+    assert.equal(gatedDispatch.interaction, interaction, 'Device context survives the asynchronous pilot gate');
     const approvals = [];
     function pending() {
         const id = app.sessionId;
@@ -68,6 +94,7 @@ async function main() {
     const reset = pending();
     await app.resetConversation();
     assert(reset.closed);
+    assert.deepEqual(removedWordleSaves, ['new-1']);
     const resumed = pending();
     await app.resumeConversation('old');
     assert(resumed.closed);
@@ -75,9 +102,11 @@ async function main() {
     const deleted = pending();
     await app.deleteConversation('old');
     assert(deleted.closed);
+    assert.deepEqual(removedWordleSaves, ['new-1', 'old']);
     assert.equal(app.sessionId, 'new-2');
     const shutdown = pending();
     await app.shutdown();
+    assert(pilotStopped, 'Application shutdown must stop the pilot.');
     assert(shutdown.closed);
     assert.deepEqual(await Promise.all(approvals), [false, false, false, false, false]);
     assert.equal(permissions.pendingRequests.size, 0);

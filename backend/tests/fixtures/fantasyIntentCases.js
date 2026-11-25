@@ -1,0 +1,62 @@
+const basketball = [
+    { role: 'user', content: 'Show my fantasy basketball roster.' },
+    { role: 'assistant', content: "Here's the roster for Jitters in DIH RIDERS. Checked ESPN today. Josh Hart is day-to-day." }
+];
+const league = [...basketball,
+    { role: 'user', content: 'How about the whole league?' },
+    { role: 'assistant', content: 'Do you want standings or injuries across all the fantasy team rosters?' }
+];
+module.exports = [
+    ['Can you tell me about the free agents in the league?', basketball, ['free_agents']],
+    ['Can you tell me about the injuries that are in the league?', basketball, ['league_injuries']],
+    ['Who could I pick up from the waiver pool?', basketball, ['free_agents']],
+    ['Anyone on my squad banged up?', basketball, ['injuries']],
+    ['Who is hurt on the other fantasy teams?', basketball, ['league_injuries']],
+    ['The injuries, please.', league, ['league_injuries']],
+    ['Actually just my guys.', [...league, { role: 'assistant', content: 'Here are the league-wide injury flags from ESPN.' }], ['injuries']],
+    ['Where do we sit compared with everybody else?', basketball, ['standings']],
+    ['Run through who I have on my team.', basketball, ['roster']],
+    ['Give me the big picture on my fantasy basketball team.', [], ['overview']],
+    ['Who am I facing and how close is it?', basketball, ['matchup']],
+    ['Check my roster and the available free agents.', basketball, ['roster', 'free_agents']],
+    ['Can you show me my current standings in my fantasy league?', [], ['standings']],
+    ['Can you give me an overview of my fantasy NBA?', [], ['overview']],
+    ['Can you show my fantasy basketball roster?', [], ['roster']],
+    ["What's my current ranking in my ESPN fantasy NBA league?", [], ['standings']],
+    ['How does a waiver claim work?', basketball, null],
+    ["Don't fetch the injuries yet.", basketball, null],
+    ['My knee hurts after running. What should I do?', basketball, null],
+    ['Switching to football: show my NFL fantasy injuries.', basketball, null],
+    ['What does the ESPN bridge function do?', basketball, null],
+    ['How is the weather tomorrow?', basketball, null],
+    ['Add the best available player to my roster.', basketball, 'unsupported'],
+    ['Can you tell me the injuries in the league?', [], 'clarify'],
+    ['Could you pull up the players nobody in our fantasy league owns?', [], ['free_agents']],
+    ['Any health concerns on my fantasy basketball squad?', [], ['injuries']],
+    ['I would like to see where my fantasy basketball team sits in the table.', [], ['standings']],
+    ['List the injured players rostered by every manager in my fantasy basketball league.', [], ['league_injuries']],
+    ['What about my opponent this week?', basketball, ['matchup']],
+    ['Forget basketball. How are the baseball standings looking?', basketball, null],
+    ['Which fantasy teams are struggling most with injuries?', [], ['league_analysis']],
+    ['Who has the strongest fantasy team this week?', [], ['league_analysis']],
+    ['Build my best lineup for next week.', basketball, ['optimize_lineup'], {window:'next'}],
+    ['What do I need to average in the games left to win?', basketball, ['forecast']],
+    ['Which waiver pickups would improve my starting lineup?', basketball, ['waiver_scout']],
+    ['Find some trade opportunities in my fantasy basketball league.', [], ['trade_scout']],
+    ['Would giving Harden for Hart improve my fantasy team?', [], ['evaluate_trade'], {give:['Harden'],receive:['Hart']}],
+    ['Pull together a unified fantasy league snapshot.', [], ['snapshot']],
+    ['Actually submit the trade for me.', basketball, 'unsupported'],
+    ['Forecast my fantasy matchup.', [
+        {role:'user',content:'Build my best fantasy lineup for next week.'},
+        {role:'assistant',content:'ESPN analysis for Jitters. Matchup period 5: November 16, 2026 through November 22, 2026. Next-period planning assumes locks reset.'}
+    ], ['forecast'], {window:undefined}],
+    ['How am I projected to finish against my opponent?', [
+        {role:'user',content:'Find fantasy trade opportunities for next week.'},
+        {role:'assistant',content:'Here are fantasy trade scenarios for next week.'}
+    ], ['forecast'], {window:undefined}],
+    ['Forecast my fantasy matchup for next week.', basketball, 'unsupported'],
+    ['How many actual games has each fantasy team played this season?',basketball,['played_games']],
+    ['Compare games played by active players, excluding my bench and IR.',basketball,['played_games']],
+    ['Show me the fantasy stats overview.',basketball,['overview']],
+    ['Which fantasy team got the most actual appearances last week?',basketball,['played_games']],
+];

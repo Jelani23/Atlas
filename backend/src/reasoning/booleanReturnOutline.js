@@ -58,4 +58,4 @@ function presentBooleanReturn(outline){
     claims.push({text:'This establishes the Boolean return rule; it does not establish the behavior of calls or property access inside that rule.',citations:[outline.span],lines:[outline.span.line]});
     return claims;
 }
-module.exports={deriveBooleanReturn,presentBooleanReturn};
+module.exports={deriveBooleanReturn,presentBooleanReturn,spokenExpression};

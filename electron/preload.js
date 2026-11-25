@@ -3,7 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Everything the renderer is allowed to do lives here. It talks to "Atlas",
 // full stop — no backend file or function names ever cross this bridge.
 contextBridge.exposeInMainWorld('atlasBridge', {
-    sendMessage: (text) => ipcRenderer.invoke('atlas:sendMessage', text),
+    sendMessage: (text, options) => ipcRenderer.invoke('atlas:sendMessage', text, options),
+    getClientDevice: () => ipcRenderer.invoke('atlas:getClientDevice'),
     getState: () => ipcRenderer.invoke('atlas:getState'),
     listModes: () => ipcRenderer.invoke('atlas:listModes'),
     setMode: (mode) => ipcRenderer.invoke('atlas:setMode', mode),

@@ -28,6 +28,7 @@ class AtlasInterface extends EventEmitter {
         this.sessionId = null;
         this.ready = false;
         this._initPromise = null;
+        this.evidencePilot = require('../reasoning/evidencePilot/application').createApplicationPilot();
         
         this.taskCounter = 1; 
         this.activeRequestId = null;
@@ -42,10 +43,10 @@ class AtlasInterface extends EventEmitter {
     }
 
     _wireEventBusToUI() {
-        eventBus.on(EventTypes.REQUEST_STARTED, ({ requestId, text }) => {
+        eventBus.on(EventTypes.REQUEST_STARTED, ({ requestId, text, interaction }) => {
             this.activeRequestId = requestId;
-            this.emit('user.message', { text });
-            this.emit('atlas.request_started', { requestId });
+            this.emit('user.message', { text, requestId, interaction });
+            this.emit('atlas.request_started', { requestId, interaction });
         });
         
         eventBus.on(EventTypes.TASK_PROGRESS, ({ stage }) => {
@@ -87,8 +88,9 @@ class AtlasInterface extends EventEmitter {
             this.emit('atlas.response', { text: friendlyError, isBackground: true });
         });
 
-        eventBus.on(EventTypes.REQUEST_FAILED, ({ error }) => {
-            this.emit('atlas.error', { message: error });
+        eventBus.on(EventTypes.REQUEST_FAILED, ({ error, reply }) => {
+            // Returned replies already reach the UI through sendMessage.
+            if (!reply) this.emit('atlas.error', { message: error });
         });
         
         // 8G.1: Only forward 'content' tokens to the UI as visible chat
@@ -164,6 +166,7 @@ class AtlasInterface extends EventEmitter {
             this.emit('atlas.status', { phase: 'ready', sessionId: this.sessionId });
             reflectionWorker.schedule();
             passiveLearningWorker.schedule();
+            this.evidencePilot.start();
             return this.sessionId;
         })();
 
@@ -174,7 +177,8 @@ class AtlasInterface extends EventEmitter {
         return {
             mode: this.mode,
             sessionId: this.sessionId != null ? String(this.sessionId) : null,
-            ready: this.ready
+            ready: this.ready,
+            connectedEvidencePilot: this.evidencePilot.status()
         };
     }
 
@@ -228,7 +232,7 @@ class AtlasInterface extends EventEmitter {
     _transitionConversation(change) {
         if (this._shutdownPromise) return Promise.reject(new Error('Atlas is shutting down.'));
         const previous = this._conversationTransition || Promise.resolve();
-        const pending = previous.catch(() => {}).then(change);
+        const pending = previous.catch(() => {}).then(() => this.evidencePilot.foreground(change));
         this._conversationTransition = pending;
         const clear = () => { if (this._conversationTransition === pending) this._conversationTransition = null; };
         pending.then(clear, clear);
@@ -285,6 +289,7 @@ class AtlasInterface extends EventEmitter {
         const wasCurrent = this.sessionId != null && String(this.sessionId) === String(sessionId);
         require('../planner/state').endSession(sessionId);
         await sessionManager.deleteSession(sessionId);
+        require('../puzzles/wordleStore').remove(sessionId);
 
         let newSessionId = null;
         if (wasCurrent) {
@@ -320,10 +325,20 @@ class AtlasInterface extends EventEmitter {
         if (!this.sessionId) return;
         require('../planner/state').endSession(this.sessionId);
         await memory.workingMemory.clear(this.sessionId);
+        require('../puzzles/wordleStore').remove(this.sessionId);
         this.emit('atlas.status', { phase: 'conversation_reset' });
     }
 
-    async sendMessage(text) {
+    async sendMessage(text, interaction) {
+        return this.evidencePilot.foreground(() => this._sendMessage(text, interaction));
+    }
+
+    reanalyzeConnectedEvidence(focus) {
+        if (this._shutdownPromise || !this.ready) return Promise.reject(new Error('Atlas must be ready for pilot reanalysis.'));
+        return this.evidencePilot.reanalyze(focus);
+    }
+
+    async _sendMessage(text, interaction) {
         if (this._shutdownPromise) throw new Error('Atlas is shutting down.');
         if (!this.ready) await this.initialize();
         while (this._conversationTransition) await this._conversationTransition;
@@ -341,7 +356,8 @@ class AtlasInterface extends EventEmitter {
                 mode: this.mode,
                 sessionId: this.sessionId,
                 taskId,
-                requestId
+                requestId,
+                interaction
             });
             return resultObj; 
         } catch (err) {
@@ -388,6 +404,7 @@ class AtlasInterface extends EventEmitter {
         if (this._shutdownPromise) return this._shutdownPromise;
 
         this._shutdownPromise = (async () => {
+            await this.evidencePilot.stop();
             while (this._conversationTransition) await this._conversationTransition.catch(() => {});
             if (this.sessionId) {
                 const sessionId = this.sessionId;

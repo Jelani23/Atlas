@@ -21,27 +21,37 @@ function buildRequestBody(messages, options = {}, stream = false) {
 }
 
 async function complete(messages, options = {}) {
+  const data = await completeEnvelope(messages, options);
+  return data.message.content;
+}
+
+// The opt-in deep analysis path needs completion and channel metadata as well as text.
+async function completeEnvelope(messages, options = {}) {
   const body = buildRequestBody(messages, options, false);
 
-  // Optional structured formats remain available for internal extraction
-  // tasks. Alice's user-facing response path intentionally does not use a
-  // grammar; it uses native thinking plus content-channel filtering.
-  const response = await fetch('http://localhost:11434/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: options.signal,
-  });
+  // Structured formats support extraction and opt-in deep analysis.
+  // Ordinary conversational streaming keeps its existing format policy.
+  let data;
+  if(options.timeoutMs!==undefined){
+    data=await require('./ollamaEnvelopeTransport').requestEnvelope(body,options);
+  }else{
+    const response = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
 
-  if (!response.ok) {
-    throw new Error(`Ollama request failed: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Ollama request failed: ${response.status} ${response.statusText}`);
+    }
+
+    data = await response.json();
   }
-
-  const data = await response.json();
   if (data.done) {
     emitMetrics(data, options.model || process.env.OLLAMA_MODEL || 'qwen3.5:4b', options.requestId);
   }
-  return data.message.content;
+  return data;
 }
 
 async function* streamComplete(messages, options = {}) {
@@ -192,4 +202,4 @@ async function warmup(modelName) {
   }
 }
 
-module.exports = { complete, streamComplete, warmup, buildRequestBody };
+module.exports = { complete, completeEnvelope, streamComplete, warmup, buildRequestBody };

@@ -1,0 +1,56 @@
+const assert=require('node:assert/strict'),h=require('../evaluation/semantic/harness');
+const checker=require('../src/reasoning/checkedPredictions'),renderer=require('../src/reasoning/checkedAnalysisResponse');
+async function main(){
+ const e=await h.prepare(h.manifest.cases.find(t=>t.id==='unknown-runtime'));
+ const bound=checker.bindEvidence(e.packet,[],e.probes);
+ assert.deepEqual(bound.probes[0].missingBindings,['cache']);
+ const draft={overview:'UNSUPPORTED CLAIM',assumptions:[],predictions:[{inputId:'p1',outcome:{kind:'return',type:'string',valueJson:'"missing"'},reason:'UNSUPPORTED REASON',neededEvidence:'',citations:[{path:e.packet.sources[0].path,line:2}]}]};
+ const result=checker.parse(JSON.stringify(draft),e.packet,bound);
+ assert.equal(result.released.status,'withheld_missing_runtime');assert.equal(result.released.modelInterpretation,null);
+ const shown=renderer.render(result,{probes:e.probes,evidence:bound},e.packet);
+ assert.match(shown.reply,/Runtime values not supplied: p1: cache/);assert.match(shown.reply,/selected\(cache/);
+ assert.match(shown.speech,/runtime values were not supplied/);assert(!JSON.stringify(shown).includes('UNSUPPORTED'));
+ assert(!shown.speech.includes('predictions conflict'));assert.match(shown.speech,/No verified result/);
+ assert.throws(()=>checker.bindEvidence(e.packet,[],[{...e.probes[0],missingBindings:['notAParameter']}]),/Invalid missing/);
+ assert.throws(()=>checker.bindEvidence(e.packet,[{inputId:'p1'}],e.probes),/missing runtime/);
+ const missing=await h.prepare(h.manifest.cases.find(t=>t.id==='missing-helper'));
+ const mb=checker.bindEvidence(missing.packet,[],missing.probes);
+ draft.predictions[0].citations=[{path:missing.packet.sources[0].path,line:3}];
+ const dep=checker.parse(JSON.stringify(draft),missing.packet,mb);
+ assert.equal(dep.released.status,'withheld_unverified_dependency');
+ const depShown=renderer.render(dep,{probes:missing.probes,evidence:mb},missing.packet);
+ assert.match(depShown.reply,/unavailable-price/);assert(!JSON.stringify(depShown).includes('UNSUPPORTED'));assert(!depShown.speech.includes('predictions conflict'));
+ // Unrelated unresolved imports conservatively block unverified outcomes too.
+ const trim=await h.prepare(h.manifest.cases.find(t=>t.id==='trim-pipeline'));
+ const withImport={...trim.packet,unresolvedDependencies:[{specifier:'./unrelated',from:trim.packet.sources[0].path,reason:'Source unavailable'}]};
+ const td={overview:'Unverified explanation.',assumptions:[],predictions:trim.probes.map(p=>({inputId:p.id,outcome:{kind:'return',type:'number',valueJson:p.id==='p1'?'1':'2'},reason:'Unverified.',neededEvidence:'',citations:[{path:trim.packet.sources[0].path,line:4}]}))};
+ const unsupported=checker.parse(JSON.stringify(td),withImport,checker.bindEvidence(withImport,[],trim.probes));
+ assert.equal(unsupported.released.status,'withheld_unverified_dependency');
+ const known=checker.parse(JSON.stringify(td),withImport,checker.bindEvidence(withImport,trim.checks.scenarios,trim.probes));
+ assert.equal(known.released.independentOutcomes.length,2);assert.notEqual(known.released.modelInterpretation,null);assert.equal(known.released.explanationVerified,false);
+ const strict=require('../src/reasoning/checkedReleasePolicy').requireCheckedOutcomes;
+ assert.notEqual(strict(known).released.modelInterpretation,null);
+ const spokenKnown=renderer.render(known,{probes:trim.probes},withImport);assert.match(spokenKnown.speech,/returns 1/);assert(!spokenKnown.speech.includes(td.overview));
+ const unchecked=checker.parse(JSON.stringify(td),trim.packet,checker.bindEvidence(trim.packet,[],trim.probes));
+ assert.equal(strict(unchecked).released.status,'withheld_unchecked_outcome');assert.equal(strict(unchecked).released.modelInterpretation,null);
+ const partial=checker.parse(JSON.stringify(td),trim.packet,checker.bindEvidence(trim.packet,trim.checks.scenarios.slice(0,1),trim.probes));
+ assert.equal(strict(partial).released.independentOutcomes.length,1);assert.equal(strict(partial).released.modelInterpretation,null);
+ // Routed checked service with a missing source must never leak the rejected prose.
+ const s=missing.packet.sources[0],read=async name=>{if(name!==s.path)throw Error('Source unavailable');return {path:s.path,version:s.version,text:s.source,complete:true};};
+ const service=require('../src/reasoning/projectQuestion').createService({read,repository:{get(){throw Error('Storage must not be used');}}});
+ const detect=require('../src/reasoning/projectQuestion').detect;
+ const cmd=detect('Checked analyze '+s.path+' function quote with sku set to "A"',null,'alice',0,[]);
+ assert.equal(cmd.checkedInputs,true);let calls=0;
+ const options={agentId:'alice',completeEnvelope:async()=>{calls++;return {done:true,done_reason:'stop',message:{role:'assistant',content:JSON.stringify(draft)}};}};
+ const routed=await service.answer(cmd,options);assert.equal(calls,0);assert.equal(routed.analysis.status,'not_requested_unsupported');assert(!JSON.stringify({reply:routed.reply,speech:routed.speech}).includes('UNSUPPORTED'));
+ const noArgs=detect('Checked analyze '+s.path+' function quote.',null,'alice',0,[]);
+ const clarification=await service.answer(noArgs,options);assert.deepEqual(clarification.clarification,{kind:'parameter_values',parameters:['sku']});assert.match(clarification.reply,/please provide a value for sku/);assert.equal(clarification.modelSkipped,'needs_parameter_values');assert.equal(calls,0);
+ const failed=await service.answer(cmd,{agentId:'alice',completeEnvelope:async()=>{throw Error('Offline');}});
+ assert.equal(failed.analysis.modelInterpretation,null);assert.match(failed.reply,/Dependency source not available/);assert.match(failed.speech,/No verified result/);
+ const prior={path:s.path,targetSymbol:'quote',question:cmd.question,analysisMode:true,deepAnalysis:true,checkedInputs:true,agentId:'alice',at:0};
+ assert.equal(detect('What does that function return with sku set to "B"?',prior,'alice',1,[]).checkedInputs,true);
+ assert.equal(detect('Analyze that function.',prior,'alice',1,[]).checkedInputs,undefined);
+ assert.equal(detect('Deep analyze '+s.path+' function quote.',null,'alice',0,[]).checkedInputs,undefined);
+ console.log('Checked release: runtime bindings, dependency gaps, conservative unrelated imports, preserved checks, safe text/speech and explicit routing passed.');
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});

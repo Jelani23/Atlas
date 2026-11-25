@@ -1,0 +1,8 @@
+{
+  "source": "https://raw.githubusercontent.com/tabatkins/wordle-list/255b9469c4dad99a3b95cc4ddbe139b3d3747868/words",
+  "revision": "255b9469c4dad99a3b95cc4ddbe139b3d3747868",
+  "license": "MIT",
+  "count": 14855,
+  "sha256": "ba86911aea83d038d53c0999fe6cbe310c8f59d2b79626c73bd0cd0773adc320",
+  "note": "Static vocabulary, not a live NYT answer list. No daily answer ordering."
+}

@@ -7,6 +7,8 @@ const noteFilename = name => ({ ...text(name), format: 'noteFilename' });
 const number = name => ({ name, type: 'number' });
 const directory = [{ ...text('directory'), optional: true, allowEmpty: true }];
 const TOOL_ARGUMENTS = {
+    espnFantasy: [{ ...text('action'), optional: true, description: 'overview, standings, roster, injuries, league_injuries, matchup, free_agents, played_games, snapshot, league_analysis, optimize_lineup, forecast, waiver_scout, trade_scout, evaluate_trade' }, { ...text('parameters'), optional:true, description:'JSON object: optional window (current or next); evaluate_trade also needs give and receive arrays of player names. Never include credentials.' }],
+    puzzleHelper: [{ ...text('request'), description: 'The entire explicit Wordle: or Connections: command, unchanged.' }],
     calculate: [{ ...text('expression'), format: 'arithmetic',
         description: 'Translate spoken numbers/operators into digits and + - * / parentheses, without evaluating. Example: three times four becomes 3 * 4.' }],
     wordCount: [text('text')],

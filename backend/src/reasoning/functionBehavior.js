@@ -1,7 +1,7 @@
 // Unified source-derived inventory. This module never loads or executes analyzed code.
 const ts=require('typescript');
 const crypto=require('node:crypto');
-const VERSION=`function-behavior-5/ts-${ts.version}`;
+const VERSION=`function-behavior-8/ts-${ts.version}`;
 function buildFunctionRecords(bundle){
     const manifest=bundle.files.map(f=>({path:f.path,version:f.version})).sort((a,b)=>a.path.localeCompare(b.path));
     const records=[];
@@ -67,6 +67,7 @@ function buildFunctionRecords(bundle){
                 record.coverage.gaps=[...new Set(record.coverage.gaps)];
                 record.inputs=inputInventory(fn);
                 record.booleanReturn=require('./booleanReturnOutline').deriveBooleanReturn(fn,span);
+                record.flowOutline=require('./functionFlowOutline').deriveFlowOutline(fn,span,record.inputs);
                 record.coverage.stateAccess='lexical_reference_inventory_with_unresolved_property_effects';
                 record.coverage.gaps=record.coverage.gaps.filter(g=>!g.includes('lexical read/write ownership'));
                 record.coverage.gaps.push('Lexical bindings do not establish runtime values, parameter initializer effects, aliases or call side effects.');

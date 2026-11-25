@@ -38,7 +38,7 @@ function compactSearchEvidence(raw, maxChars = 12000) {
     return `${header}${parts.map(part => part.slice(0, perSource)).join('')}${footer}`;
 }
 
-async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy, workingContext, preprocessed, sessionId, capabilityRuntime, agentProfile, priorCodeEvidence }) {
+async function buildContext({ mode, intent, responseStyle, memoryResult, toolResult, userInput, history, policy, workingContext, preprocessed, sessionId, capabilityRuntime, agentProfile, priorCodeEvidence, interaction }) {
     console.time("buildContext");
     
     // Phase: when the optional preprocessing layer already retrieved (and
@@ -400,6 +400,7 @@ Recorded feature tracking from Supabase dev_state; entries may be outdated. Thes
 
     return [
         dateLine,
+        require('../devices/interactionContext').buildDeviceContext(interaction),
         'Personalization: a saved preference or active project does not establish what the user did today or why they like something. Do not invent that connection. Answer only the requested preference topic and owner. For recommendations, use only titles and creator attributions you are confident about; omit uncertain examples rather than fill out a list.',
         systemPrompt,
         mode === 'analysis' ? require('../reasoning/codeAnalysis').ANALYSIS_CONTRACT : '',

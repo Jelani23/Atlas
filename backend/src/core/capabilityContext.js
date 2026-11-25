@@ -8,6 +8,8 @@ const { isToolInventoryRequest } = require('../intent/capabilityRequest');
 const { isNonExecutingToolMention } = require('../intent/toolRequestBoundary');
 
 const TOOL_LABELS = {
+    espnFantasy: 'check ESPN fantasy basketball standings, roster, injuries, matchups and free agents',
+    puzzleHelper: 'check Wordle clues and suggest Connections groups',
     listNotes: 'list notes', readNote: 'read a note', writeNote: 'write or replace a note',
     appendNote: 'append to an existing note', renameNote: 'rename a note', deleteNote: 'delete a note',
     findFile: 'find a file', fileExists: 'check whether a file exists', getFileMetadata: 'read file metadata',
@@ -41,6 +43,18 @@ function formatToolInventory(catalog = getCatalog()) {
 // Reviewed against the listed source files. Descriptions are maintenance data,
 // not executable routing rules. New tools need a reviewed description here.
 const GROUPS = {
+    fantasy: {
+        match: /\b(?:espn|fantasy|basketball|nba)\b/i,
+        tools: ['espnFantasy'],
+        sources: ['integrations/espnFantasy.js', 'tools/fantasy', '../integrations/espn/bridge.py'],
+        guide: 'ESPN fantasy basketball is a separate read-only integration using espn-api. Use Fantasy NBA: overview, standings, roster, injuries, league injuries, matchup, or free agents. Natural requests use local semantic interpretation with recent conversation context; exact commands bypass the model. Injuries means your own roster; league injuries covers all fantasy rosters grouped by team, excluding unrostered players. Contextual follow-ups can change view or scope; ambiguous requests require clarification. Explicitly different sports or unrelated topics must not fetch basketball data. Configure ESPN_LEAGUE_ID, ESPN_SEASON (ending year), and ESPN_TEAM_ID locally; private leagues also need ESPN_S2 and ESPN_SWID cookies in backend/.env, never chat or memory. Python and the integration requirements must be installed. A registered tool does not establish a working connection. Overview and Fantasy NBA: games played include actual active player-games for all teams (season, current and previous matchup), counted from historical daily slots and raw minutes greater than zero, excluding bench/IR and non-appearances. Partial daily coverage is disclosed. Results show retrieval time and are fetched on demand, not continuously monitored or saved to durable memory. Deterministic snapshot, league analysis, lineup optimization, matchup forecast, waiver scouting and trade evaluation are available for head-to-head points leagues with weekly first-game locks. Use Fantasy NBA: snapshot, analysis, lineup, lineup next, forecast, waivers, or trades. Name outgoing and incoming players for a proposed trade evaluation. Analysis carries source timestamps, uses explicit injury scenarios, honors current lineup locks and eligibility, and reports missing inputs. Waiver/trade planning defaults to next matchup; lineup/league analysis defaults current. These are hypothetical calculations, not lineup changes, trade submissions, waiver claims, proactive alerts, or guaranteed recommendations. Points and category leagues have distinct score formats. Do not claim current league data without a successful tool result.'
+    },
+    puzzles: {
+        match: /\b(?:wordle|connections|puzzleHelper|puzzles?)\b/i,
+        tools: ['puzzleHelper'],
+        sources: ['puzzles/puzzlePipeline.js', 'puzzles/wordleConversation.js', 'puzzles/wordle.js', 'puzzles/connections.js', 'tools/puzzles'],
+        guide: 'Wordle is conversational: say Let us play Wordle, then report colors for the pending guess using ordered colors, square emoji, positions or named letters and explicit rest-gray feedback. Alice checks the clues and automatically proposes one next guess. Partial or ambiguous reports require clarification, especially duplicate letters; never assume missing colors. Corrections must name the recorded guess. Pause Wordle keeps the board; resume Wordle returns to it; new game resets it. No screen vision is included. Optional Wordle: commands still support new, status, hint, suggest, check, candidates and correct. Connections currently uses explicit Connections: commands: new takes 4, 8, 12 or 16 comma-separated entries; solved, rejected and one away take four entries; hint and suggest propose checked groups. Wordle state is saved in a local JSON file per conversation and restored after restart; new games replace that save, and clearing or deleting the conversation removes it. Connections state remains in memory only. A bundled local vocabulary filters Wordle guesses; no live daily answer lookup is included. Wordle checks duplicate counts and positions; Connections checks board coverage and recorded feedback, not category truth. Model suggestions can fail and word eligibility is unverified. No remote fallback is used. Active Wordle turns use local semantic interpretation and checked observation extraction. Ambiguous language still needs clarification. Other game families are not implemented.'
+    },
     notes: {
         match: /\bnotes?\b/i,
         tools: ['listNotes', 'readNote', 'writeNote', 'appendNote', 'renameNote', 'deleteNote'],
@@ -117,7 +131,7 @@ function selectTopics(userInput, history = [], intent = {}) {
     const profileStorage = /\b(?:your|alice)\b/i.test(input)
         && /\b(?:stored|storage|database|tables?|saved|loaded|persist\w*|atlasState|agent_profiles)\b/i.test(input);
     return Object.entries(GROUPS).filter(([key, group]) => group.match.test(input)
-        && (selfContext || (profileStorage && key === 'memory') || (instructions && ['notes', 'utilities', 'time'].includes(key)))).map(([key]) => key);
+        && (selfContext || (profileStorage && key === 'memory') || (instructions && ['notes', 'utilities', 'time', 'puzzles'].includes(key)))).map(([key]) => key);
 }
 
 function getCatalog({ tools = require('../tools'), checkPermission = name => require('../permissions/permissionManager').check(name) } = {}) {

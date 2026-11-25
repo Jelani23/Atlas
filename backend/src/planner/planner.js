@@ -28,7 +28,7 @@ function planResult(execution) {
     };
 }
 
-async function route(intent, message, history = [], taskId, requestId) {
+async function route(intent, message, history = [], taskId, requestId, context = {}) {
     if (state.isSessionClosed()) return { needsTool: false };
     // 0. Systemic Permission & Confirmation Boundary
     // Intercept Yes/No at the very top to resolve pending permissions or actions.
@@ -92,7 +92,31 @@ async function route(intent, message, history = [], taskId, requestId) {
         }
     }
 
+    const fantasyRequest = Object.hasOwn(context, 'fantasyRequest') ? context.fantasyRequest
+        : await require('../integrations/espnFantasyIntent').resolve(message, history, { requestId });
+    if (state.isSessionClosed()) return { needsTool: false };
+    if (fantasyRequest) {
+        if (fantasyRequest.reply) return { needsTool: true, toolName: 'ask_clarification',
+            toolResult: fantasyRequest.reply, shortCircuit: true };
+        const results = [];
+        await require('../integrations/espnFantasy').withSnapshot(async () => {
+            for (const action of fantasyRequest.actions) results.push(await execute('espnFantasy', fantasyRequest.parameters ? [action,JSON.stringify(fantasyRequest.parameters)] : [action]));
+        });
+        return { needsTool: true, toolName: 'espnFantasy', toolResult: results.join('\n\n'), shortCircuit: true };
+    }
+
+    const puzzleReply = await require('../puzzles/wordleDialogue').route(message, { history });
+    if (puzzleReply !== null) return { needsTool: true, toolName: 'puzzleHelper', toolResult: puzzleReply, shortCircuit: true };
+
     if (isNonExecutingToolMention(message)) return { needsTool: false };
+
+
+    // Keep explicit puzzle commands intact: board entries and clue colors
+    // must not be split into unrelated tool clauses or rewritten by a model.
+    if (require('../puzzles/puzzlePipeline').matchesRequest(message)) {
+        return { needsTool: true, toolName: 'puzzleHelper',
+            toolResult: await execute('puzzleHelper', [message]), shortCircuit: true };
+    }
 
     const checkedAnalysis = require('../reasoning/controlledChecks').checkRequest(message);
     if (checkedAnalysis) {

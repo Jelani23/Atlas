@@ -1,6 +1,8 @@
 // backend/src/permissions/permissionPolicy.js
 const POLICY = {
+    espnFantasy:        { risk: 'LOW', default: 'allow' },
     // LOW RISK (Read-only / Reversible)
+    puzzleHelper:      { risk: 'LOW', default: 'allow' },
     webSearch:          { risk: 'LOW', default: 'allow' },
     getTime:            { risk: 'LOW', default: 'allow' },
     convertTime:        { risk: 'LOW', default: 'allow' },

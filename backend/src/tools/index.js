@@ -7,5 +7,7 @@ module.exports = {
     ...require('./notes'),
     ...require('./tasks'),
     ...require('./utilities'),
-    ...require('./writing')
+    ...require('./writing'),
+    ...require('./puzzles'),
+    ...require('./fantasy')
 };

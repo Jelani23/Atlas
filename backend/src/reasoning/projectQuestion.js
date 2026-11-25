@@ -2,16 +2,42 @@ const {readRange}=require('../core/sourceReader');
 const {getDefaultModel}=require('../models/modelRouter');
 function detect(input,prior,agentId,now=Date.now(),tree=require('../core/projectCache').getTree()) {
     let text=String(input||'').trim();
-    const optIn=/^(?:please )?analy[sz]e\b/i.test(text);
-    if(optIn)text=text.replace(/^(?:please )?analy[sz]e\b/i,'Explain');
-    const mode=optIn?{analysisMode:true}:{};
+    const currentPrior=Boolean(prior&&prior.agentId===agentId&&now>=prior.at&&now-prior.at<600000);
+    // Resolve only an explicit choice from this conversation's pending file list.
+    // Preserve the original question and analysis mode, rather than asking the model
+    // to reconstruct an unfinished request from chat history.
+    if(currentPrior&&Array.isArray(prior.choices)){
+        if(/\b(?:that|this) (?:file|function|code)\b/i.test(text)&&/^(?:how|what|why|when|where|does|do|is|are|can|explain|describe)\b/i.test(text)){
+            const {agentId:owner,at,...request}=prior;
+            return {...request,choices:prior.choices.filter(file=>tree.includes(file))};
+        }
+        const choice=/^(?:(?:the )?(?:one|file|module) (?:in|under|from) |(?:in|under|from) )?(?:the )?([a-z0-9_./-]+?)(?: (?:folder|directory))?[.!?]?$/i.exec(text);
+        if(choice){
+            const selected=choice[1].toLowerCase();
+            const available=prior.choices.filter(file=>tree.includes(file));
+            const matches=available.filter(file=>{
+                const parts=file.toLowerCase().split('/'),folder=parts.slice(0,-1).join('/');
+                return file.toLowerCase()===selected||parts.at(-1)===selected||parts.slice(1,-1).includes(selected)||folder===selected||folder.endsWith('/'+selected);
+            });
+            const {choices,agentId:owner,at,...request}=prior;
+            if(matches.length===1)return {...request,filename:matches[0]};
+            if(matches.length>1||/^(?:(?:the )?(?:one|file|module) (?:in|under|from)|(?:in|under|from))\b/i.test(text))return {...request,choices:matches.length?matches:available};
+        }
+    }
+    const checked=/^(?:please )?checked analy[sz]e\b/i;
+    const checkedOptIn=checked.test(text);
+    const deep=/^(?:please )?(?:deep(?:ly)? analy[sz]e|analy[sz]e (?:deeply|in depth))\b/i;
+    const deepOptIn=checkedOptIn||deep.test(text);
+    const optIn=deepOptIn||/^(?:please )?analy[sz]e\b/i.test(text);
+    if(optIn)text=text.replace(checkedOptIn?checked:deepOptIn?deep:/^(?:please )?analy[sz]e\b/i,'Explain');
+    const mode=optIn?{analysisMode:true,...(deepOptIn?{deepAnalysis:true}:{}),...(checkedOptIn?{checkedInputs:true}:{})}:{};
     if(/^(?:can|could|would) you (?:please )?(?:read|show|run|execute|save|delete|edit|modify|rename|learn|check)\b/i.test(text))return null;
     if(!/^(?:how|what|why|when|where|does|do|is|are|can|could|would|explain|describe|compare)\b/i.test(text)
         || /\b(?:do not|don't|never) (?:read|inspect|access)\b/i.test(text))return null;
     const paths=[...text.matchAll(/\bsrc\/[a-zA-Z0-9_./-]+\.(?:js|json)\b/g)].map(m=>m[0]);
     const unique=[...new Set(paths)];
     if(unique.length===1)return {filename:unique[0],question:text,...mode};
-    if(!unique.length && prior?.agentId===agentId && now-prior.at<600000 && /\b(?:that|this) (?:file|function|code)\b/i.test(text))return {filename:prior.path,question:text,contextQuestion:prior.question,...(optIn||prior.analysisMode?{analysisMode:true,targetSymbol:prior.targetSymbol}: {})};
+    if(!unique.length && currentPrior && prior.path && /\b(?:that|this) (?:file|function|code)\b/i.test(text))return {filename:prior.path,question:text,contextQuestion:prior.question,...(optIn||prior.analysisMode?{analysisMode:true,targetSymbol:prior.targetSymbol}: {}),...(deepOptIn||!optIn&&prior.deepAnalysis?{deepAnalysis:true}:{}),...(checkedOptIn||!optIn&&prior.checkedInputs?{checkedInputs:true}:{})};
     if(!unique.length){
         const words=value=>value.replace(/([a-z0-9])([A-Z])/g,'$1 $2').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
         const spoken=' '+words(text)+' ';
@@ -25,12 +51,16 @@ function detect(input,prior,agentId,now=Date.now(),tree=require('../core/project
         const qualified=matches.filter(file=>file.split('/').slice(1,-1).some(folder=>spoken.includes(' '+words(folder)+' ')));
         const candidates=qualified.length?qualified:matches;
         if(candidates.length===1)return {filename:candidates[0],question:text,...mode};
-        if(candidates.length>1)return {choices:candidates,question:text};
+        if(candidates.length>1)return {choices:candidates,question:text,...mode};
     }
     return null;
 }
 function createService({repository,read=readRange,timeoutMs=45000,evidenceBundle=false,coverageContract=false}={}){
-    return {async answer({filename,question,contextQuestion,targetSymbol,inputBindings,analysisMode},{agentId,complete,isCancelled=()=>false,requestId}){
+    return {async answer(command,options){
+        if(command.deepAnalysis)return require('./deepAnalysis').createService({read,checkedInputs:command.checkedInputs===true}).answer(command,options);
+        const {filename,question,contextQuestion,targetSymbol:requestedSymbol,inputBindings:requestedBindings,analysisMode}=command;
+        let targetSymbol=requestedSymbol,inputBindings=requestedBindings;
+        const {agentId,complete,isCancelled=()=>false,requestId}=options;
         if(!/^[a-z][a-z0-9_-]{0,63}$/.test(agentId)||!question||question.length>3000)throw new Error('Invalid project question.');
         const cancelled=()=>{if(isCancelled())throw new Error('Project question cancelled.');};
         cancelled();
@@ -65,6 +95,8 @@ function createService({repository,read=readRange,timeoutMs=45000,evidenceBundle
         const functionRecord=functionInventory?.records.find(r=>r.symbolId===built.bundle.target.symbolId);
         const scenarios=functionRecord&&inputBindings?require('./functionScenario').evaluateScenarios(completeBundle,functionRecord,inputs,inputBindings):[];
         const booleanOutline=!inputs.length&&!inputBindings?functionRecord?.booleanReturn:null;
+        const flowOutline=!contextQuestion&&!inputs.length&&!inputBindings&&!booleanOutline?functionRecord?.flowOutline:null;
+        const sourceOutline=booleanOutline||flowOutline;
         if(scenarios.length)packet.finalOutcomes=scenarios.map(s=>({inputId:s.inputId,arguments:s.arguments,outcome:s.outcome}));
         if(built){built.bundle.request.quotedInputs=inputs;packet.bundle=built.bundle;}
         if(inputBindings){
@@ -119,14 +151,14 @@ function createService({repository,read=readRange,timeoutMs=45000,evidenceBundle
         const controller=new AbortController();let timer,poll,raw;
         const started=Date.now();
         try{
-            raw=booleanOutline?JSON.stringify({claims:[],unknowns:[],operationIds:[]}):await Promise.race([
+            raw=sourceOutline?JSON.stringify({claims:[],unknowns:[],operationIds:[]}):await Promise.race([
                 complete(messages,{...getDefaultModel(),requestId,think:false,temperature:0,maxTokens:900,context:8192,signal:controller.signal,
                     format:{type:'object',required:requiredFields,additionalProperties:false,properties:{...inputSchema,...semanticSchema,...branchSchema,...operationSchema,claims:{type:'array',minItems:scenarios.length?0:1,maxItems:scenarios.length?0:5,items:{type:'object',required:['text',referenceKey,...(built&&coverageContract?['addresses']:[])],additionalProperties:false,properties:{...(built&&coverageContract?{addresses:{type:'array',minItems:1,maxItems:questionParts.length,items:{type:'string',enum:questionParts.map(p=>p.id)}}}:{}),text:{type:'string'},[referenceKey]:{type:'array',minItems:1,maxItems:6,items:built?{type:'string',enum:allowedEvidence}:{type:'integer'}}}}},unknowns:{type:'array',maxItems:scenarios.length?0:4,items:{type:'string'}}}}}),
                 new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Project question timed out.'));},timeoutMs);poll=setInterval(()=>{if(isCancelled()){controller.abort();reject(new Error('Project question cancelled.'));}},50);})
             ]);
         }finally{
             clearTimeout(timer);clearInterval(poll);
-            console.info('[ProjectQuestion]',JSON.stringify({requestId,stage:booleanOutline?'boolean_outline':'model',elapsedMs:Date.now()-started,aborted:controller.signal.aborted,returned:typeof raw==='string'}));
+            console.info('[ProjectQuestion]',JSON.stringify({requestId,stage:booleanOutline?'boolean_outline':flowOutline?'flow_outline':'model',elapsedMs:Date.now()-started,aborted:controller.signal.aborted,returned:typeof raw==='string'}));
         }
         cancelled();
         if(typeof raw!=='string'||raw.length>16000)throw new Error('Invalid project answer.');
@@ -137,7 +169,7 @@ function createService({repository,read=readRange,timeoutMs=45000,evidenceBundle
         if(built&&answer.claims.length)answer.claims=require('./sourceBundle').bindClaims(answer,built.bundle);
         const lines=new Map(source.text.split('\n').map(l=>{const m=/^(\d+): (.*)$/.exec(l);return [Number(m[1]),m[2]];}));
         const validText=x=>typeof x==='string'&&x.trim()&&x.length<=2000;
-        if(!Array.isArray(answer.claims)||(!answer.claims.length&&!scenarios.length&&!booleanOutline)||answer.claims.length>5||!answer.claims.every(c=>validText(c.text)&&(built ? c.citations.length>0 : Array.isArray(c.lines)&&c.lines.length&&c.lines.length<=6&&c.lines.every(n=>Number.isSafeInteger(n)&&lines.has(n))))
+        if(!Array.isArray(answer.claims)||(!answer.claims.length&&!scenarios.length&&!sourceOutline)||answer.claims.length>5||!answer.claims.every(c=>validText(c.text)&&(built ? c.citations.length>0 : Array.isArray(c.lines)&&c.lines.length&&c.lines.length<=6&&c.lines.every(n=>Number.isSafeInteger(n)&&lines.has(n))))
             ||!Array.isArray(answer.unknowns)||answer.unknowns.length>4||!answer.unknowns.every(validText))throw new Error('Answer missing valid source citations.');
         if(scenarios.length)answer.predictions=[];
         if(inputs.length)answer.predictions=require('./questionInputs').bindPredictions(answer.predictions,inputs,built.bundle);
@@ -164,13 +196,13 @@ function createService({repository,read=readRange,timeoutMs=45000,evidenceBundle
         const narrativeClaims=answer.claims.filter(c=>!c.evidenceIds?.length||!c.evidenceIds.every(id=>selectedIds.has(id)));
         const operationClaims=selectedOperations.map(f=>({text:f.summary,citations:[f.span],lines:[f.span.line]}));
         const outcomeClaims=scenarios.map(s=>({text:require('./functionScenario').presentScenario(s,inputs.find(i=>i.id===s.inputId)),citations:[functionRecord.exits.find(e=>e.id===s.outcome.exitId)?.span||functionRecord.source],lines:[functionRecord.source.line]}));
-        const presentedClaims=[...new Map([...require('./booleanReturnOutline').presentBooleanReturn(booleanOutline),...outcomeClaims,...(answer.predictions||[]),...operationClaims,...narrativeClaims].map(c=>[c.text.trim(),c])).values()];
+        const presentedClaims=[...new Map([...require('./booleanReturnOutline').presentBooleanReturn(booleanOutline),...require('./functionFlowOutline').presentFlowOutline(flowOutline),...outcomeClaims,...(answer.predictions||[]),...operationClaims,...narrativeClaims].map(c=>[c.text.trim(),c])).values()];
         const missingText=questionCoverage?.missing.length?' Not yet addressed: '+questionCoverage.missing.map(p=>p.text).join('; '):'';
         const inputReport=require('./functionInputReport').reportInputs(functionRecord);
         const reply=presentedClaims.map(c=>`${c.text}\nSource: ${built?[...new Set(c.citations.map(s=>s.path+':'+s.line))].join(', '):source.path+':'+[...new Set(c.lines)].join(', ')}`).join('\n\n')+
             (answer.unknowns.length?'\n\nMissing evidence: '+answer.unknowns.join(' '):'')+
-            `\n\n${booleanOutline?'Source-derived Boolean return rule; leaf behavior remains unresolved.':'Current-source explanation; model reasoning is not independently verified.'} No tests run or knowledge saved. ${notes.join(' ')}`+missingText+assignmentText+coverageText+staticText+branchText+inputReport;
-        let speech=presentedClaims.map(c=>(booleanOutline&&c.speech)||c.text).join(' ')+(answer.unknowns.length?' I still need more evidence about: '+answer.unknowns.join(' '):'')+missingText+' This is my reading of the code, not a tested result.';
+            `\n\n${booleanOutline?'Source-derived Boolean return rule; leaf behavior remains unresolved.':flowOutline?'Source-derived control-flow outline; expression values and effects remain unresolved.':'Current-source explanation; model reasoning is not independently verified.'} No tests run or knowledge saved. ${notes.join(' ')}`+missingText+assignmentText+coverageText+staticText+branchText+inputReport;
+        let speech=presentedClaims.map(c=>(sourceOutline&&c.speech)||c.text).join(' ')+(answer.unknowns.length?' I still need more evidence about: '+answer.unknowns.join(' '):'')+missingText+' This is my reading of the code, not a tested result.';
         for(const file of built?built.bundle.files.map(f=>f.path):[source.path]){
             const spoken=file.split('/').pop().replace(/\.(js|json)$/,'').replace(/([a-z0-9])([A-Z])/g,'$1 $2')+' file';
             speech=speech.split(file).join(spoken);

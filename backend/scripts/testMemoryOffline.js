@@ -2,6 +2,30 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const tests = [
+    'evidenceCallerContext.test.js',
+    'evidenceApplication.test.js',
+    'connectedWorkflow.test.js',
+    'evidenceStore.test.js',
+    'evidenceOutline.test.js',
+    'evidenceOperations.test.js',
+    'sourceUnits.test.js',
+    'connectedEvidence.test.js',
+    'kokoroProcess.test.js',
+    'checkedReleasePolicy.test.js',
+    'conditionClaims.test.js',
+    'analysisBoundary.test.js',
+    'singleInput.test.js',
+    'wordleConstraints.test.js',
+    'puzzleHelper.test.js',
+    'wordleConversation.test.js',
+    'wordleStore.test.js',
+    'wordleDialogue.test.js',
+    'checkedPredictions.test.js',
+    'semanticEvaluation.test.js',
+    'ollamaEnvelopeTransport.test.js',
+    'deepAnalysisContract.test.js',
+    'deepAnalysis.test.js',
+    'conversationDeepAnalysis.test.js',
     'projectQuestion.test.js',
     'sourceBundle.test.js',
     'primitiveSemantics.test.js',
@@ -13,6 +37,11 @@ const tests = [
     'functionBehavior.test.js',
     'functionInputs.test.js',
     'booleanReturnOutline.test.js',
+    'functionFlowOutline.test.js',
+    'inputTransformations.test.js',
+    'flowOperations.test.js',
+    'analysisContext.test.js',
+    'deepAnalysisAudit.test.js',
     'functionCompletion.test.js',
     'functionScenario.test.js',
     'symbolScope.test.js',
@@ -60,10 +89,10 @@ const tests = [
 ];
 const failures = [];
 for (const test of tests) {
-    const script = "globalThis.fetch = async () => { throw new Error('Network disabled in offline memory tests'); }; require(process.argv[1]);";
+    const script = "const blocked=()=>{throw new Error('Network disabled in offline memory tests');}; globalThis.fetch=async()=>blocked(); for(const name of ['node:http','node:https']){const mod=require(name);mod.request=blocked;mod.get=blocked;} require(process.argv[1]);";
     const result = spawnSync(process.execPath, ['-e', script, path.join(__dirname, '../tests', test)], {
         encoding: 'utf8', timeout: 30000,
-        env: { ...process.env, ATLAS_MODEL_PROVIDER: 'ollama', OLLAMA_MODEL_MEMORY: '', SEMANTIC_MEMORY_CANONICALIZATION: 'true' }
+        env: { ...process.env, ATLAS_CONNECTED_EVIDENCE_PILOT: 'false', ATLAS_MODEL_PROVIDER: 'ollama', OLLAMA_MODEL_MEMORY: '', SEMANTIC_MEMORY_CANONICALIZATION: 'true' }
     });
     if (result.status !== 0) {
         failures.push(test);

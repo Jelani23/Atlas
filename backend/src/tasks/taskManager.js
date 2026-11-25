@@ -158,11 +158,12 @@ class TaskManager {
         });
     }
 
-    endRequest(taskId) {
+    endRequest(taskId, error) {
         const task = this.tasks.get(taskId);
         if (task) {
             const now = Date.now();
-            task.status = TaskStates.COMPLETED;
+            task.status = error ? TaskStates.FAILED : TaskStates.COMPLETED;
+            task.error = error || null;
             task.completedAt = now;
             task.duration = now - task.startedAt;
         }

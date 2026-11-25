@@ -3,6 +3,9 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
+const { loadClientIdentity } = require('./clientIdentity');
+let clientIdentity;
+let registrationReady = null;
 
 // Marker file that tells us whether Atlas has ever launched on this machine
 // before. Lives in Electron's per-user data dir, so it survives app updates
@@ -39,6 +42,7 @@ const pendingRpcs = new Map();
 function sendStatusToRenderer(status) {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('atlas:status', status);
+        mainWindow.webContents.send('atlas:event', { type: 'atlas.status', payload: { phase: 'client_connection', status } });
     }
 }
 
@@ -52,7 +56,14 @@ function connectAtlas() {
     ws.on('open', () => {
         console.log('[Electron] Connected to Atlas backend.');
         reconnectAttempts = 0;
-        sendStatusToRenderer('ready');
+        registrationReady = callAtlas('registerClient', [clientIdentity]);
+        registrationReady.then(device => {
+            sendStatusToRenderer('ready');
+            mainWindow?.webContents.send('atlas:event', { type: 'atlas.status', payload: { phase: 'client_registered', device } });
+        }).catch(error => {
+            console.error('[Electron] Client registration failed:', error.message);
+            sendStatusToRenderer('offline');
+        });
     });
 
     ws.on('message', (data) => {
@@ -74,6 +85,9 @@ function connectAtlas() {
     });
 
     ws.on('close', () => {
+        registrationReady = null;
+        for (const pending of pendingRpcs.values()) pending.reject(new Error('Backend disconnected'));
+        pendingRpcs.clear();
         if (isShuttingDown) return;
         console.log('[Electron] Atlas backend disconnected. Reconnecting...');
         sendStatusToRenderer('offline');
@@ -90,6 +104,13 @@ function connectAtlas() {
 }
 
 function callAtlas(method, args = []) {
+    if (method !== 'registerClient' && registrationReady) {
+        return registrationReady.then(() => sendRpc(method, args));
+    }
+    return sendRpc(method, args);
+}
+
+function sendRpc(method, args) {
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             return reject(new Error('Atlas backend is currently restarting or offline.'));
@@ -152,7 +173,8 @@ function createWindow() {
 }
 
 // IPC surface: renderer -> Electron -> Atlas Backend (via WS)
-ipcMain.handle('atlas:sendMessage', async (_event, text) => callAtlas('sendMessage', [text]));
+ipcMain.handle('atlas:sendMessage', async (_event, text, options) => callAtlas('sendMessage', [text, options]));
+ipcMain.handle('atlas:getClientDevice', () => callAtlas('getClientDevice'));
 ipcMain.handle('atlas:getState', () => callAtlas('getState'));
 ipcMain.handle('atlas:listModes', () => callAtlas('listModes'));
 ipcMain.handle('atlas:setMode', (_event, mode) => callAtlas('setMode', [mode]));
@@ -192,6 +214,7 @@ ipcMain.handle('window:close', () => {
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
 
 app.whenReady().then(() => {
+    clientIdentity = loadClientIdentity(app.getPath('userData'));
     createWindow();
     connectAtlas(); // Start WS client
 

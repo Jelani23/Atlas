@@ -3,7 +3,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const storage = new AsyncLocalStorage();
 const sessions = new Map();
 const fresh = id => ({ id, closed: false, lastSearchQuery: null, lastFileAction: null,
-    pendingAction: null, pendingPlan: null, codeEvidence: null, projectQuestion: null });
+    pendingAction: null, pendingPlan: null, codeEvidence: null, projectQuestion: null, puzzleState: null, puzzleConversation: null, puzzleBusy: false });
 const legacy = fresh(null); // Isolated callers/tests without a session.
 const current = () => storage.getStore() || legacy;
 const methods = {
@@ -26,6 +26,8 @@ const methods = {
         scope.closed = true;
         scope.codeEvidence = null;
         scope.projectQuestion = null;
+        scope.puzzleState = null;
+        scope.puzzleConversation = null;
         scope.pendingAction = scope.pendingPlan = scope.lastFileAction = scope.lastSearchQuery = null;
         require('../permissions/permissionManager').cancelScope(scope);
         if (key != null) sessions.delete(key);

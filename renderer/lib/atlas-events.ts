@@ -21,7 +21,12 @@ export interface AtlasEvent {
 }
 
 export interface AtlasBridge {
-  sendMessage: (text: string) => Promise<{ ok: boolean; reply?: string; error?: string }>
+  sendMessage: (text: string, options?: { transcriptionId?: string }) => Promise<{ ok: boolean; reply?: string; error?: string }>
+  getClientDevice: () => Promise<{ connectionId: string; inputSource: string; client: null | {
+    schemaVersion: number; deviceId: string; displayName: string; os: string;
+    clientType: string; deviceKind: string; trust: 'self-reported';
+    capabilities: Record<string, { supported: boolean; permission: string }>;
+  } }>
   getState: () => Promise<{ mode: string; sessionId: string | null; ready: boolean }>
   listModes: () => Promise<string[]>
   setMode: (mode: string) => Promise<{ ok: boolean; mode?: string; error?: string }>

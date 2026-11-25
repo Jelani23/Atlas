@@ -6,6 +6,9 @@ const { WebSocketServer } = require('ws');
 const { AtlasInterface } = require('./interface/atlasInterface');
 const ttsManager = require('./voice/tts/ttsManager');
 const kokoroProcess = require('./voice/tts/providers/kokoroProcess');
+const { createClientRegistry } = require('./devices/clientRegistry');
+const { createClientSession } = require('./devices/clientSession');
+const clientRegistry = createClientRegistry();
 
 const PORT = process.env.ATLAS_PORT || 7341;
 const atlas = new AtlasInterface();
@@ -42,6 +45,7 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
+    const clientSession = createClientSession(clientRegistry, ws);
     console.log('[Atlas Backend] Electron client connected via WS.');
     
     const handlers = {};
@@ -56,16 +60,18 @@ wss.on('connection', (ws) => {
 
     // Listen for RPC commands from Electron
     ws.on('message', async (data) => {
-        const msg = JSON.parse(data.toString());
-        const { id, method, args = [] } = msg;
+        let id;
         try {
+            const msg = JSON.parse(data.toString());
+            if (!msg || typeof msg.method !== 'string' || !Array.isArray(msg.args || [])) throw new Error('Invalid RPC envelope');
+            id = msg.id;
+            const { method, args = [] } = msg;
             let result;
-            if (method === 'sendMessage') {
-                const res = await atlas.sendMessage(...args);
-                // Spread so frontend gets { ok: true, reply: "...", audio: "..." }
-                result = { ok: true, ...res }; 
+            if (['registerClient', 'getClientDevice', 'sendMessage', 'transcribeAudio'].includes(method)) {
+                result = await clientSession.dispatch(method, args, atlas);
             }
             else if (method === 'getState') result = atlas.getState();
+            else if (method === 'reanalyzeConnectedEvidence') result = await atlas.reanalyzeConnectedEvidence(args[0]);
             else if (method === 'listModes') result = atlas.listModes();
             else if (method === 'setMode') result = { ok: true, mode: atlas.setMode(...args) };
             else if (method === 'resetConversation') {
@@ -94,18 +100,19 @@ wss.on('connection', (ws) => {
                 await atlas.shutdown();
                 result = { ok: true };
             }
-            else if (method === 'transcribeAudio') result = await atlas.transcribeAudio(...args);
             else if (method === 'interrupt') {
                 atlas.interrupt();
                 result = { ok: true };
             }
-            ws.send(JSON.stringify({ id, result }));
+            else throw new Error('Unknown RPC method');
+            if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ id, result }));
         } catch (err) {
-            ws.send(JSON.stringify({ id, error: err.message }));
+            if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ id, error: err.message }));
         }
     });
 
     ws.on('close', () => {
+        clientSession.close();
         FORWARDED_EVENTS.forEach(evt => atlas.off(evt, handlers[evt]));
         console.log('[Atlas Backend] Electron client disconnected.');
     });

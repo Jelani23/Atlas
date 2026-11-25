@@ -1,0 +1,47 @@
+{"message":"Can you tell me about the free agents in the league?","expected":["free_agents"],"actual":["free_agents"]}
+{"message":"Can you tell me about the injuries that are in the league?","expected":["league_injuries"],"actual":["league_injuries"]}
+{"message":"Who could I pick up from the waiver pool?","expected":["free_agents"],"actual":["free_agents"]}
+{"message":"Anyone on my squad banged up?","expected":["injuries"],"actual":["injuries"]}
+{"message":"Who is hurt on the other fantasy teams?","expected":["league_injuries"],"actual":["league_injuries"]}
+{"message":"The injuries, please.","expected":["league_injuries"],"actual":["league_injuries"]}
+{"message":"Actually just my guys.","expected":["injuries"],"actual":["injuries"]}
+{"message":"Where do we sit compared with everybody else?","expected":["standings"],"actual":["standings"]}
+{"message":"Run through who I have on my team.","expected":["roster"],"actual":["roster"]}
+{"message":"Give me the big picture on my fantasy basketball team.","expected":["overview"],"actual":["overview"]}
+{"message":"Who am I facing and how close is it?","expected":["matchup"],"actual":["matchup"]}
+{"message":"Check my roster and the available free agents.","expected":["roster","free_agents"],"actual":["roster","free_agents"]}
+{"message":"Can you show me my current standings in my fantasy league?","expected":["standings"],"actual":["standings"]}
+{"message":"Can you give me an overview of my fantasy NBA?","expected":["overview"],"actual":["overview"]}
+{"message":"Can you show my fantasy basketball roster?","expected":["roster"],"actual":["roster"]}
+{"message":"What's my current ranking in my ESPN fantasy NBA league?","expected":["standings"],"actual":["standings"]}
+{"message":"How does a waiver claim work?","expected":null,"actual":null}
+{"message":"Don't fetch the injuries yet.","expected":null,"actual":null}
+{"message":"My knee hurts after running. What should I do?","expected":null,"actual":null}
+{"message":"Switching to football: show my NFL fantasy injuries.","expected":null,"actual":null}
+{"message":"What does the ESPN bridge function do?","expected":null,"actual":null}
+{"message":"How is the weather tomorrow?","expected":null,"actual":null}
+{"message":"Add the best available player to my roster.","expected":"unsupported","actual":["waiver_scout"]}
+{"message":"Can you tell me the injuries in the league?","expected":"clarify","actual":"clarify"}
+{"message":"Could you pull up the players nobody in our fantasy league owns?","expected":["free_agents"],"actual":["free_agents"]}
+{"message":"Any health concerns on my fantasy basketball squad?","expected":["injuries"],"actual":["injuries"]}
+{"message":"I would like to see where my fantasy basketball team sits in the table.","expected":["standings"],"actual":["standings"]}
+{"message":"List the injured players rostered by every manager in my fantasy basketball league.","expected":["league_injuries"],"actual":["league_injuries"]}
+{"message":"What about my opponent this week?","expected":["matchup"],"actual":["matchup"]}
+{"message":"Forget basketball. How are the baseball standings looking?","expected":null,"actual":null}
+{"message":"Which fantasy teams are struggling most with injuries?","expected":["league_analysis"],"actual":["league_analysis"]}
+{"message":"Who has the strongest fantasy team this week?","expected":["league_analysis"],"actual":["standings"]}
+{"message":"Build my best lineup for next week.","expected":["optimize_lineup"],"actual":["optimize_lineup"],"expectedParameters":{"window":"next"},"parameters":{"window":"next"}}
+{"message":"What do I need to average in the games left to win?","expected":["forecast"],"actual":["forecast"]}
+{"message":"Which waiver pickups would improve my starting lineup?","expected":["waiver_scout"],"actual":["waiver_scout"]}
+{"message":"Find some trade opportunities in my fantasy basketball league.","expected":["trade_scout"],"actual":["trade_scout"]}
+{"message":"Would giving Harden for Hart improve my fantasy team?","expected":["evaluate_trade"],"actual":["evaluate_trade"],"expectedParameters":{"give":["Harden"],"receive":["Hart"]},"parameters":{"give":["Harden"],"receive":["Hart"]}}
+{"message":"Pull together a unified fantasy league snapshot.","expected":["snapshot"],"actual":["snapshot"]}
+{"message":"Actually submit the trade for me.","expected":"unsupported","actual":"unsupported"}
+{"message":"Forecast my fantasy matchup.","expected":["forecast"],"actual":["forecast"],"expectedParameters":{}}
+{"message":"How am I projected to finish against my opponent?","expected":["forecast"],"actual":["forecast"],"expectedParameters":{}}
+{"message":"Forecast my fantasy matchup for next week.","expected":"unsupported","actual":"unsupported"}
+{"message":"How many actual games has each fantasy team played this season?","expected":["played_games"],"actual":["played_games"]}
+{"message":"Compare games played by active players, excluding my bench and IR.","expected":["played_games"],"actual":["played_games"]}
+{"message":"Show me the fantasy stats overview.","expected":["played_games"],"actual":["overview"]}
+{"message":"Which fantasy team got the most actual appearances last week?","expected":["played_games"],"actual":["played_games"]}
+43/46 live local-model routing cases passed.

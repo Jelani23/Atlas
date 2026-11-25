@@ -1,2 +1,8 @@
 node_modules/
+.env
+.env.*
+!.env.example
+.venv-espn/
+__pycache__/
 out/
+backend/.local/wordle-games/

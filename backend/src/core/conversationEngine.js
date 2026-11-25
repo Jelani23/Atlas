@@ -12,7 +12,7 @@ const responseController = require('../response/controller');
 const memoryManager = require('../memory/memoryManager');
 const contextBuilder = require('./contextBuilder');
 const responseProcessor = require('../response/processor');
-const { formatImmediateToolReply } = require('../response/toolResultPresenter');
+const { formatImmediateToolReply, formatImmediateToolSpeech } = require('../response/toolResultPresenter');
 const personalityEngine = require('./personalityEngine');
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
@@ -46,13 +46,14 @@ let lastEmittedModel = null;
 // Source-backed extraction is enabled by default. Set the flag to false to pause it.
 const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = isSearchKnowledgePersistenceEnabled();
 
-async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart, speech }) {
+async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart, speech, failure }) {
     await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
-    taskManager.endRequest(taskId);
-    eventBus.emit(EventTypes.REQUEST_COMPLETED, {
+    taskManager.endRequest(taskId,failure);
+    eventBus.emit(failure?EventTypes.REQUEST_FAILED:EventTypes.REQUEST_COMPLETED, {
         taskId,
         requestId,
         reply,
+        ...(failure?{error:failure}:{}),
         timestamp: Date.now(),
         duration: Date.now() - requestStart
     });
@@ -135,19 +136,43 @@ function scheduleMemoryExtraction({ userInput, memory, userMessageId, workingCon
     }, taskId, requestId, 'NORMAL');
 }
 
+// Track turns by the actual session scope, including its lifetime after closing.
+const pendingTurns = new WeakMap();
 function handleMessage(userInput, options) {
-    return require('../planner/state').runInSession(options.sessionId,
-        () => handleSessionMessage(userInput, options));
+    const state = require('../planner/state');
+    return state.runInSession(options.sessionId, () => {
+        const scope = state.getSessionScope();
+        const previous = pendingTurns.get(scope);
+        const turn = { superseded: false, deep: false, taskId: options.taskId };
+        if (previous) {
+            previous.superseded = true;
+            if (previous.deep) taskManager.cancelTask(previous.taskId);
+        }
+        pendingTurns.set(scope, turn);
+        turn.promise = (async () => {
+            // Let the cancelled analysis release its service lock before routing again.
+            if (previous?.deep || previous?.waiting) {
+                turn.waiting = true;
+                await previous.promise.catch(() => {});
+                turn.waiting = false;
+            }
+            if (turn.superseded || scope.closed) return { reply: '', audio: null };
+            return handleSessionMessage(userInput, { ...options, turn });
+        })().finally(() => {
+            if (pendingTurns.get(scope) === turn) pendingTurns.delete(scope);
+        });
+        return turn.promise;
+    });
 }
 
-async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId }) {
+async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId, turn, interaction }) {
     const requestStart = Date.now();
 
     try {
         ttsQueue.stop();
 
         taskManager.startRequest(taskId, requestId);
-        eventBus.emit(EventTypes.REQUEST_STARTED, { taskId, requestId, text: userInput, timestamp: requestStart });
+        eventBus.emit(EventTypes.REQUEST_STARTED, { taskId, requestId, text: userInput, interaction, timestamp: requestStart });
         
         // 1. Intent Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'intent', timestamp: Date.now() });
@@ -159,6 +184,10 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         const history = await memory.workingMemory.getHistory(sessionId, 4);
         const agent = await getAgentProfile(agentId);
         const sessionScope = require('../planner/state');
+        if (turn.superseded || sessionScope.isSessionClosed()) {
+            taskManager.cancelTask(taskId);
+            return { reply: '', audio: null };
+        }
         const codeEvidence = require('./codeEvidence');
         const priorCodeEvidence = codeEvidence.followUp(userInput, sessionScope.codeEvidence, agent.agentId);
         sessionScope.codeEvidence = priorCodeEvidence;
@@ -184,11 +213,25 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         }
 
         const projectQuestion=require('../reasoning/projectQuestion');
-        const question=projectQuestion.detect(userInput,sessionScope.projectQuestion,agent.agentId);
+        // A league-data request must reach the tool planner even when a prior
+        // source discussion or the ESPN tool's filename matches the question.
+        const fantasyRequest = await require('../integrations/espnFantasyIntent').resolve(userInput, history, { requestId });
+        const question=fantasyRequest ? null : projectQuestion.detect(userInput,sessionScope.projectQuestion,agent.agentId);
+        if (turn.superseded || sessionScope.isSessionClosed()) {
+            taskManager.cancelTask(taskId);
+            return { reply: '', audio: null };
+        }
         sessionScope.projectQuestion=null;
         if(question){
-            let reply,speech;
+            turn.deep = question.deepAnalysis === true;
+            let reply,speech,failure;
+            const questionCancelled=()=>sessionScope.isSessionClosed()||(question.deepAnalysis&&(turn.superseded||taskManager.getTask(taskId)?.status==='CANCELLED'));
             if(question.choices){
+                if(!question.choices.length){
+                    reply='Those source files are no longer in the current index. Please name the source file again.';
+                    return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech:reply});
+                }
+                sessionScope.projectQuestion={...question,agentId:agent.agentId,at:Date.now()};
                 reply='I found several matching source files: '+question.choices.join(', ')+'. Please include the folder name to distinguish them.';
                 speech='I found several matching files. Please include the folder name to distinguish them.';
                 return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech});
@@ -196,14 +239,29 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
             try{
                 const permission=require('../permissions/permissionManager').check('readCode');
                 if(!permission.allowed||permission.requiresApproval)throw new Error('Source reading is not permitted.');
-                const result=await projectQuestion.createService({repository:understanding.configuredRepository(),evidenceBundle:question.analysisMode===true}).answer(question,{
-                    agentId:agent.agentId,requestId,complete:(messages,options)=>modelAdapter.complete(messages,options),isCancelled:()=>sessionScope.isSessionClosed()
+                const result=await projectQuestion.createService({repository:question.deepAnalysis?undefined:understanding.configuredRepository(),evidenceBundle:question.analysisMode===true}).answer(question,{
+                    agentId:agent.agentId,requestId,complete:(messages,options)=>modelAdapter.complete(messages,options),
+                    completeEnvelope:(messages,options)=>require('../models/providers/ollama').completeEnvelope(messages,options),
+                    onSourceSelected:({path,targetSymbol})=>{
+                        sessionScope.projectQuestion={path,targetSymbol,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question,analysisMode:true,deepAnalysis:true,checkedInputs:question.checkedInputs===true};
+                    },
+                    isCancelled:questionCancelled
                 });
-                sessionScope.projectQuestion={path:result.path,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question,analysisMode:question.analysisMode===true,targetSymbol:result.coverage?.target?.name};
+                if(question.deepAnalysis&&questionCancelled())throw new Error('Deep analysis cancelled.');
+                sessionScope.projectQuestion={path:result.path,agentId:agent.agentId,at:Date.now(),question:question.contextQuestion||question.question,analysisMode:question.analysisMode===true,deepAnalysis:question.deepAnalysis===true,checkedInputs:question.checkedInputs===true,targetSymbol:result.coverage?.target?.name};
                 reply=result.reply;
                 speech=result.speech;
-            }catch(error){reply=`Project question could not complete: ${error.message}`;}
-            return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech});
+            }catch(error){
+                if(question.deepAnalysis&&sessionScope.projectQuestion)sessionScope.projectQuestion.at=Date.now();
+                reply=`Project question could not complete: ${error.message}`;
+                failure=reply;
+            }
+            if(question.deepAnalysis&&questionCancelled()){
+                if (!turn.superseded) sessionScope.projectQuestion=null;
+                taskManager.cancelTask(taskId);
+                return {reply:'',audio:null};
+            }
+            return finishImmediateReply(reply,{memory,sessionId,taskId,requestId,requestStart,speech,failure});
         }
 
         // Phase 3C.2: Fetch rolling working context
@@ -212,7 +270,7 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         // 2. Planner Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'planner', timestamp: Date.now() });
         const plannerStart = Date.now();
-        const toolResult = await planner.route(intent, userInput, history, taskId, requestId);
+        const toolResult = await planner.route(intent, userInput, history, taskId, requestId, { fantasyRequest });
         sessionScope.codeEvidence = codeEvidence.capture(toolResult, agent.agentId)
             || (toolResult.needsTool ? null : priorCodeEvidence);
         const plannerDuration = Date.now() - plannerStart;
@@ -256,7 +314,8 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         if (toolResult.shortCircuit) {
             const instantReply = formatImmediateToolReply(toolResult);
             return finishImmediateReply(instantReply, {
-                memory, sessionId, taskId, requestId, requestStart
+                memory, sessionId, taskId, requestId, requestStart,
+                speech: formatImmediateToolSpeech(toolResult)
             });
         }
 
@@ -422,7 +481,8 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
             return finishImmediateReply(recallGap, { memory, sessionId, taskId, requestId, requestStart });
         }
 
-        const context = await contextBuilder.buildContext({
+        let context = await contextBuilder.buildContext({
+            interaction,
             mode: effectiveMode,
             intent,
             responseStyle,
@@ -438,6 +498,8 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
             capabilityRuntime: { model: modelChoice, tts: ttsManager.getStatus(), agentProfile: { agentId: agent.agentId, source: agent.source, revision: agent.revision } },
             agentProfile: agent.profile
         });
+        const puzzleContext = require('../puzzles/wordleConversation').contextFor(userInput);
+        if (puzzleContext) context += '\n\n' + puzzleContext;
         const contextDuration = Date.now() - contextStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'context', duration: contextDuration, timestamp: Date.now() });
 

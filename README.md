@@ -9,6 +9,15 @@ It ships as a desktop app: an Electron shell wrapping a Next.js/React/
 Tailwind UI (a "cloud" presence visualization plus a chat interface) on
 top of a Node.js backend that talks to local LLMs through Ollama.
 
+## Cost requirement
+
+Atlas/Alice development and operation must use free software and the existing
+hardware. Do not add paid APIs, subscriptions, paid hosting, or required purchases.
+Use installed local models for the current semantic evaluation work. The earlier
+paid model comparison proposal was declined and is withdrawn. Retained remote
+provider adapters are optional legacy integrations, not a requirement or an
+automatic fallback for local model failures.
+
 ## Why
 
 Most AI assistants are either a chat window bolted onto a hosted model, or
@@ -99,6 +108,22 @@ everything — plus TTS/STT for voice interaction down the line.
   `SUPABASE_MIGRATION.md`
 
 ## Development
+
+### Puzzle helper
+
+Tell Alice “Let's play Wordle.” She suggests a guess; describe its colors or
+paste the squares, and she checks the clues before suggesting the next one.
+Partial or ambiguous feedback prompts a clarification. She remembers the board
+in a local per-conversation JSON save. The local model interprets natural turns;
+a bundled vocabulary and clue checks validate guesses. Explicit Wordle commands remain available; Connections
+currently uses `Connections: new` plus a comma-separated board and `Connections: suggest`.
+See the [commands and limitations](docs/puzzle-helper.md).
+
+### Experimental checked code analysis
+
+Use `Checked analyze src/<file>.js function <name> with <parameter> set to <value>` for the explicit checked-analysis pilot. Supply every function parameter; join additional assignments with `and`. It reads source without executing it. If any requested outcome lacks a bounded static check, it skips the model and reports the limitation, preserving any supported results. When all outcomes have checks, it can request a separately labeled, unverified model explanation. This deliberately narrow mode does not make model explanations reliable.
+
+The normal chat and analysis modes keep their existing behavior. See the [live test checklist](docs/checked-analysis-live-check-2026-10-08.md) for examples, limitations and offline results.
 
 ```bash
 npm install       # installs root, backend, and renderer deps

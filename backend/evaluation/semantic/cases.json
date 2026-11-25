@@ -1,0 +1,1268 @@
+{
+  "version": 2,
+  "review": {
+    "status": "Source-reviewed; fixed pure-fixture execution cross-check enforced by semanticEvaluation.test.js.",
+    "reviewer": "Codex primary agent; no separate human or second-agent review",
+    "splitPolicy": "Adjacent fallback operators share development; numeric parsing operations share heldout. No function or alternate input crosses splits. Heldout is a session holdout, not unseen pretraining data."
+  },
+  "cases": [
+    {
+      "id": "fallback",
+      "split": "development",
+      "family": "fallback-operators",
+      "file": "fixtures/fallback.js",
+      "target": "renderValue",
+      "invoke": "renderValue",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": ""
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            false
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": ""
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            "  oak  "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "oak"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Apply || before String; 0 and false choose empty text."
+        },
+        {
+          "id": "c2",
+          "text": "Trim only after conversion; return a string."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "numeric-prefix",
+      "split": "heldout",
+      "family": "numeric-parsing",
+      "file": "fixtures/numeric-prefix.js",
+      "target": "prefixNumber",
+      "invoke": "prefixNumber",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "12cats"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 12
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "cats12"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": "NaN"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "parseFloat consumes a numeric prefix but does not search later text."
+        },
+        {
+          "id": "c2",
+          "text": "NaN is a number value, not an exception."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "guard-method",
+      "split": "development",
+      "family": "type-exception",
+      "file": "fixtures/guard-method.js",
+      "target": "lower",
+      "invoke": "lower",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "absent"
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            7
+          ],
+          "expected": {
+            "kind": "throw",
+            "errorName": "TypeError"
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            "BOAT"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "boat"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Falsy input returns before the method call."
+        },
+        {
+          "id": "c2",
+          "text": "Truthy numeric input has no toLowerCase method; no implicit String conversion."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "delete-punctuation",
+      "split": "development",
+      "family": "strings",
+      "file": "fixtures/delete-punctuation.js",
+      "target": "joined",
+      "invoke": "joined",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "red-blue sky"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                "redblue",
+                "sky"
+              ]
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "Éa!"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                "a"
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Deletion joins adjacent fragments; no lowercase or transliteration occurs."
+        },
+        {
+          "id": "c2",
+          "text": "Split runs on retained whitespace after deletion."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "set-order",
+      "split": "development",
+      "family": "collections",
+      "file": "fixtures/set-order.js",
+      "target": "unique",
+      "invoke": "unique",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            [
+              "b",
+              "a",
+              "b"
+            ]
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                "b",
+                "a"
+              ]
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            [
+              2,
+              1,
+              2
+            ]
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                2,
+                1
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Set iteration preserves first insertion order."
+        },
+        {
+          "id": "c2",
+          "text": "Adding an existing element does not move it."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "branch-priority",
+      "split": "development",
+      "family": "branches",
+      "file": "fixtures/branch-priority.js",
+      "target": "status",
+      "invoke": "status",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "ALLOW DENY"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "ALLOW error"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            "ordinary!"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "DENY wins when both markers occur."
+        },
+        {
+          "id": "c2",
+          "text": "ALLOW returns before the length fallback; true does not establish authorization."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "descending-bound",
+      "split": "development",
+      "family": "loops",
+      "file": "fixtures/descending-bound.js",
+      "target": "sizes",
+      "invoke": "sizes",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            2
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": []
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            5
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                5,
+                4,
+                3
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Start is min(n,5); lower bound 3 is inclusive."
+        },
+        {
+          "id": "c2",
+          "text": "No iteration happens if the starting value is below 3."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "helper-flow",
+      "split": "development",
+      "family": "helpers",
+      "file": "fixtures/helper-flow.js",
+      "target": "twice",
+      "invoke": "twice",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            2
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 4
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "2"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "211"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Both helper bodies are supplied; inner call precedes outer call."
+        },
+        {
+          "id": "c2",
+          "text": "The + operator concatenates when the supplied operand is a string."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "alias-state",
+      "split": "development",
+      "family": "state",
+      "file": "fixtures/alias-state.js",
+      "target": "aliasCount",
+      "invoke": "aliasCount",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            2
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 3
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "2"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 3
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Alias and state refer to the same object; const does not freeze it."
+        },
+        {
+          "id": "c2",
+          "text": "Postincrement coerces count numerically before storing it."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "missing-helper",
+      "split": "development",
+      "family": "missing-dependency",
+      "file": "fixtures/missing-helper.js",
+      "target": "quote",
+      "invoke": "quote",
+      "executable": false,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "A"
+          ],
+          "expected": {
+            "kind": "unknown",
+            "needed": "price implementation and return for A"
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Conditional on the dependency loading, exact output requires price implementation/result."
+        },
+        {
+          "id": "c2",
+          "text": "The supplied source establishes multiplication by 2, but does not supply price."
+        }
+      ],
+      "questionExtra": "Assume the external module loads; its price implementation is not supplied."
+    },
+    {
+      "id": "caller-normalizes",
+      "split": "development",
+      "family": "caller-context",
+      "file": "fixtures/caller-normalizes.js",
+      "target": "width",
+      "invoke": "handle",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            7
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 1
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            null
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 0
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Question asks handle calls; falsy fallback and String belong to the caller."
+        },
+        {
+          "id": "c2",
+          "text": "handle(7) passes string 7 of length 1; handle(null) passes empty string."
+        }
+      ],
+      "questionExtra": "Explain how width participates in handle; report results for the specified caller invocation."
+    },
+    {
+      "id": "trim-pipeline",
+      "split": "development",
+      "family": "intermediate",
+      "file": "fixtures/trim-pipeline.js",
+      "target": "tokenCount",
+      "invoke": "tokenCount",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "   "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 1
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            " a  b "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 2
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Trimming whitespace-only text produces empty string."
+        },
+        {
+          "id": "c2",
+          "text": "Splitting empty string gives one empty element, not an empty array."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "nullish",
+      "split": "development",
+      "family": "fallback-operators",
+      "file": "fixtures/nullish.js",
+      "target": "defaultCount",
+      "invoke": "defaultCount",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            false
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            null
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 9
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Nullish fallback preserves 0 and false."
+        },
+        {
+          "id": "c2",
+          "text": "Only null or undefined choose 9 for these inputs."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "numeric-whole",
+      "split": "heldout",
+      "family": "numeric-parsing",
+      "file": "fixtures/numeric-whole.js",
+      "target": "wholeNumber",
+      "invoke": "wholeNumber",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "  "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "0x10"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 16
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            "12cats"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": "NaN"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Number parses the whole trimmed input and recognizes hexadecimal syntax."
+        },
+        {
+          "id": "c2",
+          "text": "Empty whitespace is zero; trailing nonnumeric characters yield NaN."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "exception-boundary",
+      "split": "heldout",
+      "family": "catch-scope",
+      "file": "fixtures/exception-boundary.js",
+      "target": "safeParse",
+      "invoke": "safeParse",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            7
+          ],
+          "expected": {
+            "kind": "throw",
+            "errorName": "TypeError"
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            " bad "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "null",
+              "value": null
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            " {\"a\":1} "
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "object",
+              "value": {
+                "a": 1
+              }
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "trim is outside try; its TypeError escapes."
+        },
+        {
+          "id": "c2",
+          "text": "JSON parse errors are caught and return null."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "utf16",
+      "split": "heldout",
+      "family": "unicode-units",
+      "file": "fixtures/utf16.js",
+      "target": "middleUnit",
+      "invoke": "middleUnit",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "😀a"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                3,
+                56832
+              ]
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "ab"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                2,
+                98
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "length and slice use UTF-16 code units, not code points."
+        },
+        {
+          "id": "c2",
+          "text": "The selected unit of the emoji is the low surrogate 56832."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "map-reinsert",
+      "split": "heldout",
+      "family": "map-mutation",
+      "file": "fixtures/map-reinsert.js",
+      "target": "reinsert",
+      "invoke": "reinsert",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            [
+              [
+                "a",
+                1
+              ],
+              [
+                "b",
+                2
+              ]
+            ]
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                "b",
+                "a"
+              ]
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            [
+              [
+                "b",
+                2
+              ],
+              [
+                "a",
+                1
+              ],
+              [
+                "c",
+                3
+              ]
+            ]
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                "b",
+                "c",
+                "a"
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Deleting removes the insertion position."
+        },
+        {
+          "id": "c2",
+          "text": "Reinsertion puts a at the end regardless of its prior position."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "finally-return",
+      "split": "heldout",
+      "family": "finally-control",
+      "file": "fixtures/finally-return.js",
+      "target": "finish",
+      "invoke": "finish",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            true
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "last"
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            false
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "last"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "finally return replaces the pending return when true."
+        },
+        {
+          "id": "c2",
+          "text": "finally return also suppresses the thrown Error when false."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "loop-continue",
+      "split": "heldout",
+      "family": "loop-update",
+      "file": "fixtures/loop-continue.js",
+      "target": "sumOddSlots",
+      "invoke": "sumOddSlots",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            4
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 4
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            1
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 0
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "continue still runs the for update expression."
+        },
+        {
+          "id": "c2",
+          "text": "Upper bound is exclusive; for n=4 only 1 and 3 contribute."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "helper-shadow",
+      "split": "heldout",
+      "family": "lexical-binding",
+      "file": "fixtures/helper-shadow.js",
+      "target": "apply",
+      "invoke": "entry",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 6
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "The parameter convert shadows the module function."
+        },
+        {
+          "id": "c2",
+          "text": "entry supplies the callback, which returns 6; do not use module convert."
+        }
+      ],
+      "questionExtra": "Explain how apply participates in entry; report results for the specified caller invocation."
+    },
+    {
+      "id": "regex-state",
+      "split": "heldout",
+      "family": "shared-mutable-state",
+      "file": "fixtures/regex-state.js",
+      "target": "testTwice",
+      "invoke": "testTwice",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "a"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                true,
+                false,
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            "aa"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "array",
+              "value": [
+                true,
+                true,
+                2
+              ]
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "The same global regex retains lastIndex between tests in one invocation."
+        },
+        {
+          "id": "c2",
+          "text": "A failed test resets lastIndex to zero; each invocation constructs a fresh regex."
+        }
+      ],
+      "questionExtra": ""
+    },
+    {
+      "id": "unknown-runtime",
+      "split": "heldout",
+      "family": "runtime-state",
+      "file": "fixtures/unknown-runtime.js",
+      "target": "selected",
+      "invoke": "selected",
+      "executable": false,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "A"
+          ],
+          "expected": {
+            "kind": "unknown",
+            "needed": "cache.get(A) result and cache binding"
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Actual cache contents/get behavior are unspecified."
+        },
+        {
+          "id": "c2",
+          "text": "If get returns nullish, selected returns missing; other values are preserved."
+        }
+      ],
+      "questionExtra": "For selected(cache,\"A\"), the cache binding and contents are not supplied. Do not assume Map or an empty cache."
+    },
+    {
+      "id": "caller-truthiness",
+      "split": "heldout",
+      "family": "downstream-consequence",
+      "file": "fixtures/caller-truthiness.js",
+      "target": "check",
+      "invoke": "shouldSave",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            "x"
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            ""
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "Nonempty string no is truthy, regardless of its English meaning."
+        },
+        {
+          "id": "c2",
+          "text": "The caller converts check output to boolean; direct output is not the caller output."
+        }
+      ],
+      "questionExtra": "Explain how check participates in shouldSave; report results for the specified caller invocation."
+    },
+    {
+      "id": "short-circuit",
+      "split": "heldout",
+      "family": "operand-values",
+      "file": "fixtures/short-circuit.js",
+      "target": "choose",
+      "invoke": "choose",
+      "executable": true,
+      "probes": [
+        {
+          "id": "p1",
+          "args": [
+            0
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "number",
+              "value": 0
+            }
+          }
+        },
+        {
+          "id": "p2",
+          "args": [
+            ""
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": ""
+            }
+          }
+        },
+        {
+          "id": "p3",
+          "args": [
+            7
+          ],
+          "expected": {
+            "kind": "return",
+            "value": {
+              "type": "string",
+              "value": "ready"
+            }
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "id": "c1",
+          "text": "&& returns an operand, not necessarily a boolean."
+        },
+        {
+          "id": "c2",
+          "text": "Falsy input short circuits; truthy input yields the right operand."
+        }
+      ],
+      "questionExtra": ""
+    }
+  ]
+}
