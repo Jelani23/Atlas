@@ -10,7 +10,7 @@
     "dev": "node scripts/dev.js",
     "dev:host": "node scripts/dev.js --role=host",
     "dev:client": "node scripts/dev.js --role=client",
-    "test:launch": "node tests/launchConfig.test.js && node tests/electronClientLifecycle.test.js",
+    "test:launch": "node tests/launchConfig.test.js && node tests/electronClientLifecycle.test.js && node tests/electronLauncher.test.js",
     "build:renderer": "npm --prefix renderer run build",
     "build": "npm run build:renderer && electron-builder",
     "postinstall": "node scripts/installDependencies.js"
