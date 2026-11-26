@@ -31,9 +31,9 @@ async function main() {
     for (const text of ['describe my screen', 'Please look at my screen.', "What's on my screen?", 'take a screenshot', "Can you tell me what's going on in my screen?", 'Could you describe my screen on monitor 2?']) assert(isScreenRequest(text), text);
     for (const text of ['Can you see my screen?', "Don't take a screenshot", 'How do I take a screenshot?', 'describe my screen and delete files']) assert(!isScreenRequest(text));
     // Intentionally reverse source enumeration; selection must use IDs, not order.
-    let confirmations = 0, connectedDisplays = displays;
+    let confirmations = 0, connectedDisplays = displays, appDisplay = displays[0];
     const multi = createScreenAwareness({
-        platform: 'win32', screen: { getAllDisplays: () => connectedDisplays, getPrimaryDisplay: () => displays[0], getDisplayMatching: () => displays[0] },
+        platform: 'win32', screen: { getAllDisplays: () => connectedDisplays, getPrimaryDisplay: () => displays[0], getDisplayMatching: () => appDisplay },
         dialog: { showMessageBox: async () => { confirmations++; return { response: 1 }; } },
         desktopCapturer: { getSources: async () => [2,1].map(id => ({ id: `screen:${id}:0`, display_id: String(id), thumbnail: {
             isEmpty: () => false, getSize: () => ({ width: 1600, height: 900 }), toJPEG: () => Buffer.from([255,216,255,id]),
@@ -44,7 +44,7 @@ async function main() {
     assert.equal(first.displayId, '1'); assert.equal(second.displayId, '2');
     assert.notEqual(first.imageHash, second.imageHash);
     assert.equal(multi.inventory(window).selectedDisplayId, '2');
-    assert.equal((await multi.capture(window, undefined, { requested: true, text: "Can you tell me what's going on in my screen?" })).displayId, '2');
+    assert.equal((await multi.capture(window, undefined, { requested: true, text: "Can you tell me what's going on in my screen?" })).displayId, '1');
     assert.equal((await multi.capture(window, undefined, { requested: true, text: 'describe my screen on monitor 1' })).displayId, '1');
     assert.equal(confirmations, 0, 'Manual and natural-language requests must never show application dialogs');
     // Replay the user's exact sequence, not just isolated parser matches.
@@ -52,12 +52,20 @@ async function main() {
         ["Alright can you tell me what's happening on monitor 1?", '1'],
         ["Tell me what's happening on this screen?", '1'],
         ["Can you tell me what's shown on my other screen?", '2'],
-        ["Well then can you tell me what's happening on my other screen then?", '1'],
+        ["Well then can you tell me what's happening on my other screen then?", '2'],
         ["Okay, so can you tell me what\u2019s shown on this screen?", '1'],
     ]) {
         assert(isScreenRequest(text), text);
         assert.equal((await multi.capture(window, undefined, { requested: true, text })).displayId, expected, text);
     }
+    for (const text of ["Can you tell me what's visible on my other monitor?", 'What about on my other monitor?', "What's happening on my other monitor?", "Um ok I think I fixed your screen sharing, can you tell me what's shown on my other monitor now?"]) {
+        assert.equal((await multi.capture(window, undefined, { requested: true, text })).displayId, '2');
+    }
+    appDisplay = displays[1];
+    assert.equal((await multi.capture(window, undefined, { requested: true, text: 'Describe this monitor' })).displayId, '2');
+    assert.equal((await multi.capture(window, undefined, { requested: true, text: 'What about on my other monitor?' })).displayId, '1');
+    assert.equal((await multi.capture(window, undefined, { requested: true, text: 'What about on my other monitor?' })).displayId, '1');
+    appDisplay = displays[0];
     connectedDisplays = [...displays, { ...displays[0], id: 3 }];
     await assert.rejects(multi.capture(window, undefined, { requested: true, text: "What's on my other screen?" }), error => error.code === 'SCREEN_OTHER' && /3 connected/.test(error.message));
     connectedDisplays = [displays[1]];
@@ -67,6 +75,17 @@ async function main() {
     await assert.rejects(multi.capture(window, undefined, { requested: true, text: 'look at monitor two' }), error => error.code === 'SCREEN_RANGE' && error.requestedMonitor === 2 && /1 connected screen/.test(error.message));
     for (const [text, number] of [['Look at monitor 2',2], ['Can you tell me what is happening on my second monitor?',2], ['Take a screenshot of monitor one',1], ['What do you see on screen 1?',1], ['Check my first monitor',1], ['Can you describe monitor 3 for me?',3], ['Capture a screenshot of display 0',0]]) assert.equal(parseScreenRequest(text)?.monitorNumber, number, text);
     for (const text of ['Do not look at monitor 2', 'How can I take a screenshot of monitor 1?', 'I took a screenshot of monitor 2', 'look at monitor 1 and delete files']) assert.equal(parseScreenRequest(text), null, text);
+    assert.deepEqual(parseScreenRequest("I moved Alice off monitor 2. Could you describe this screen?"), { monitorNumber: null, relative: 'current' });
+    for (const text of [
+        'For example, can you describe my screen?',
+        'If I move the app, can you describe my screen?',
+        'Do not capture yet, can you describe my screen?',
+        'She asked, can you describe my screen?',
+        'I would say, can you describe my screen?',
+        'Delete my files, can you describe my screen?',
+        'Describe monitor 1, can you describe monitor 2?',
+        'The prompt is "can you describe my screen?"',
+    ]) assert.equal(parseScreenRequest(text), null, text);
     console.log('screenAwareness.test.js: direct capture without popups, selection, OS denial and no fallback passed');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

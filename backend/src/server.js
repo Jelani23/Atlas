@@ -67,7 +67,7 @@ wss.on('connection', (ws) => {
             id = msg.id;
             const { method, args = [] } = msg;
             let result;
-            if (['registerClient', 'getClientDevice', 'sendMessage', 'transcribeAudio'].includes(method)) {
+            if (['registerClient', 'getClientDevice', 'prepareTask', 'sendMessage', 'transcribeAudio'].includes(method)) {
                 result = await clientSession.dispatch(method, args, atlas);
             }
             else if (method === 'getState') result = atlas.getState();

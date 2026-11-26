@@ -7,17 +7,40 @@ const { normalizeScreens, validateCapture } = require('./screenContext');
 function createClientSession(registry, transport, { now = Date.now } = {}) {
     const connectionId = registry.connect(transport);
     const transcripts = new Map();
+    const taskReceipts = new Map();
     let closed = false;
     return {
         connectionId,
-        close() { closed = true; transcripts.clear(); registry.disconnect(connectionId); },
+        close() { closed = true; transcripts.clear(); taskReceipts.clear(); registry.disconnect(connectionId); },
         async dispatch(method, args, atlas, fallback) {
             if (closed) throw new Error('Client disconnected');
             if (!Array.isArray(args)) throw new Error('RPC args must be an array');
             if (method === 'registerClient') return registry.register(connectionId, args[0]);
             if (method === 'getClientDevice') return registry.snapshot(connectionId);
+            if (method === 'prepareTask') {
+                const text = args[0], sessionId = atlas.sessionId;
+                const state = require('../planner/state');
+                const scope = state.runInSession(sessionId, () => state.getSessionScope());
+                const interaction = registry.snapshot(connectionId);
+                const screens = normalizeScreens(args[1], now());
+                const intent = await require('../intent/conversationalTask').resolve(text, { sessionId, interaction, screens });
+                if (closed || scope.closed || atlas.sessionId !== sessionId) throw new Error('Conversation changed while interpreting the request');
+                for (const [id, entry] of taskReceipts) if (now() - entry.at > 120000) taskReceipts.delete(id);
+                if (taskReceipts.size >= 8) taskReceipts.delete(taskReceipts.keys().next().value);
+                const taskReceipt = randomUUID();
+                taskReceipts.set(taskReceipt, { text, intent, sessionId, scope, at: now() });
+                return { taskReceipt, intent };
+            }
             if (method === 'sendMessage') {
                 let interaction = registry.snapshot(connectionId);
+                let taskIntent;
+                if (args[1]?.taskReceipt !== undefined) {
+                    const receipt = taskReceipts.get(args[1].taskReceipt);
+                    taskReceipts.delete(args[1].taskReceipt);
+                    if (!receipt || receipt.scope.closed || receipt.text !== args[0] || receipt.sessionId !== atlas.sessionId || now() - receipt.at > 120000)
+                        throw new Error('Task request expired or changed. Please try again.');
+                    taskIntent = receipt.intent;
+                }
                 const receiptId = args[1]?.transcriptionId;
                 if (receiptId !== undefined) {
                     const receipt = transcripts.get(receiptId);
@@ -27,6 +50,7 @@ function createClientSession(registry, transport, { now = Date.now } = {}) {
                 }
                 const screens = normalizeScreens(args[1]?.screens, now());
                 const screenCapture = validateCapture(args[1]?.screenCapture, screens, now());
+                if (taskIntent?.displayId && screenCapture?.displayId !== taskIntent.displayId) throw new Error('Wordle capture does not match the requested monitor');
                 const unavailable = args[1]?.requestedMonitorUnavailable;
                 let screenRequestError;
                 if (args[1]?.requestedOtherMonitorIssue === true) {
@@ -42,8 +66,8 @@ function createClientSession(registry, transport, { now = Date.now } = {}) {
                     screenRequestError = `I can't look at monitor ${unavailable} because this device ${count === 0 ? 'has no connected screens' : `only has ${count} connected screen${count === 1 ? '' : 's'}`}.${count > 0 ? ` Available monitor${count === 1 ? '' : 's'}: ${count === 1 ? '1' : `1 through ${count}`}.` : ''}`;
                 }
                 if (screenCapture && !interaction.client?.capabilities.screenshot.supported) throw new Error('This client has not registered screenshot support');
-                interaction = Object.freeze({ ...interaction, screens });
-                return runWithInteraction(interaction, async () => ({ ok: true, ...await atlas.sendMessage(args[0], interaction, { screenCapture, screenRequestError }) }));
+                interaction = Object.freeze({ ...interaction, screens, manualWordleRequested: /^(?:please\s+)?wordle\s*:/i.test(args[0]) });
+                return runWithInteraction(interaction, async () => ({ ok: true, ...await atlas.sendMessage(args[0], interaction, { screenCapture, screenRequestError, taskIntent }) }));
             }
             if (method === 'transcribeAudio') {
                 const interaction = registry.snapshot(connectionId, 'voice');

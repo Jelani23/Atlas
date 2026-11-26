@@ -359,7 +359,8 @@ class AtlasInterface extends EventEmitter {
                 requestId,
                 interaction,
                 screenCapture: attachments.screenCapture,
-                screenRequestError: attachments.screenRequestError
+                screenRequestError: attachments.screenRequestError,
+                taskIntent: attachments.taskIntent
             });
             return resultObj; 
         } catch (err) {

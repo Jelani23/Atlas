@@ -105,7 +105,10 @@ async function route(intent, message, history = [], taskId, requestId, context =
         return { needsTool: true, toolName: 'espnFantasy', toolResult: results.join('\n\n'), shortCircuit: true };
     }
 
-    const puzzleReply = await require('../puzzles/wordleDialogue').route(message, { history });
+    // Screen-capable clients use the prepared conversational task route. Never
+    // silently turn an unrecognized screen request into manual color reporting.
+    const visualClient = require('../devices/interactionContext').getInteraction()?.client?.capabilities?.screenshot?.supported;
+    const puzzleReply = visualClient ? null : await require('../puzzles/wordleDialogue').route(message, { history });
     if (puzzleReply !== null) return { needsTool: true, toolName: 'puzzleHelper', toolResult: puzzleReply, shortCircuit: true };
 
     if (isNonExecutingToolMention(message)) return { needsTool: false };
@@ -114,6 +117,7 @@ async function route(intent, message, history = [], taskId, requestId, context =
     // Keep explicit puzzle commands intact: board entries and clue colors
     // must not be split into unrelated tool clauses or rewritten by a model.
     if (require('../puzzles/puzzlePipeline').matchesRequest(message)) {
+        if (/^(?:please\s+)?wordle\s*:/i.test(message)) { state.visualWordle = null; state.taskFocus = null; }
         return { needsTool: true, toolName: 'puzzleHelper',
             toolResult: await execute('puzzleHelper', [message]), shortCircuit: true };
     }

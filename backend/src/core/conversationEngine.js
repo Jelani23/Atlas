@@ -165,7 +165,7 @@ function handleMessage(userInput, options) {
     });
 }
 
-async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId, turn, interaction, screenCapture, screenRequestError }) {
+async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId, requestId, agentId, turn, interaction, screenCapture, screenRequestError, taskIntent }) {
     const requestStart = Date.now();
 
     try {
@@ -196,6 +196,23 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
 
         if (screenRequestError) {
             return finishImmediateReply(screenRequestError, { memory, sessionId, taskId, requestId, requestStart });
+        }
+        let visualWordleReply = await require('../puzzles/visualWordle').handle(userInput, {
+            scope: sessionScope.getSessionScope(), capture: screenCapture, interaction, requestId, taskIntent,
+            isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
+        });
+        if (visualWordleReply !== null) {
+            if (sessionScope.taskResult) visualWordleReply = await require('../response/taskResponseBuilder').build({
+                result: sessionScope.taskResult, fallback: visualWordleReply, requestId,
+                personality: personalityEngine.getSystemPrompt(mode === 'auto' ? personalityEngine.DEFAULT_MODE : mode, undefined, null, agent.profile, { userInput, history: [] }),
+                isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
+            });
+            if (turn.superseded || sessionScope.isSessionClosed()) {
+                taskManager.cancelTask(taskId);
+                return { reply: '', audio: null };
+            }
+            return { ...await finishImmediateReply(visualWordleReply, { memory, sessionId, taskId, requestId, requestStart }),
+                visualWordleActive: Boolean(sessionScope.getSessionScope().visualWordle) };
         }
         if (screenCapture) {
             let reply;

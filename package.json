@@ -32,6 +32,7 @@
     "productName": "Atlas",
     "files": [
       "electron/**/*",
+      "shared/**/*",
       "atlas.config.json",
       "renderer/out/**/*",
       "backend/**/*",

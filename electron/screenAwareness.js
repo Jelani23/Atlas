@@ -1,25 +1,4 @@
-// Parse explicit observation requests before model routing, for typed and STT text.
-function parseScreenRequest(text) {
-    const value = String(text).trim().replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ')
-        .replace(/^(?:(?:alright|all right|okay|ok|so|well|then|now|and)[,!]?\s+)+/i, '')
-        .replace(/[?.!]+$/g, '').trim();
-    const target = '(?:(?:my|the|this)\\s+)?(?:(?:other|first|second|third|fourth)\\s+)?(?:screen|monitor|display)(?:\\s+(?:number\\s+)?(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten))?';
-    const prefix = "(?:(?:hey\\s+)?alice[,!]?\\s+)?(?:please\\s+)?(?:(?:can|could|would|will) you\\s+)?(?:please\\s+)?";
-    const action = `(?:describe|look at|check|check out|inspect|analyze|analyse|view|show me) ${target}`;
-    const question = `(?:(?:tell me|show me) )?what(?:'s| is| do you see) (?:currently )?(?:(?:going on|happening|visible|displayed|showing|shown) )?(?:on|in) ${target}`;
-    const screenshot = `(?:take|capture|grab) (?:a |an |another |a new |a fresh )?screenshot(?: (?:of|on) ${target})?`;
-    const suffix = `(?: (?:on|of) ${target})?(?: (?:for me|please|right now|now|then))*`;
-    if (!new RegExp(`^${prefix}(?:${action}|${question}|${screenshot})${suffix}$`, 'i').test(value)) return null;
-    const words = { one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10, first:1, second:2, third:3, fourth:4 };
-    const matches = [...value.matchAll(/(?:screen|monitor|display)\s+(?:number\s+)?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b|\b(first|second|third|fourth)\s+(?:screen|monitor|display)/gi)];
-    const numbers = matches.map(m => words[(m[1] || m[2]).toLowerCase()] ?? Number(m[1]));
-    if (new Set(numbers).size > 1) return null;
-    const relative = /\bother (?:screen|monitor|display)\b/i.test(value) ? 'other'
-        : /\bthis (?:screen|monitor|display)\b/i.test(value) ? 'current' : null;
-    if (relative === 'other' && numbers.length) return null;
-    return { monitorNumber: numbers[0] ?? null, relative };
-}
-function isScreenRequest(text) { return parseScreenRequest(text) !== null; }
+const { parseScreenRequest, isScreenRequest } = require('../shared/screenIntent');
 
 function createScreenAwareness({ screen, desktopCapturer, systemPreferences, platform = process.platform, now = Date.now }) {
     let capturing = false;
@@ -62,7 +41,9 @@ function createScreenAwareness({ screen, desktopCapturer, systemPreferences, pla
                     throw error;
                 }
             } else if (request?.relative === 'other') {
-                const reference = info.displays.find(d => d.id === preferredId) || info.displays.find(d => d.current) || info.displays.find(d => d.primary) || info.displays[0];
+                // Relative requests are anchored to Alice's window NOW, never
+                // the last captured monitor. Repeated "other" must not toggle.
+                const reference = info.displays.find(d => d.current) || info.displays.find(d => d.primary) || info.displays[0];
                 const others = info.displays.filter(d => d.id !== reference?.id);
                 if (others.length !== 1) {
                     const error = new Error(info.displays.length < 2
@@ -72,7 +53,7 @@ function createScreenAwareness({ screen, desktopCapturer, systemPreferences, pla
                 }
                 displayId = others[0].id;
             } else if (request?.relative === 'current') {
-                displayId = info.displays.find(d => d.current)?.id || info.displays.find(d => d.primary)?.id;
+                displayId = info.displays.find(d => d.current)?.id || info.displays.find(d => d.primary)?.id || info.displays[0]?.id;
             } else if (!displayId) displayId = info.displays.length === 1 ? info.displays[0].id : preferredId || info.displays.find(d => d.current)?.id || info.displays.find(d => d.primary)?.id;
             let selected = info.displays.find(display => display.id === displayId);
             if (displayId && !selected) throw new Error('That monitor is no longer connected. Refresh the screen list.');

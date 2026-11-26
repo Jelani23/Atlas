@@ -12,6 +12,18 @@ let visionCalls = 0;
 const capture = { data: 'private-pixels', displayId: '2' };
 const interaction = { client: { displayName: 'MacBook' }, screens: { displays: [{ id: '2' }] } };
 const fixtures = {
+    '../puzzles/visualWordle': { handle: async (text, options) => {
+        if (text !== 'start Wordle on monitor 2') return null;
+        assert.equal(options.capture, capture);
+        assert.equal(options.interaction, interaction);
+        options.scope.visualWordle = { displayId: '2' };
+        options.scope.taskResult = { task: 'wordle', status: 'suggestion', guess: 'SLATE', turns: 0 };
+        return 'Try SLATE. Say done after entering it.';
+    } },
+    '../response/taskResponseBuilder': { build: async ({ result, personality }) => {
+        assert.equal(result.guess, 'SLATE'); assert.match(personality, /Existing personality/);
+        return 'Try SLATE. Say done after entering it.';
+    } },
     '../models/modelAdapter': { createModelAdapter: () => ({}) },
     '../memory/knowledgePersistencePolicy': { isSearchKnowledgePersistenceEnabled: () => false },
     '../planner/state': state,
@@ -56,5 +68,10 @@ const memory = { workingMemory: { getHistory: async () => [], append: async mess
     assert.equal(failed.reply, unavailable);
     assert.equal(spoken.at(-1), unavailable);
     assert.equal(visionCalls, 1, 'Out-of-range requests must not invoke vision');
+    const game = await engine.handleMessage('start Wordle on monitor 2', { memory, mode: 'casual', sessionId: 'screen-test', taskId: 'wordle-task', requestId: 'wordle-request', interaction, screenCapture: capture });
+    assert.equal(game.reply, 'Try SLATE. Say done after entering it.');
+    assert.equal(game.visualWordleActive, true);
+    assert.equal(spoken.at(-1), game.reply);
+    assert.equal(visionCalls, 1, 'Visual Wordle must precede general screen descriptions');
     console.log('screenConversation.test.js: screen route, personality context, speech, no tools/extraction/pixel persistence passed');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { Module._load = originalLoad; state.endSession('screen-test'); });

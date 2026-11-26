@@ -184,8 +184,16 @@ ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
     // Renderer cannot supply pixels or fabricated monitor metadata. Only this
     // explicit client-side request path can capture. OS permissions still apply.
     let capture = null, requestedMonitorUnavailable, requestedOtherMonitorIssue;
+    let initialScreens = null;
+    try { initialScreens = screenAwareness.inventory(mainWindow); } catch { /* Ordinary chat remains available. */ }
+    const prepared = await callAtlas('prepareTask', [text, initialScreens]);
+    if (ws !== originSocket) throw new Error('Connection changed while interpreting the request.');
+    const wordleIntent = prepared.intent;
+    const wordleCapture = Boolean(wordleIntent?.displayId);
     try {
-        if (options.screenDisplayId !== undefined || isScreenRequest(text)) {
+        if (wordleCapture) {
+            capture = await screenAwareness.capture(mainWindow, wordleIntent.displayId);
+        } else if (options.screenDisplayId !== undefined || isScreenRequest(text)) {
             capture = await screenAwareness.capture(mainWindow, options.screenDisplayId, { requested: options.screenDisplayId === undefined && isScreenRequest(text), text });
         }
     } catch (error) {
@@ -204,23 +212,25 @@ ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
         if (capture) throw error;
         console.warn('[Electron] Monitor inventory unavailable:', error.message);
     }
-    return callAtlas('sendMessage', [text, {
+    const result = await callAtlas('sendMessage', [text, {
         transcriptionId: options.transcriptionId,
+        taskReceipt: prepared.taskReceipt,
         screens,
         requestedMonitorUnavailable,
         requestedOtherMonitorIssue,
         ...(capture ? { screenCapture: { ...capture, observationOnly: isScreenRequest(text) } } : {}),
     }]);
+    return result;
 });
 ipcMain.handle('atlas:getClientDevice', () => callAtlas('getClientDevice'));
 ipcMain.handle('atlas:getState', () => callAtlas('getState'));
 ipcMain.handle('atlas:listModes', () => callAtlas('listModes'));
 ipcMain.handle('atlas:setMode', (_event, mode) => callAtlas('setMode', [mode]));
-ipcMain.handle('atlas:resetConversation', async () => callAtlas('resetConversation'));
+ipcMain.handle('atlas:resetConversation', async () => { return callAtlas('resetConversation'); });
 ipcMain.handle('atlas:resolvePermission', (_event, id, decision) => callAtlas('resolvePermission', [id, decision]));
 ipcMain.handle('atlas:listConversations', async () => callAtlas('listConversations'));
 ipcMain.handle('atlas:getConversation', async (_event, sessionId) => callAtlas('getConversation', [sessionId]));
-ipcMain.handle('atlas:resumeConversation', async (_event, sessionId) => callAtlas('resumeConversation', [sessionId]));
+ipcMain.handle('atlas:resumeConversation', async (_event, sessionId) => { return callAtlas('resumeConversation', [sessionId]); });
 ipcMain.handle('atlas:newConversation', async () => {
     console.log('[Electron] New conversation requested by renderer.');
     try {
