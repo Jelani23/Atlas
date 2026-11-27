@@ -12,7 +12,6 @@ const responseController = require('../response/controller');
 const memoryManager = require('../memory/memoryManager');
 const contextBuilder = require('./contextBuilder');
 const responseProcessor = require('../response/processor');
-const { formatImmediateToolReply, formatImmediateToolSpeech } = require('../response/toolResultPresenter');
 const personalityEngine = require('./personalityEngine');
 const { eventBus } = require('../events/eventBus');
 const EventTypes = require('../events/eventTypes');
@@ -48,6 +47,7 @@ const SEARCH_KNOWLEDGE_PERSISTENCE_ENABLED = isSearchKnowledgePersistenceEnabled
 
 async function finishImmediateReply(reply, { memory, sessionId, taskId, requestId, requestStart, speech, failure }) {
     await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
+    require('../intent/conversationContinuity').assistant(require('../planner/state').getSessionScope(), reply);
     taskManager.endRequest(taskId,failure);
     eventBus.emit(failure?EventTypes.REQUEST_FAILED:EventTypes.REQUEST_COMPLETED, {
         taskId,
@@ -177,7 +177,9 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         // 1. Intent Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'intent', timestamp: Date.now() });
         const intentStart = Date.now();
-        const intent = resolve(userInput);
+        const routingInput = taskIntent?.action === 'legacy' ? taskIntent.requestText : userInput;
+        const chatOnly = taskIntent?.task === 'input' && taskIntent.action === 'chat';
+        const intent = resolve(routingInput);
         const intentDuration = Date.now() - intentStart;
         eventBus.emit(EventTypes.STAGE_COMPLETED, { taskId, requestId, stage: 'intent', duration: intentDuration, timestamp: Date.now() });
 
@@ -193,24 +195,43 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         sessionScope.codeEvidence = priorCodeEvidence;
         console.log(`[AgentProfile] ${agent.agentId}: ${agent.source}, revision ${agent.revision ?? 'seed'}${agent.degraded ? ' (degraded)' : ''}`);
         const userMessageId = await memory.workingMemory.append({ role: 'user', content: userInput }, sessionId);
+        require('../intent/conversationContinuity').user(sessionScope.getSessionScope(), interaction?.connectionId, userInput);
 
+        if (taskIntent?.action === 'clarify' && taskIntent.reply) {
+            return finishImmediateReply(taskIntent.reply, { memory, sessionId, taskId, requestId, requestStart });
+        }
         if (screenRequestError) {
             return finishImmediateReply(screenRequestError, { memory, sessionId, taskId, requestId, requestStart });
         }
+        if (taskIntent?.task === 'devices' && taskIntent.action === 'read') {
+            const result = require('../response/deviceResponse').normalize(interaction?.deviceInventory, taskIntent.query);
+            const composed = await require('../response/responseBuilder').compose({ result, userInput, history, requestId,
+                isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
+            });
+            if (turn.superseded || sessionScope.isSessionClosed()) return { reply: '', audio: null };
+            return finishImmediateReply(composed.display, { memory, sessionId, taskId, requestId, requestStart, speech: composed.speech });
+        }
+        const directResponse = require('../response/directResponse');
+        const deviceReply = directResponse.deviceAnswer(userInput, interaction)
+            || (chatOnly ? directResponse.personaAnswer(userInput, agent.profile) : null);
+        if (deviceReply) return finishImmediateReply(deviceReply, { memory, sessionId, taskId, requestId, requestStart });
         let visualWordleReply = await require('../puzzles/visualWordle').handle(userInput, {
             scope: sessionScope.getSessionScope(), capture: screenCapture, interaction, requestId, taskIntent,
             isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
         });
         if (visualWordleReply !== null) {
             if (sessionScope.taskResult) visualWordleReply = await require('../response/taskResponseBuilder').build({
-                result: sessionScope.taskResult, fallback: visualWordleReply, requestId,
-                personality: personalityEngine.getSystemPrompt(mode === 'auto' ? personalityEngine.DEFAULT_MODE : mode, undefined, null, agent.profile, { userInput, history: [] }),
+                result: sessionScope.taskResult, fallback: visualWordleReply, requestId, userInput, history,
+                personality: personalityEngine.getSystemPrompt(mode === 'auto' ? personalityEngine.DEFAULT_MODE : mode, undefined, null, agent.profile, { userInput, history }),
                 isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
             });
             if (turn.superseded || sessionScope.isSessionClosed()) {
                 taskManager.cancelTask(taskId);
                 return { reply: '', audio: null };
             }
+            if (sessionScope.taskResult) sessionScope.responseEvidence = { task: 'wordle', at: Date.now(),
+                status: sessionScope.taskResult.status, guess: sessionScope.taskResult.guess,
+                mode: 'requested client screenshot; user types guesses; no continuous monitoring' };
             return { ...await finishImmediateReply(visualWordleReply, { memory, sessionId, taskId, requestId, requestStart }),
                 visualWordleActive: Boolean(sessionScope.getSessionScope().visualWordle) };
         }
@@ -240,7 +261,7 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
 
         // Explicit single-file learning pilot; never triggered by ordinary discussion.
         const understanding = require('../memory/projectUnderstanding');
-        const understandingCommand = understanding.detect(userInput);
+        const understandingCommand = chatOnly ? null : understanding.detect(routingInput);
         if (understandingCommand) {
             sessionScope.projectQuestion=null;
             let reply;
@@ -259,8 +280,8 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         const projectQuestion=require('../reasoning/projectQuestion');
         // A league-data request must reach the tool planner even when a prior
         // source discussion or the ESPN tool's filename matches the question.
-        const fantasyRequest = await require('../integrations/espnFantasyIntent').resolve(userInput, history, { requestId });
-        const question=fantasyRequest ? null : projectQuestion.detect(userInput,sessionScope.projectQuestion,agent.agentId);
+        const fantasyRequest = chatOnly ? null : await require('../integrations/espnFantasyIntent').resolve(routingInput, history, { requestId });
+        const question=chatOnly || fantasyRequest ? null : projectQuestion.detect(routingInput,sessionScope.projectQuestion,agent.agentId);
         if (turn.superseded || sessionScope.isSessionClosed()) {
             taskManager.cancelTask(taskId);
             return { reply: '', audio: null };
@@ -314,7 +335,7 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         // 2. Planner Route
         eventBus.emit(EventTypes.STAGE_STARTED, { taskId, requestId, stage: 'planner', timestamp: Date.now() });
         const plannerStart = Date.now();
-        const toolResult = await planner.route(intent, userInput, history, taskId, requestId, { fantasyRequest });
+        const toolResult = chatOnly ? { needsTool: false } : await planner.route(intent, routingInput, history, taskId, requestId, { fantasyRequest });
         sessionScope.codeEvidence = codeEvidence.capture(toolResult, agent.agentId)
             || (toolResult.needsTool ? null : priorCodeEvidence);
         const plannerDuration = Date.now() - plannerStart;
@@ -356,10 +377,29 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
 
         // Short-Circuit for Deterministic Tools & Background Tasks
         if (toolResult.shortCircuit) {
-            const instantReply = formatImmediateToolReply(toolResult);
-            return finishImmediateReply(instantReply, {
+            const builder = require('../response/responseBuilder');
+            const result = builder.normalizeTool(toolResult);
+            const composed = await builder.compose({ result, userInput, history, requestId,
+                personality: result.status === 'success' ? personalityEngine.getSystemPrompt(effectiveMode, undefined, null, agent.profile, { userInput, history }) : '',
+                isCancelled: () => turn.superseded || sessionScope.isSessionClosed(),
+            });
+            if (turn.superseded || sessionScope.isSessionClosed()) {
+                taskManager.cancelTask(taskId);
+                return { reply: '', audio: null };
+            }
+            console.log('[ResponseBuilder] ' + JSON.stringify({ task: result.task, status: result.status, ...composed.composition }));
+            require('../intent/conversationContinuity').task(sessionScope.getSessionScope(), {
+                name: result.task, status: result.status,
+                numericRequests: require('../intent/explicitToolRequest').parseNumericRequests(routingInput),
+                summary: composed.display.slice(0, 1800),
+            });
+            if (result.task === 'espnFantasy') sessionScope.responseEvidence = { task: 'ESPN fantasy basketball',
+                at: Date.now(), status: result.status, summary: composed.display.slice(0, 1600),
+                summaryTruncated: composed.display.length > 1600,
+                source: 'Completed ESPN tool request; independent of screen capture. Snapshot, not continuous live access.' };
+            return finishImmediateReply(composed.display, {
                 memory, sessionId, taskId, requestId, requestStart,
-                speech: formatImmediateToolSpeech(toolResult)
+                speech: composed.speech
             });
         }
 
@@ -526,6 +566,7 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         }
 
         let context = await contextBuilder.buildContext({
+            responseEvidence: sessionScope.responseEvidence,
             interaction,
             mode: effectiveMode,
             intent,
@@ -699,6 +740,8 @@ async function handleSessionMessage(userInput, { memory, mode, sessionId, taskId
         }
 
         await memory.workingMemory.append({ role: 'assistant', content: reply }, sessionId);
+
+        require('../intent/conversationContinuity').assistant(sessionScope.getSessionScope(), reply);
 
         scheduleMemoryExtraction({
             userInput,

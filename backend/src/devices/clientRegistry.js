@@ -25,8 +25,16 @@ function normalizeClient(value) {
         capabilities: Object.freeze(capabilities), trust: 'self-reported',
     });
 }
-function createClientRegistry() {
+function createClientRegistry({ store = null, now = Date.now } = {}) {
     const connections = new Map();
+    const devices = new Map((store?.load() || []).map(value => {
+        const client = normalizeClient(value.client);
+        if (!Number.isFinite(value.lastSeen)) throw new Error('Invalid remembered device timestamp');
+        // Historical displays are deliberately not validated against today's clock.
+        const screens = value.screens ? require('./screenContext').normalizeScreens(value.screens, value.screens.observedAt) : null;
+        return [client.deviceId, { client, lastSeen: value.lastSeen, screens }];
+    }));
+    const persist = () => store?.save([...devices.values()]);
     return {
         connect(transport) {
             const connectionId = randomUUID();
@@ -38,12 +46,39 @@ function createClientRegistry() {
             if (!entry) throw new Error('Client disconnected');
             if (entry.client) throw new Error('Client already registered on this connection');
             entry.client = normalizeClient(value);
+            devices.set(entry.client.deviceId, { client: entry.client, lastSeen: now(), screens: devices.get(entry.client.deviceId)?.screens || null });
+            persist();
             return this.snapshot(connectionId);
         },
         snapshot(connectionId, inputSource = 'text') {
             return Object.freeze({ connectionId, inputSource, client: connections.get(connectionId)?.client || null });
         },
-        disconnect(connectionId) { connections.delete(connectionId); },
+        listDevices(connectionId, screens) {
+            const current = connections.get(connectionId)?.client;
+            if (!current) throw new Error('Register this client before listing devices');
+            const record = devices.get(current.deviceId);
+            record.lastSeen = now();
+            if (screens) record.screens = screens;
+            persist();
+            return this.inventory(connectionId);
+        },
+        inventory(connectionId) {
+            const current = connections.get(connectionId)?.client;
+            const online = new Set([...connections.values()].flatMap(entry => entry.client ? [entry.client.deviceId] : []));
+            return { observedAt: now(), devices: [...devices.values()].map(device => ({
+                ...device, online: online.has(device.client.deviceId), current: device.client.deviceId === current?.deviceId,
+            })) };
+        },
+        disconnect(connectionId) {
+            const client = connections.get(connectionId)?.client;
+            if (client) devices.get(client.deviceId).lastSeen = now();
+            connections.delete(connectionId);
+            if (client) {
+                // A disk failure during a socket close must not take down the
+                // backend. The remembered record already exists from registration.
+                try { persist(); } catch (error) { console.error('[Devices] Could not save last-seen time:', error.message); }
+            }
+        },
         resolveTarget(interaction, capability) {
             const entry = connections.get(interaction?.connectionId);
             if (!entry) return { ok: false, reason: 'disconnected' };

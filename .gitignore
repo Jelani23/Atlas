@@ -6,4 +6,5 @@ node_modules/
 __pycache__/
 out/
 backend/.local/wordle-games/
+backend/.local/devices.json*
 atlas.local.json

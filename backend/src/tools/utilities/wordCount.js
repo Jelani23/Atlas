@@ -1,7 +1,7 @@
 // src/tools/utilities/wordCount.js
 async function wordCount(text) {
     try {
-        const words = text.trim().split(/\s+/).length;
+        const words = text.trim() ? text.trim().split(/\s+/).length : 0;
         return `Word count: ${words}`;
     } catch (error) {
         return `Error counting words: ${error.message}`;

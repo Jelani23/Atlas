@@ -23,7 +23,9 @@
  * conversational reply path (modelAdapter.streamComplete in
  * conversationEngine.js). Only background memory-extraction and
  * semantic-enrichment calls go through here, so the user-facing
- * reply is never held up waiting behind a queued memory call.
+ * reply does not join this queue. The Ollama provider additionally uses
+ * localModelPriority to abort and resume an in-flight background model call
+ * when foreground work arrives; separate JS queues alone cannot free the GPU.
  * ============================================================
  */
 
@@ -33,7 +35,7 @@ let queueLength = 0;
 function enqueue(fn) {
     queueLength += 1;
 
-    const run = tail.then(() => fn());
+    const run = tail.then(() => require('../models/localModelPriority').runBackground(fn));
 
     // Keep the chain alive even if a queued call rejects - one
     // failed enrichment/extraction shouldn't wedge everything

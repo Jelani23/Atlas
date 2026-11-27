@@ -7,6 +7,7 @@ import { BottomNav } from "./bottom-nav"
 import { ComingSoon } from "./coming-soon"
 import { ConversationsView } from "./conversations-view"
 import { HomeView } from "./home-view"
+import { DevicesView, useDeviceInventory } from "./devices-view"
 import { TitleBarControls } from "./title-bar-controls"
 import { type AtlasState } from "./atlas-state"
 import type { AtlasEvent } from "@/lib/atlas-events"
@@ -68,13 +69,13 @@ function stateForEvent(event: AtlasEvent): AtlasState | null {
 }
 
 const PLACEHOLDER_TABS: Record<string, { icon: typeof Sparkles; label: string }> = {
-  memory: { icon: Sparkles, label: "Memory" },
   projects: { icon: FolderOpen, label: "Projects" },
   activity: { icon: Activity, label: "Activity" },
   settings: { icon: Settings, label: "Settings" },
 }
 
 export function AtlasApp() {
+  const deviceInventory = useDeviceInventory()
   const [state, setState] = useState<AtlasState>("idle")
   const [steps, setSteps] = useState<string[]>([])
   const [messages, setMessages] = useState<Message[]>([])
@@ -657,7 +658,7 @@ export function AtlasApp() {
           <BottomNav active={tab} onChange={handleTabChange} />
         </div>
 
-        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+        <span className="hidden shrink-0 text-xs font-medium text-muted-foreground xl:inline">
           {new Date().toLocaleDateString(undefined, {
             weekday: "long",
             month: "short",
@@ -696,6 +697,8 @@ export function AtlasApp() {
           onConversationDeleted={handleConversationDeleted}
         />
       )}
+
+      {tab === "devices" && <DevicesView {...deviceInventory} />}
 
       {PLACEHOLDER_TABS[tab] && (
         <ComingSoon icon={PLACEHOLDER_TABS[tab].icon} label={PLACEHOLDER_TABS[tab].label} />

@@ -39,7 +39,11 @@ async function run() {
     assert(multiple.includes('Content of src/tools/files/readCode.js:'));
 
     const message = 'Calculate 2 + 2 and then word count of hello world';
-    const result = await planner.route(resolve(message), message);
+    const prepared = await require('../src/intent/prepareInput').prepare(message, {
+        sessionId: 'legacy-input-compatibility', interaction: { connectionId: 'fixture' }, screens: null,
+    }, { complete: async () => JSON.stringify({ clauses: [{ text: message, kind: 'request', domain: 'tools', action: 'execute', confidence: 1 }] }) });
+    assert.equal(prepared.action, 'legacy');
+    const result = await planner.route(resolve(prepared.requestText), prepared.requestText);
     assert.strictEqual(result.toolName, 'multi_tool');
     assert.deepStrictEqual(result.toolNames, ['calculate', 'wordCount']);
     assert.strictEqual(result.shortCircuit, true);

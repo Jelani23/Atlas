@@ -215,9 +215,9 @@ async function route(message, options) {
 function contextFor(message) {
     const scope = state.getSessionScope();
     if (!scope.puzzleConversation?.active || !/\b(?:wordle|guess|board|clues?|letters?|strategy|thinking|reasoning)\b/i.test(message)) return '';
-    return '[Active Wordle context]\nWe are playing Wordle together. The user relays the board. Discuss the game naturally. '
+    return '[Active Wordle context]\nWe are playing Wordle together. ' + (scope.visualWordle ? 'The visual game reads fresh requested screenshots; the user types the suggested guesses. Do not require manual colors or the paperclip. ' : 'This is a manual-feedback game; the user relays the board. ') + 'Discuss the game naturally. '
         + 'Only the puzzle checker records feedback and chooses guesses; do not invent observations or propose a different unchecked guess. '
-        + 'The pending guess is a suggestion, not a played row. If asked for unknown colors, ask the user.\n'
+        + 'The pending guess is a suggestion, not a played row. Never infer unknown colors; a visual game needs a fresh requested capture, while a manual game needs user feedback.\n'
         + JSON.stringify({ rows: scope.puzzleState?.wordle?.rows || [], pendingGuess: scope.puzzleConversation.pendingGuess,
             partial: scope.puzzleConversation.partial });
 }

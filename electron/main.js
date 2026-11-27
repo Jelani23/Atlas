@@ -178,7 +178,9 @@ function createWindow() {
 
 // IPC surface: renderer -> Electron -> Atlas Backend (via WS)
 ipcMain.handle('atlas:listScreens', () => screenAwareness.inventory(mainWindow));
+let inputGeneration = 0;
 ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
+    const generation = ++inputGeneration;
     const originSocket = ws;
     if (!originSocket || originSocket.readyState !== WebSocket.OPEN) throw new Error('Connect to the backend before sharing a screen or sending a message.');
     // Renderer cannot supply pixels or fabricated monitor metadata. Only this
@@ -188,6 +190,7 @@ ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
     try { initialScreens = screenAwareness.inventory(mainWindow); } catch { /* Ordinary chat remains available. */ }
     const prepared = await callAtlas('prepareTask', [text, initialScreens]);
     if (ws !== originSocket) throw new Error('Connection changed while interpreting the request.');
+    if (generation !== inputGeneration) return { ok: true, reply: '' };
     const wordleIntent = prepared.intent;
     const wordleCapture = Boolean(wordleIntent?.displayId);
     try {
@@ -202,6 +205,7 @@ ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
         else throw error;
     }
     if (ws !== originSocket || originSocket.readyState !== WebSocket.OPEN) throw new Error('Connection changed while sharing; please try again.');
+    if (generation !== inputGeneration) return { ok: true, reply: '' };
     if (capture) mainWindow?.webContents.send('atlas:event', { type: 'atlas.screen_captured', payload: {
         displayId: capture.displayId, displayLabel: capture.displayLabel, capturedAt: capture.capturedAt,
         imageHash: capture.imageHash, dataUrl: `data:image/jpeg;base64,${capture.data}`,
@@ -212,17 +216,24 @@ ipcMain.handle('atlas:sendMessage', async (_event, text, options = {}) => {
         if (capture) throw error;
         console.warn('[Electron] Monitor inventory unavailable:', error.message);
     }
+    if (generation !== inputGeneration) return { ok: true, reply: '' };
     const result = await callAtlas('sendMessage', [text, {
         transcriptionId: options.transcriptionId,
         taskReceipt: prepared.taskReceipt,
         screens,
         requestedMonitorUnavailable,
         requestedOtherMonitorIssue,
-        ...(capture ? { screenCapture: { ...capture, observationOnly: isScreenRequest(text) } } : {}),
+        ...(capture ? { screenCapture: { ...capture, observationOnly: wordleIntent?.task === 'screen' || isScreenRequest(text) } } : {}),
     }]);
     return result;
 });
 ipcMain.handle('atlas:getClientDevice', () => callAtlas('getClientDevice'));
+ipcMain.handle('atlas:listDevices', () => {
+    let screens = null;
+    try { screens = screenAwareness.inventory(mainWindow); }
+    catch (error) { console.warn('[Electron] Monitor inventory unavailable:', error.message); }
+    return callAtlas('listDevices', [screens]);
+});
 ipcMain.handle('atlas:getState', () => callAtlas('getState'));
 ipcMain.handle('atlas:listModes', () => callAtlas('listModes'));
 ipcMain.handle('atlas:setMode', (_event, mode) => callAtlas('setMode', [mode]));
@@ -245,7 +256,7 @@ ipcMain.handle('atlas:newConversation', async () => {
 ipcMain.handle('atlas:deleteConversation', async (_event, sessionId) => callAtlas('deleteConversation', [sessionId]));
 ipcMain.handle('atlas:renameConversation', async (_event, sessionId, title) => callAtlas('renameConversation', [sessionId, title]));
 ipcMain.handle('atlas:transcribeAudio', async (_event, base64Audio) => callAtlas('transcribeAudio', [base64Audio]));
-ipcMain.handle('atlas:interrupt', async () => callAtlas('interrupt', []));
+ipcMain.handle('atlas:interrupt', async () => { ++inputGeneration; return callAtlas('interrupt', []); });
 
 // IPC surface: renderer's custom title bar -> the actual BrowserWindow chrome
 ipcMain.handle('window:minimize', () => {

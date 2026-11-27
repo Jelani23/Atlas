@@ -1,0 +1,22 @@
+[
+  ["Morning Alice, hope you're having a good day", "chat"],
+  ["Your calculator seems a lot faster today", "chat"],
+  ["Please don't search for anything yet", "chat"],
+  ["If I said 'remove my notes', what would happen?", "chat"],
+  ["Would you please calculate 18 divided by 3 for me?", "tools"],
+  ["Count the words in 'a quick brown fox jumps'", "tools"],
+  ["Please read the code for src/server.js lines 10-15", "tools"],
+  ["Find out online when the Bulls play next", "tools"],
+  ["Show me the notes I've saved", "tools"],
+  ["How is my ESPN fantasy team doing this week?", "tools"],
+  ["Hey, could you describe whatever is on the display beside this one?", "screen"],
+  ["What's open on monitor 1 at the moment?", "screen"],
+  ["I've put the letters in and the colors are showing now", "wordle", {"activeTask":"wordle"}, "read"],
+  ["Ready for your next guess whenever you are", "wordle", {"activeTask":"wordle"}, "read"],
+  ["Let's leave Wordle there for today", "wordle", {"activeTask":"wordle"}, "stop"],
+  ["That was fun, shall we do a fresh Wordle?", "wordle", {"recentTask":"wordle"}, "start"],
+  ["Why does a letter sometimes turn yellow?", "chat", {"activeTask":"wordle"}],
+  ["Wait, I still need to type that word", "chat", {"activeTask":"wordle"}],
+  ["Check my screen and find tomorrow's weather online", "clarify"],
+  ["Work out 8 plus 6, then count the words in 'blue sky'", "tools"]
+]

@@ -47,6 +47,9 @@ function hasTrigger(lower, trigger) {
 }
 
 function resolve(message) {
+    const explicit = require('./explicitToolRequest').parseExplicitToolRequest(message);
+    if (explicit) return { state: 'DETERMINISTIC', winner: explicit.toolName, params: explicit.args,
+        confidence: 1, margin: 1, ambiguity: 0, llmRequired: false, entities: [] };
     if (isNonExecutingToolMention(message)) {
         return { state: 'UNKNOWN', winner: null, confidence: 0, ambiguity: 0,
             llmRequired: true, entities: [], params: [] };

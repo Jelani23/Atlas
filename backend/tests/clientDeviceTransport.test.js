@@ -4,6 +4,10 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { EventEmitter, once } = require('node:events');
 const WebSocket = require('ws');
+const fs = require('node:fs');
+const path = require('node:path');
+const deviceDirectory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'atlas-device-transport-'));
+process.env.ATLAS_DEVICE_STORE_FILE = path.join(deviceDirectory, 'devices.json');
 const { getInteraction } = require('../src/devices/interactionContext');
 function stub(name, exports) {
     const id = require.resolve(name);
@@ -54,6 +58,14 @@ async function main() {
         const mac = await connect(); sockets.push(mac);
         const pcDevice = await rpc(pc, 'registerClient', [registration('Windows PC', 'windows', 'a')]);
         await rpc(mac, 'registerClient', [registration('MacBook', 'macos', 'b')]);
+        const screens = { observedAt: Date.now(), permission: 'unknown', displays: [{ id: '1', label: 'Desk monitor', width: 1920, height: 1080, scaleFactor: 1, rotation: 0, primary: true }] };
+        const inventory = await rpc(pc, 'listDevices', [screens]);
+        assert.equal(inventory.devices.length, 2);
+        assert(inventory.devices.every(device => device.online));
+        assert.equal(inventory.devices.find(device => device.current).client.displayName, 'Windows PC');
+        const remoteInventory = await rpc(mac, 'listDevices');
+        assert.equal(remoteInventory.devices.find(device => !device.current).screens.displays[0].label, 'Desk monitor');
+        await assert.rejects(rpc(pc, 'listDevices', [{ ...screens, displays: [{ ...screens.displays[0], width: -1 }] }]), /dimensions/);
         const replies = await Promise.all([rpc(pc, 'sendMessage', ['device?']), rpc(mac, 'sendMessage', ['device?'])]);
         assert.deepEqual(replies.map(r => r.reply), ['Windows PC', 'MacBook']);
         assert.equal(replies[0].interaction.connectionId, pcDevice.connectionId);
@@ -66,16 +78,29 @@ async function main() {
         assert(JSON.parse((await malformedReply)[0]).error);
         assert.equal((await rpc(pc, 'getClientDevice')).client.displayName, 'Windows PC', 'Malformed messages do not crash the server');
         const pcClosed = once(pc, 'close'); pc.close(); await pcClosed;
+        // The peer's close event can arrive before the server finishes closing
+        // its side. Wait for that observable transition, with a bounded deadline.
+        let offline;
+        for (let attempt = 0; attempt < 50; attempt++) {
+            offline = await rpc(mac, 'listDevices');
+            if (!offline.devices.find(device => !device.current).online) break;
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        assert.equal(offline.devices.find(device => !device.current).online, false);
         const reconnect = await connect(); sockets.push(reconnect);
         const restored = await rpc(reconnect, 'registerClient', [registration('Windows PC', 'windows', 'a')]);
         assert.equal(restored.client.deviceId, pcDevice.client.deviceId);
         assert.notEqual(restored.connectionId, pcDevice.connectionId);
+        const reconnected = await rpc(reconnect, 'listDevices');
+        assert.equal(reconnected.devices.length, 2);
+        assert(reconnected.devices.every(device => device.online));
         console.log('clientDeviceTransport.test.js: all assertions passed');
     } finally {
         await Promise.all(sockets.filter(ws => ws.readyState !== WebSocket.CLOSED).map(async ws => {
             const closed = once(ws, 'close'); ws.close(); await closed;
         }));
         await new Promise(resolve => server.close(resolve));
+        fs.rmSync(deviceDirectory, { recursive: true, force: true });
     }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

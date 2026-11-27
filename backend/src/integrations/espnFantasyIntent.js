@@ -88,8 +88,12 @@ async function resolve(message, history = [], options = {}) {
         || recentContext(history).some(turn => /\b(?:fantasy|espn|basketball|nba)\b/i.test(turn.content));
     if (result.kind === 'read' && !anchored) result = { kind: 'clarify', actions: [] };
     if (result.actions.includes('forecast') && parameters?.window==='next') result={kind:'unsupported',actions:[]};
+    if (result.actions.includes('forecast') && /\b(?:tomorrow|today|tonight|daily|single.day)\b/i.test(message))
+        return { kind: 'unsupported', actions: [], reply: 'My current forecast covers the whole matchup, not an individual day. I can give you that weekly scenario, but it would not answer your daily projection request.' };
     if (result.kind === 'clarify') return { ...result, reply: 'Do you mean your fantasy basketball team or the whole fantasy league, and which information would you like me to check?' };
     if (result.kind === 'unsupported') return { ...result, reply: 'I can read league data and calculate weekly lineup, matchup, waiver and trade scenarios. I cannot submit roster changes or trades, monitor in the background, or provide that other view through this integration.' };
-    return { kind: 'read', actions: [...new Set(result.actions)], ...(parameters && Object.keys(parameters).length ? {parameters} : {}) };
+    const actions = [...new Set(result.actions)].filter(action => !result.actions.includes('overview')
+        || !['roster', 'standings', 'matchup', 'played_games'].includes(action));
+    return { kind: 'read', actions, ...(parameters && Object.keys(parameters).length ? {parameters} : {}) };
 }
 module.exports = { resolve, interpret, explicitAction, explicitRequest, shouldInterpret, recentContext };

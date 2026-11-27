@@ -12,6 +12,10 @@ let visionCalls = 0;
 const capture = { data: 'private-pixels', displayId: '2' };
 const interaction = { client: { displayName: 'MacBook' }, screens: { displays: [{ id: '2' }] } };
 const fixtures = {
+    '../intent/conversationContinuity': require('../src/intent/conversationContinuity'),
+    '../response/deviceResponse': require('../src/response/deviceResponse'),
+    '../response/responseBuilder': require('../src/response/responseBuilder'),
+    '../response/directResponse': require('../src/response/directResponse'),
     '../puzzles/visualWordle': { handle: async (text, options) => {
         if (text !== 'start Wordle on monitor 2') return null;
         assert.equal(options.capture, capture);
@@ -73,5 +77,21 @@ const memory = { workingMemory: { getHistory: async () => [], append: async mess
     assert.equal(game.visualWordleActive, true);
     assert.equal(spoken.at(-1), game.reply);
     assert.equal(visionCalls, 1, 'Visual Wordle must precede general screen descriptions');
+    const devices = await engine.handleMessage('Which devices are online?', { memory, mode: 'casual', sessionId: 'screen-test', taskId: 'device-task', requestId: 'device-request',
+        taskIntent: { task: 'devices', action: 'read' }, interaction: { deviceInventory: { observedAt: Date.now(), devices: [
+            { client: { displayName: 'MacBook', os: 'macos', capabilities: {} }, online: false, current: false, screens: null, lastSeen: Date.now() },
+        ] } } });
+    assert.match(devices.reply, /MacBook — offline/);
+    assert.equal(spoken.at(-1), devices.reply);
+    assert.equal(stored.at(-1).content, devices.reply);
+    assert.equal(visionCalls, 1, 'Device questions must not capture or inspect screens');
+    const current = await engine.handleMessage('What device am I currently messaging from?', { memory, mode: 'casual', sessionId: 'screen-test', taskId: 'current-device-task', requestId: 'current-device-request',
+        taskIntent: { task: 'devices', action: 'read', query: { scope: 'current', topic: 'status', name: '' } },
+        interaction: { deviceInventory: { observedAt: Date.now(), devices: [
+            { client: { displayName: 'Windows PC', os: 'windows', capabilities: {} }, online: true, current: true },
+            { client: { displayName: 'Mac', os: 'macos', capabilities: {} }, online: false, current: false },
+        ] } } });
+    assert.equal(current.reply, 'You’re messaging me from Windows PC, running Windows.');
+    assert.equal(spoken.at(-1), current.reply);
     console.log('screenConversation.test.js: screen route, personality context, speech, no tools/extraction/pixel persistence passed');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => { Module._load = originalLoad; state.endSession('screen-test'); });

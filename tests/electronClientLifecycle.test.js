@@ -60,7 +60,13 @@ async function exercise(role) {
         assert.equal(calls[1].method, 'prepareTask');
         assert.equal(calls[2].method, 'sendMessage');
         assert.equal(calls[2].args[1].taskReceipt, 'test-receipt');
+        await ipc.get('atlas:listDevices')();
+        assert.equal(calls.at(-1).method, 'listDevices');
+        assert.equal(calls.at(-1).args[0].displays.length, 2);
         inventoryFails = true;
+        await ipc.get('atlas:listDevices')();
+        assert.equal(calls.at(-1).method, 'listDevices');
+        assert.equal(calls.at(-1).args[0], null, 'Monitor failure must not prevent listing computers');
         await ipc.get('atlas:sendMessage')({}, 'chat still works');
         assert.equal(calls.at(-1).method, 'sendMessage');
         assert.equal(calls.at(-1).args[1].screens, null, 'Monitor enumeration failure must not block chat');

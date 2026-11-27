@@ -26,7 +26,9 @@ Only Phase 1 is implemented by this change. Finish its real-device acceptance ch
 - `backend/src/interface/atlasInterface.js`, `backend/src/core/conversationEngine.js`, `backend/src/core/contextBuilder.js`: preserve device context through asynchronous foreground work and context assembly. Request-start events retain origin metadata.
 - `renderer/components/atlas-app.tsx`: shows the registered name in the desktop header, retains voice receipts, and displays RPC errors without leaving the chat stuck in thinking state.
 
-The backend registry is deliberately in memory. Persistent identity is restored by registration after restart, without a database migration. Device snapshots are runtime context, not saved personal facts or a new conversation-history store. Existing memory, personality, model selection, STT/TTS implementations, and permission policy remain in place.
+Live connections are in memory. The backend now remembers device identities, capabilities, last-seen timestamps, and last reported monitors in `backend/.local/devices.json` (override with `ATLAS_DEVICE_STORE_FILE`). Writes replace the file atomically; online status is never persisted. After a backend restart, remembered devices start offline and become online when their clients reconnect. Refresh updates status and metadata without removing offline entries. Devices forgotten by an older backend need to connect once to enter this durable list. This is device inventory, not personal memory or a conversation-history store.
+
+Device questions use the input interpreter's `devices/read` domain and the shared response builder. At execution time the backend supplies the same inventory used by the Devices page. Answers distinguish online status, reported capabilities, and OS permissions; reading inventory never captures a screen or authorizes remote control. The current-client identity response remains available separately.
 
 ## Registration and routing contract
 

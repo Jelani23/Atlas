@@ -27,6 +27,10 @@ async function complete(messages, options = {}) {
 
 // The opt-in deep analysis path needs completion and channel metadata as well as text.
 async function completeEnvelope(messages, options = {}) {
+  return require('../localModelPriority').complete(opts => completeEnvelopeRaw(messages, opts), options);
+}
+
+async function completeEnvelopeRaw(messages, options = {}) {
   const body = buildRequestBody(messages, options, false);
 
   // Structured formats support extraction and opt-in deep analysis.
@@ -55,6 +59,11 @@ async function completeEnvelope(messages, options = {}) {
 }
 
 async function* streamComplete(messages, options = {}) {
+  const release = require('../localModelPriority').enterForeground();
+  try { yield* streamCompleteRaw(messages, options); } finally { release(); }
+}
+
+async function* streamCompleteRaw(messages, options = {}) {
   const startTime = Date.now();
   const log = (msg) => console.log(`[OllamaProvider Timing] ${Date.now() - startTime}ms - ${msg}`);
   

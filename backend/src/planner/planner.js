@@ -113,6 +113,17 @@ async function route(intent, message, history = [], taskId, requestId, context =
 
     if (isNonExecutingToolMention(message)) return { needsTool: false };
 
+    const numeric = require('../intent/explicitToolRequest').parseNumericRequests(message);
+    if (numeric.length) {
+        const results = [];
+        for (const request of numeric) results.push({ toolName: request.toolName,
+            result: await execute(request.toolName, request.args), status: 'complete' });
+        return results.length === 1 ? { needsTool: true, toolName: results[0].toolName,
+            toolResult: results[0].result, shortCircuit: true }
+            : { needsTool: true, toolName: 'multi_tool', toolResults: results,
+                toolResult: results.map(result => result.result).join('\n'), shortCircuit: true };
+    }
+
 
     // Keep explicit puzzle commands intact: board entries and clue colors
     // must not be split into unrelated tool clauses or rewritten by a model.

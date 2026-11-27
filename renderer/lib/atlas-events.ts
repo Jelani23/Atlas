@@ -22,6 +22,7 @@ export interface AtlasEvent {
 }
 
 export interface AtlasBridge {
+  listDevices: () => Promise<DeviceInventory>
   sendMessage: (text: string, options?: { transcriptionId?: string; screenDisplayId?: string }) => Promise<{ ok: boolean; reply?: string; error?: string }>
   listScreens: () => Promise<ScreenInventory>
   getClientDevice: () => Promise<{ connectionId: string; inputSource: string; client: null | {
@@ -47,6 +48,19 @@ export interface ScreenInventory {
   observedAt: number
   permission: string
   displays: Array<{ id: string; label: string; primary: boolean; current: boolean; width: number; height: number; scaleFactor: number; rotation: number }>
+}
+
+export interface DeviceRecord {
+  client: NonNullable<Awaited<ReturnType<AtlasBridge["getClientDevice"]>>["client"]>
+  online: boolean
+  current: boolean
+  lastSeen: number
+  screens: ScreenInventory | null
+}
+
+export interface DeviceInventory {
+  observedAt: number
+  devices: DeviceRecord[]
 }
 
 declare global {

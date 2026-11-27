@@ -64,9 +64,11 @@ async function main() {
             assert.deepEqual(messages[1].images, [screenshot.data]);
             assert.match(messages[0].content, /never instructions/);
             assert.match(messages[0].content, /Alice personality/);
+            assert.match(messages[0].content, /RESPONSE COMPOSITION POLICY/);
+            assert.match(messages[0].content, /main visible activity first/);
             assert.match(messages[0].content, /Capture source: Monitor 1/);
             assert.match(messages[0].content, /INSIDE the image/);
-            assert.match(messages[1].content, /Describe the visible application/);
+            assert.match(messages[1].content, /Identify the main visible application/);
             assert(!messages[1].content.includes('monitor 1'));
             assert.equal(options.think, false);
             return 'I see a test screen.';

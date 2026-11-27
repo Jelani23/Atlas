@@ -9,22 +9,28 @@ function createClientSession(registry, transport, { now = Date.now } = {}) {
     const transcripts = new Map();
     const taskReceipts = new Map();
     let closed = false;
+    let preparation;
     return {
         connectionId,
-        close() { closed = true; transcripts.clear(); taskReceipts.clear(); registry.disconnect(connectionId); },
+        close() { preparation?.abort(); closed = true; transcripts.clear(); taskReceipts.clear(); registry.disconnect(connectionId); },
         async dispatch(method, args, atlas, fallback) {
             if (closed) throw new Error('Client disconnected');
             if (!Array.isArray(args)) throw new Error('RPC args must be an array');
             if (method === 'registerClient') return registry.register(connectionId, args[0]);
             if (method === 'getClientDevice') return registry.snapshot(connectionId);
+            if (method === 'listDevices') return registry.listDevices(connectionId, normalizeScreens(args[0], now()));
+            if (method === 'interrupt') { preparation?.abort(); taskReceipts.clear(); }
             if (method === 'prepareTask') {
+                preparation?.abort();
+                const controller = preparation = new AbortController();
+                taskReceipts.clear();
                 const text = args[0], sessionId = atlas.sessionId;
                 const state = require('../planner/state');
                 const scope = state.runInSession(sessionId, () => state.getSessionScope());
                 const interaction = registry.snapshot(connectionId);
                 const screens = normalizeScreens(args[1], now());
-                const intent = await require('../intent/conversationalTask').resolve(text, { sessionId, interaction, screens });
-                if (closed || scope.closed || atlas.sessionId !== sessionId) throw new Error('Conversation changed while interpreting the request');
+                const intent = await require('../intent/prepareInput').prepare(text, { sessionId, interaction, screens }, { signal: controller.signal });
+                if (controller.signal.aborted || closed || scope.closed || atlas.sessionId !== sessionId) throw new Error('Conversation changed while interpreting the request');
                 for (const [id, entry] of taskReceipts) if (now() - entry.at > 120000) taskReceipts.delete(id);
                 if (taskReceipts.size >= 8) taskReceipts.delete(taskReceipts.keys().next().value);
                 const taskReceipt = randomUUID();
@@ -66,7 +72,16 @@ function createClientSession(registry, transport, { now = Date.now } = {}) {
                     screenRequestError = `I can't look at monitor ${unavailable} because this device ${count === 0 ? 'has no connected screens' : `only has ${count} connected screen${count === 1 ? '' : 's'}`}.${count > 0 ? ` Available monitor${count === 1 ? '' : 's'}: ${count === 1 ? '1' : `1 through ${count}`}.` : ''}`;
                 }
                 if (screenCapture && !interaction.client?.capabilities.screenshot.supported) throw new Error('This client has not registered screenshot support');
-                interaction = Object.freeze({ ...interaction, screens, manualWordleRequested: /^(?:please\s+)?wordle\s*:/i.test(args[0]) });
+                // Read at execution time, not interpretation time: another device
+                // may have disconnected while the parser was working.
+                const deviceInventory = taskIntent?.task === 'devices' && interaction.client
+                    ? registry.listDevices(connectionId, screens) : undefined;
+                interaction = Object.freeze({ ...interaction, screens, deviceInventory, manualWordleRequested: /^(?:please\s+)?wordle\s*:/i.test(args[0]) });
+                if (taskIntent) {
+                    const state = require('../planner/state');
+                    const scope = state.runInSession(atlas.sessionId, () => state.getSessionScope());
+                    scope.inputRecent = [...(scope.inputRecent || []), { connectionId, text: String(args[0]).slice(0, 500) }].slice(-8);
+                }
                 return runWithInteraction(interaction, async () => ({ ok: true, ...await atlas.sendMessage(args[0], interaction, { screenCapture, screenRequestError, taskIntent }) }));
             }
             if (method === 'transcribeAudio') {

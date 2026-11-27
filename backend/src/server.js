@@ -8,7 +8,9 @@ const ttsManager = require('./voice/tts/ttsManager');
 const kokoroProcess = require('./voice/tts/providers/kokoroProcess');
 const { createClientRegistry } = require('./devices/clientRegistry');
 const { createClientSession } = require('./devices/clientSession');
-const clientRegistry = createClientRegistry();
+const clientRegistry = createClientRegistry({ store: require('./devices/deviceStore').createDeviceStore(
+    process.env.ATLAS_DEVICE_STORE_FILE || require('node:path').join(__dirname, '../.local/devices.json')
+) });
 
 const PORT = process.env.ATLAS_PORT || 7341;
 const atlas = new AtlasInterface();
@@ -67,7 +69,7 @@ wss.on('connection', (ws) => {
             id = msg.id;
             const { method, args = [] } = msg;
             let result;
-            if (['registerClient', 'getClientDevice', 'prepareTask', 'sendMessage', 'transcribeAudio'].includes(method)) {
+            if (['registerClient', 'getClientDevice', 'listDevices', 'prepareTask', 'sendMessage', 'transcribeAudio'].includes(method)) {
                 result = await clientSession.dispatch(method, args, atlas);
             }
             else if (method === 'getState') result = atlas.getState();

@@ -10,4 +10,9 @@ function parseVisualWordle(text) {
     return { action: 'start', monitor: match[1] ? ({ one: 1, two: 2, three: 3, four: 4 }[match[1].toLowerCase()] ?? Number(match[1])) : null,
         ...(match[2] ? { relative: match[2].toLowerCase() === 'other' ? 'other' : 'current' } : {}) };
 }
-module.exports = { parseVisualWordle };
+function isActiveGameFollowup(text) {
+    const value = String(text).trim().replace(/[’]/g, "'").replace(/[.!?]+$/, '')
+        .replace(/^(?:(?:alright|okay|ok|well|so|yes)[, ]+)+/i, '');
+    return /^(?:i (?:put|typed|entered) (?:it|that|that word) in|look|next guess|what(?:'s| is) (?:your next guess|the final verdict)|(?:check|finish|continue) (?:it|the game|wordle)(?: on (?:my |the )?(?:other |this )?(?:monitor|screen)(?: \d+)?)?)$/i.test(value);
+}
+module.exports = { parseVisualWordle, isActiveGameFollowup };

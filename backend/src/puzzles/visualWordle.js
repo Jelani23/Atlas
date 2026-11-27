@@ -128,6 +128,7 @@ function suggest(game) {
 async function handle(text, { scope, capture, interaction, requestId, taskIntent, isCancelled = () => false }, dependencies = {}) {
     scope.taskResult = null;
     const intent = taskIntent === undefined ? parseVisualWordle(text) : taskIntent;
+    if (intent?.task && intent.task !== 'wordle') return null;
     if (intent?.action === 'discuss') return null;
     if (intent?.action === 'clarify') return intent.reply;
     const session = scope.visualWordle;

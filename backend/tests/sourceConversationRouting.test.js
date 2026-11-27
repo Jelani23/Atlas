@@ -42,8 +42,8 @@ const {handleMessage}=require('../src/core/conversationEngine');
 const state=require('../src/planner/state');
 const history=[];
 const memory={workingMemory:{getHistory:async()=>history.slice(-4),append:async message=>{history.push(message);return history.length;}}};
-async function ask(input,mode='casual') {
-    const result=await state.runInSession('source-integration',()=>handleMessage(input,{memory,mode,sessionId:'source-integration',taskId:'test',requestId:'test'}));
+async function ask(input,mode='casual',taskIntent) {
+    const result=await state.runInSession('source-integration',()=>handleMessage(input,{memory,mode,sessionId:'source-integration',taskId:'test',requestId:'test',taskIntent}));
     assert(!events.some(([type])=>type==='request_failed'),JSON.stringify(events));
     return result.reply;
 }
@@ -117,6 +117,32 @@ async function main() {
     await ask('What games do you like?');
     assert.equal(state.projectQuestion,null); // Outside the scoped session.
     await state.runInSession('source-integration',()=>assert.equal(state.projectQuestion,null));
+    const beforeChat = routes.length;
+    const questionRouter = require('../src/reasoning/projectQuestion');
+    const fantasyRouter = require('../src/integrations/espnFantasyIntent');
+    const original = [understanding.detect, questionRouter.detect, fantasyRouter.resolve];
+    const forbidden = () => { throw new Error('Chat classification must bypass task detectors'); };
+    understanding.detect = questionRouter.detect = fantasyRouter.resolve = forbidden;
+    try {
+        const beforeCompositionCalls = prompts.length;
+        await ask('The word count feature works well', 'casual', { task: 'input', action: 'chat' });
+        assert.match(prompts.at(-1)[0].content, /RESPONSE COMPOSITION POLICY/);
+        assert.doesNotMatch(prompts.at(-1)[0].content, /CURRENT INTERACTION DEVICE/, 'Social chat must not inherit screenshot limitations');
+        assert.equal(prompts.length, beforeCompositionCalls + 1, 'Ordinary conversation must use one generation pass');
+        assert.equal(routes.length, beforeChat, 'Chat must not reach the legacy planner');
+        assert.equal(await ask('uncertain request', 'casual', { task: 'input', action: 'clarify', reply: 'Please clarify.' }), 'Please clarify.');
+    } finally { [understanding.detect, questionRouter.detect, fantasyRouter.resolve] = original; }
+    const sourceRequest = 'Read the code for src/core/contextManager.js lines 2-4';
+    assert.match(await ask('Nice work. ' + sourceRequest, 'casual', { task: 'input', action: 'legacy', requestText: sourceRequest }), /"startLine":2/);
+    const builder = require('../src/response/responseBuilder');
+    const originalCompose = builder.compose;
+    builder.compose = options => originalCompose(options, { complete: async () => JSON.stringify({ templates: ['{{expression}} comes to {{value}}.'] }) });
+    try {
+        const calculated = await ask('Calculate 28 times 37');
+        assert.equal(calculated, '28 * 37 comes to 1036.');
+        assert.equal(history.at(-1).content, calculated);
+        assert.match(spokenReplies.at(-1), /1036/);
+    } finally { builder.compose = originalCompose; }
     console.log('Real source conversation: read/explain/review plus learn/store/recall and unchanged skip passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

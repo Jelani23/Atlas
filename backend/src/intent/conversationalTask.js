@@ -7,7 +7,7 @@ function targetFromText(text) {
     const names = { one: 1, two: 2, three: 3, four: 4, first: 1, second: 2, third: 3, fourth: 4 };
     const hits = [...text.matchAll(/\b(?:monitor|screen|display)\s+(?:number\s+)?(\d+|one|two|three|four)\b|\b(first|second|third|fourth)\s+(?:monitor|screen|display)\b/gi)];
     const numbers = hits.map(hit => names[(hit[1] || hit[2]).toLowerCase()] ?? Number(hit[1]));
-    const other = /\bother\s+(?:monitor|screen|display)\b/i.test(text);
+    const other = /\bother\s+(?:monitor|screen|display)\b|\b(?:monitor|screen|display)\s+(?:beside|next to)\s+this one\b/i.test(text);
     const current = /\b(?:this|current)\s+(?:monitor|screen|display)\b/i.test(text);
     if (new Set(numbers).size > 1 || (other && current) || (numbers.length && (other || current))) return { ambiguous: true };
     return { monitor: numbers[0] ?? null, relative: other ? 'other' : current ? 'current' : null };
@@ -17,14 +17,18 @@ async function resolve(text, { sessionId, interaction, screens }, dependencies =
     if (typeof text !== 'string' || text.length > 20000) throw new Error('Invalid task message');
     // An explicit screen observation outranks remembered game context. Returning
     // null keeps Electron's ordinary capture and backend screen-analysis path.
-    if (isScreenRequest(text)) return null;
+    if (!dependencies.intent && isScreenRequest(text)) return null;
     if (/^(?:please\s+)?(?:wordle|connections)\s*:/i.test(text)) return null; // Explicit manual interface.
     const scope = state.runInSession(sessionId, () => state.getSessionScope());
     const focus = scope.taskFocus?.connectionId === interaction.connectionId && Date.now() - scope.taskFocus.at < 30 * 60 * 1000 ? scope.taskFocus : null;
     const active = scope.visualWordle?.connectionId === interaction.connectionId;
-    let intent = parseVisualWordle(text);
-    if (intent?.action === 'read' && !active) intent = null;
-    if (intent?.action === 'stop' && !active && !focus && !/wordle/i.test(text)) intent = null;
+    const task = dependencies.task || 'wordle';
+    let intent = dependencies.intent || parseVisualWordle(text);
+    if (!dependencies.intent && intent?.action === 'read' && !active) intent = null;
+    if (intent?.action === 'stop' && !active && !focus && !/wordle/i.test(text)) {
+        if (dependencies.intent) return { task, action: 'clarify', reply: 'There is no active Wordle game to stop.' };
+        intent = null;
+    }
     if (!intent && (/\bwordle\b/i.test(text) || ((focus || active) && text.length < 500))) {
         const complete = dependencies.complete || require('../models/providers/ollama').complete;
         try {
@@ -40,12 +44,12 @@ async function resolve(text, { sessionId, interaction, screens }, dependencies =
         } catch { intent = { action: 'clarify' }; }
     }
     if (!intent) return null;
-    const reply = message => ({ task: 'wordle', action: 'clarify', reply: message });
-    if (intent.ambiguous) return reply('Which single monitor should I use for Wordle?');
+    const reply = message => ({ task, action: 'clarify', reply: message });
+    if (intent.ambiguous) return reply('Which single monitor should I use?');
     if (intent.action === 'clarify') return reply('Do you want to start another Wordle, check the current board, or stop playing?');
     if (intent.action === 'stop') return { task: 'wordle', action: 'stop' };
-    if (!interaction.client?.capabilities?.screenshot?.supported) return reply('Visual Wordle needs the Electron client. For manual feedback, use an explicit “Wordle:” command.');
-    const permission = (dependencies.permission || (() => require('../permissions/permissionManager').check('puzzleHelper')))();
+    if (!interaction.client?.capabilities?.screenshot?.supported) return reply(task === 'screen' ? 'This client does not support screen capture.' : 'Visual Wordle needs the Electron client. For manual feedback, use an explicit “Wordle:” command.');
+    const permission = task === 'screen' ? { allowed: true } : (dependencies.permission || (() => require('../permissions/permissionManager').check('puzzleHelper')))();
     if (!permission.allowed || permission.requiresApproval) return reply('The puzzle helper is unavailable under the current tool permissions.');
     const displays = screens?.displays || [];
     let display;
@@ -58,15 +62,15 @@ async function resolve(text, { sessionId, interaction, screens }, dependencies =
         if (intent.relative === 'current') display = current;
         else {
             const others = displays.filter(d => d.id !== current?.id);
-            if (others.length !== 1) return reply(`This device has ${displays.length} screens. Which monitor number has Wordle?`);
+            if (others.length !== 1) return reply(`This device has ${displays.length} screens. Which monitor number should I use?`);
             display = others[0];
         }
     } else {
-        const id = active ? scope.visualWordle.displayId : focus?.displayId;
+        const id = task === 'screen' ? null : active ? scope.visualWordle.displayId : focus?.displayId;
         display = id ? displays.find(d => d.id === id) : displays.find(d => d.current) || displays.find(d => d.primary) || displays[0];
         if (id && !display) return reply('The previous Wordle monitor is disconnected. Which monitor should I use now?');
     }
-    if (!display) return reply('I could not find a connected monitor for Wordle.');
-    return { task: 'wordle', action: intent.action === 'read' && !active ? 'start' : intent.action, displayId: display.id };
+    if (!display) return reply('I could not find a connected monitor.');
+    return { task, action: intent.action === 'read' && !active ? 'start' : intent.action, displayId: display.id };
 }
-module.exports = { resolve };
+module.exports = { resolve, targetFromText };

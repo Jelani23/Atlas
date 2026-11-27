@@ -45,9 +45,10 @@ const memory = { workingMemory: { getHistory: async () => history.slice(-4), app
             const result = await handleMessage(input, { memory, mode: 'casual', sessionId: 'fantasy-test', taskId: 'test', requestId: 'test' });
             assert.match(result.reply, /Jitters/);
             assert.match(result.reply, /ranked 2/);
-            assert.match(result.reply, /BOS, PF; slot: PF; status: ACTIVE/);
+            if (input.includes('overview')) assert.doesNotMatch(result.reply, /Your roster:/, 'Broad overview should not recite the whole roster');
+            else assert.match(result.reply, /BOS, PF; slot: PF; status: ACTIVE/);
             assert.equal(history.at(-1).content, result.reply, 'Stored chat retains display text');
-            assert.match(speech.at(-1), /power forward for Boston Celtics/);
+            if (!input.includes('overview')) assert.match(speech.at(-1), /power forward for Boston Celtics/);
             assert.doesNotMatch(speech.at(-1), /\b(?:BOS|PF|ACTIVE)\b|Source:/);
             assert.equal(state.projectQuestion, null);
         });
